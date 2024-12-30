@@ -3346,10 +3346,6 @@ impl Vk {
         }
     }
 
-    pub fn game_tick(&self) {}
-
-    pub fn render_tick(&self) {}
-
     pub fn shutdown(&self) {
         self.device.destroy_buffer(self.uni_buff, None);
         self.device.free_memory(self.uni_mem, None);

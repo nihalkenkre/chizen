@@ -7,7 +7,6 @@ fn main() {
     let vk_sdk = std::env::var("VULKAN_SDK").unwrap();
     println!("cargo:rustc-link-search={}/Lib", vk_sdk);
     println!("cargo:rustc-link-lib=vulkan-1");
-    // println!("cargo:rustc-link-lib=User32");
 
     let vk_wrapper = bindgen::Builder::default()
         .header("vk_wrapper.h")
@@ -160,27 +159,10 @@ fn main() {
         .generate()
         .expect("Could not generate vulkan bindings");
 
-    // let win32_wrapper = bindgen::Builder::default()
-    //     .header("win32_wrapper.h")
-    //     .allowlist_type("WNDCLASSA")
-    //     .allowlist_function("RegisterClassA")
-    //     .prepend_enum_name(false)
-    //     .parse_callbacks(Box::new(bindgen::CargoCallbacks::new()))
-    //     .generate()
-    //     .expect("Could not generate win32 bindings");
-
     let out_path = PathBuf::from(std::env::var("OUT_DIR").unwrap());
     vk_wrapper
         .write_to_file(out_path.join("vk_wrapper.rs"))
         .expect("Could not write vulkan bindings");
-
-    // win32_wrapper
-    //     .write_to_file(out_path.join("win32_wrapper.rs"))
-    //     .expect("Could not write win32 bindings");
-
-    // cc::Build::new()
-    //     .file("win32_wrapper.c")
-    //     .compile("win32_wrapper");
 
     println!("Bye Build");
 }

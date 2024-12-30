@@ -93,5 +93,6 @@ fn main() -> Result<(), Box<dyn Error>> {
     event_loop.set_control_flow(winit::event_loop::ControlFlow::Poll);
     let mut app = Application::default();
     event_loop.run_app(&mut app)?;
+
     Ok(())
 }
