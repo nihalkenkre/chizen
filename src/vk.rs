@@ -1,4 +1,5 @@
-use std::{ffi::CStr, os::raw::c_void};
+use core::panic;
+use std::{ffi::CStr, os::raw::c_void, u64};
 
 include!(concat!(env!("OUT_DIR"), "/vk_wrapper.rs"));
 
@@ -51,20 +52,13 @@ impl Default for PhysicalDevice {
 
 impl Default for VkPhysicalDeviceProperties {
     fn default() -> Self {
-        let device_name_vec: Vec<char> = "None".chars().collect();
-        let mut device_name: [i8; 256] = [0; 256];
-
-        for c in 0..device_name_vec.len() {
-            device_name[c] = device_name_vec[c] as i8;
-        }
-
         Self {
             apiVersion: Default::default(),
             driverVersion: Default::default(),
             vendorID: Default::default(),
             deviceID: Default::default(),
             deviceType: Default::default(),
-            deviceName: device_name,
+            deviceName: [0; 256],
             pipelineCacheUUID: Default::default(),
             limits: Default::default(),
             sparseProperties: Default::default(),
@@ -651,8 +645,9 @@ impl PhysicalDevice {
 
         unsafe {
             vkGetPhysicalDeviceProperties(self.phy_dev, &mut phy_dev_props);
-            phy_dev_props
         }
+
+        phy_dev_props
     }
 
     pub fn queue_family_properties(&self) -> Vec<VkQueueFamilyProperties> {
@@ -851,7 +846,7 @@ impl VkDeviceCreateInfo {
         flags: VkDeviceCreateFlags,
         q_cis: &Vec<VkDeviceQueueCreateInfo>,
         enabled_extensions: &Vec<&CStr>,
-        enabled_features: Option<*const VkPhysicalDeviceFeatures>,
+        enabled_features: Option<&VkPhysicalDeviceFeatures>,
     ) -> Self {
         let mut i8: Vec<*const i8> = Vec::with_capacity(enabled_extensions.len());
 
@@ -901,7 +896,7 @@ impl VkSwapchainCreateInfoKHR {
         composite_alpha: VkCompositeAlphaFlagBitsKHR,
         present_mode: VkPresentModeKHR,
         clipped: u32,
-        old_swapchain: VkSwapchainKHR,
+        old_swapchain: Option<VkSwapchainKHR>,
     ) -> Self {
         Self {
             sType: VK_STRUCTURE_TYPE_SWAPCHAIN_CREATE_INFO_KHR,
@@ -924,7 +919,10 @@ impl VkSwapchainCreateInfoKHR {
             compositeAlpha: composite_alpha,
             presentMode: present_mode,
             clipped,
-            oldSwapchain: old_swapchain,
+            oldSwapchain: match old_swapchain {
+                Some(x) => x,
+                None => std::ptr::null_mut(),
+            },
         }
     }
 }
@@ -936,7 +934,7 @@ pub struct Device {
 impl Device {
     pub fn create(
         phy_dev: &PhysicalDevice,
-        create_info: VkDeviceCreateInfo,
+        create_info: &VkDeviceCreateInfo,
         allocator: Option<VkAllocationCallbacks>,
     ) -> Result<Self, VkResult> {
         let mut this = Self {
@@ -947,7 +945,7 @@ impl Device {
         unsafe {
             result = vkCreateDevice(
                 phy_dev.phy_dev,
-                &create_info,
+                create_info,
                 match allocator {
                     Some(x) => &x,
                     None => std::ptr::null(),
@@ -1135,6 +1133,40 @@ impl Device {
         }
     }
 
+    pub fn acquire_next_image_khr(
+        &self,
+        swapchain: VkSwapchainKHR,
+        timeout: u64,
+        semaphore: Option<VkSemaphore>,
+        fence: Option<VkFence>,
+    ) -> Result<usize, VkResult> {
+        let mut result = VK_SUCCESS;
+        let mut img_idx = 0;
+
+        unsafe {
+            result = vkAcquireNextImageKHR(
+                self.device,
+                swapchain,
+                timeout,
+                match semaphore {
+                    Some(x) => x,
+                    None => std::ptr::null_mut(),
+                },
+                match fence {
+                    Some(x) => x,
+                    None => std::ptr::null_mut(),
+                },
+                &mut img_idx,
+            )
+        }
+
+        if result >= VK_SUCCESS {
+            Ok(img_idx as usize)
+        } else {
+            Err(result)
+        }
+    }
+
     pub fn buffer_memory_requirements(&self, buffer: VkBuffer) -> VkMemoryRequirements {
         let mut mem_reqs = VkMemoryRequirements::default();
 
@@ -1270,7 +1302,7 @@ impl Device {
 
     pub fn create_descriptor_pool(
         &self,
-        create_info: VkDescriptorPoolCreateInfo,
+        create_info: &VkDescriptorPoolCreateInfo,
         allocator: Option<VkAllocationCallbacks>,
     ) -> Result<VkDescriptorPool, VkResult> {
         let mut result = VK_SUCCESS;
@@ -1279,7 +1311,7 @@ impl Device {
         unsafe {
             result = vkCreateDescriptorPool(
                 self.device,
-                &create_info,
+                create_info,
                 match allocator {
                     Some(x) => &x,
                     None => std::ptr::null(),
@@ -1297,7 +1329,7 @@ impl Device {
 
     pub fn create_descriptor_set_layout(
         &self,
-        create_info: VkDescriptorSetLayoutCreateInfo,
+        create_info: &VkDescriptorSetLayoutCreateInfo,
         allocator: Option<VkAllocationCallbacks>,
     ) -> Result<VkDescriptorSetLayout, VkResult> {
         let mut result = VK_SUCCESS;
@@ -1306,7 +1338,7 @@ impl Device {
         unsafe {
             result = vkCreateDescriptorSetLayout(
                 self.device,
-                &create_info,
+                create_info,
                 match allocator {
                     Some(x) => &x,
                     None => std::ptr::null(),
@@ -1324,13 +1356,13 @@ impl Device {
 
     pub fn allocate_descriptor_sets(
         &self,
-        alloc_info: VkDescriptorSetAllocateInfo,
+        alloc_info: &VkDescriptorSetAllocateInfo,
     ) -> Result<Vec<VkDescriptorSet>, VkResult> {
         let mut result = VK_SUCCESS;
         let mut desc_sets = vec![std::ptr::null_mut(); alloc_info.descriptorSetCount as usize];
 
         unsafe {
-            result = vkAllocateDescriptorSets(self.device, &alloc_info, desc_sets.as_mut_ptr());
+            result = vkAllocateDescriptorSets(self.device, alloc_info, desc_sets.as_mut_ptr());
         }
 
         if result >= VK_SUCCESS {
@@ -1342,7 +1374,7 @@ impl Device {
 
     pub fn create_pipeline_layout(
         &self,
-        create_info: VkPipelineLayoutCreateInfo,
+        create_info: &VkPipelineLayoutCreateInfo,
         allocator: Option<VkAllocationCallbacks>,
     ) -> Result<VkPipelineLayout, VkResult> {
         let mut result = VK_SUCCESS;
@@ -1351,7 +1383,7 @@ impl Device {
         unsafe {
             result = vkCreatePipelineLayout(
                 self.device,
-                &create_info,
+                create_info,
                 match allocator {
                     Some(x) => &x,
                     None => std::ptr::null(),
@@ -1399,7 +1431,7 @@ impl Device {
 
     pub fn create_graphics_pipelines(
         &self,
-        pipeline_cache: VkPipelineCache,
+        pipeline_cache: Option<VkPipelineCache>,
         create_infos: &Vec<VkGraphicsPipelineCreateInfo>,
         allocator: Option<VkAllocationCallbacks>,
     ) -> Result<Vec<VkPipeline>, VkResult> {
@@ -1409,7 +1441,10 @@ impl Device {
         unsafe {
             result = vkCreateGraphicsPipelines(
                 self.device,
-                pipeline_cache,
+                match pipeline_cache {
+                    Some(x) => x,
+                    None => std::ptr::null_mut(),
+                },
                 create_infos.len() as u32,
                 create_infos.as_ptr(),
                 match allocator {
@@ -1551,6 +1586,20 @@ impl Device {
                 wait_all as VkBool32,
                 timeout,
             );
+        }
+
+        if result >= VK_SUCCESS {
+            Ok(())
+        } else {
+            Err(result)
+        }
+    }
+
+    pub fn reset_fences(&self, fences: &Vec<VkFence>) -> Result<(), VkResult> {
+        let mut result = VK_SUCCESS;
+
+        unsafe {
+            result = vkResetFences(self.device, fences.len() as u32, fences.as_ptr());
         }
 
         if result >= VK_SUCCESS {
@@ -2003,7 +2052,7 @@ impl VkPipelineShaderStageCreateInfo {
             module,
             pName: name.as_ptr() as *const i8,
             pSpecializationInfo: match specialization_info {
-                Some(x) => std::ptr::addr_of!(x) as *const VkSpecializationInfo,
+                Some(x) => &x,
                 None => std::ptr::null(),
             },
         }
@@ -2014,10 +2063,10 @@ impl VkComputePipelineCreateInfo {
     pub fn new(
         p_next: Option<*const c_void>,
         flags: VkPipelineCreateFlags,
-        stage: VkPipelineShaderStageCreateInfo,
+        stage: &VkPipelineShaderStageCreateInfo,
         layout: VkPipelineLayout,
-        base_pipe_hnd: VkPipeline,
-        base_pipe_idx: i32,
+        base_pipe_hnd: Option<VkPipeline>,
+        base_pipe_idx: Option<i32>,
     ) -> Self {
         Self {
             sType: VK_STRUCTURE_TYPE_COMPUTE_PIPELINE_CREATE_INFO,
@@ -2026,10 +2075,16 @@ impl VkComputePipelineCreateInfo {
                 None => std::ptr::null(),
             },
             flags,
-            stage,
+            stage: *stage,
             layout,
-            basePipelineHandle: base_pipe_hnd,
-            basePipelineIndex: base_pipe_idx,
+            basePipelineHandle: match base_pipe_hnd {
+                Some(x) => x,
+                None => std::ptr::null_mut(),
+            },
+            basePipelineIndex: match base_pipe_idx {
+                Some(x) => x,
+                None => 0,
+            },
         }
     }
 }
@@ -2044,7 +2099,7 @@ impl VkWriteDescriptorSet {
         desc_type: VkDescriptorType,
         image_infos: &Vec<VkDescriptorImageInfo>,
         buffer_infos: &Vec<VkDescriptorBufferInfo>,
-        texel_buffer_view: VkBufferView,
+        texel_buffer_view: Option<VkBufferView>,
     ) -> Self {
         Self {
             sType: VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
@@ -2059,7 +2114,10 @@ impl VkWriteDescriptorSet {
             descriptorType: desc_type,
             pImageInfo: image_infos.as_ptr(),
             pBufferInfo: buffer_infos.as_ptr(),
-            pTexelBufferView: texel_buffer_view as *const VkBufferView,
+            pTexelBufferView: match texel_buffer_view {
+                Some(x) => &x,
+                None => std::ptr::null_mut(),
+            },
         }
     }
 }
@@ -2116,7 +2174,7 @@ impl VkCommandBufferBeginInfo {
             },
             flags,
             pInheritanceInfo: match inheritance_info {
-                Some(x) => std::ptr::addr_of!(x) as *const VkCommandBufferInheritanceInfo,
+                Some(x) => &x,
                 None => std::ptr::null(),
             },
         }
@@ -2196,11 +2254,11 @@ impl CommandBuffer {
     pub fn begin(
         &self,
         buff_idx: usize,
-        begin_info: VkCommandBufferBeginInfo,
+        begin_info: &VkCommandBufferBeginInfo,
     ) -> Result<(), VkResult> {
         let mut result = VK_SUCCESS;
         unsafe {
-            result = vkBeginCommandBuffer(self.cmd_buffs[buff_idx], &begin_info);
+            result = vkBeginCommandBuffer(self.cmd_buffs[buff_idx], begin_info);
         }
 
         if result >= VK_SUCCESS {
@@ -2244,6 +2302,32 @@ impl CommandBuffer {
         }
     }
 
+    pub fn pipeline_barrier(
+        &self,
+        buff_idx: usize,
+        src_stg_msk: VkPipelineStageFlags,
+        dst_stg_msk: VkPipelineStageFlags,
+        dependency_flags: VkDependencyFlags,
+        memory_barriers: &Vec<VkMemoryBarrier>,
+        buffer_memory_barriers: &Vec<VkBufferMemoryBarrier>,
+        image_memory_barriers: &Vec<VkImageMemoryBarrier>,
+    ) {
+        unsafe {
+            vkCmdPipelineBarrier(
+                self.cmd_buffs[buff_idx],
+                src_stg_msk,
+                dst_stg_msk,
+                dependency_flags,
+                memory_barriers.len() as u32,
+                memory_barriers.as_ptr(),
+                buffer_memory_barriers.len() as u32,
+                buffer_memory_barriers.as_ptr(),
+                image_memory_barriers.len() as u32,
+                image_memory_barriers.as_ptr(),
+            );
+        }
+    }
+
     pub fn dispatch(&self, buff_idx: usize, group_x: usize, group_y: usize, group_z: usize) {
         unsafe {
             vkCmdDispatch(
@@ -2273,7 +2357,7 @@ impl VkSubmitInfo {
     pub fn new(
         p_next: Option<*const c_void>,
         wait_sems: &Vec<VkSemaphore>,
-        wait_stage_msk: Option<*const u32>,
+        wait_stage_msk: Option<&u32>,
         cmd_buffs: &Vec<VkCommandBuffer>,
         signal_sems: &Vec<VkSemaphore>,
     ) -> Self {
@@ -2302,14 +2386,21 @@ pub struct Queue {
 }
 
 impl Queue {
-    pub fn submit(&self, submit_infos: &Vec<VkSubmitInfo>, fence: VkFence) -> Result<(), VkResult> {
+    pub fn submit(
+        &self,
+        submit_infos: &Vec<VkSubmitInfo>,
+        fence: Option<VkFence>,
+    ) -> Result<(), VkResult> {
         let mut result = VK_SUCCESS;
         unsafe {
             result = vkQueueSubmit(
                 self.q,
                 submit_infos.len() as u32,
                 submit_infos.as_ptr(),
-                fence,
+                match fence {
+                    Some(x) => x,
+                    None => std::ptr::null_mut(),
+                },
             )
         }
 
@@ -2317,6 +2408,26 @@ impl Queue {
             Ok(())
         } else {
             Err(result)
+        }
+    }
+
+    pub fn present(&self, present_info: &VkPresentInfoKHR) -> Result<(), VkResult> {
+        let mut result = VK_SUCCESS;
+
+        unsafe {
+            result = vkQueuePresentKHR(self.q, present_info);
+        }
+
+        if result >= VK_SUCCESS {
+            Ok(())
+        } else {
+            Err(result)
+        }
+    }
+
+    pub fn wait_idle(&self) {
+        unsafe {
+            vkQueueWaitIdle(self.q);
         }
     }
 }
@@ -2559,18 +2670,18 @@ impl VkGraphicsPipelineCreateInfo {
         stages: &Vec<VkPipelineShaderStageCreateInfo>,
         vertex_input_state: &VkPipelineVertexInputStateCreateInfo,
         input_assembly_state: &VkPipelineInputAssemblyStateCreateInfo,
-        tessellation_state: &VkPipelineTessellationStateCreateInfo,
-        viewport_state: &VkPipelineViewportStateCreateInfo,
-        rasterization_state: &VkPipelineRasterizationStateCreateInfo,
-        multisample_state: &VkPipelineMultisampleStateCreateInfo,
-        depth_stencil_state: &VkPipelineDepthStencilStateCreateInfo,
-        color_blend_state: &VkPipelineColorBlendStateCreateInfo,
-        dynamic_state: &VkPipelineDynamicStateCreateInfo,
+        tessellation_state: Option<&VkPipelineTessellationStateCreateInfo>,
+        viewport_state: Option<&VkPipelineViewportStateCreateInfo>,
+        rasterization_state: Option<&VkPipelineRasterizationStateCreateInfo>,
+        multisample_state: Option<&VkPipelineMultisampleStateCreateInfo>,
+        depth_stencil_state: Option<&VkPipelineDepthStencilStateCreateInfo>,
+        color_blend_state: Option<&VkPipelineColorBlendStateCreateInfo>,
+        dynamic_state: Option<&VkPipelineDynamicStateCreateInfo>,
         layout: VkPipelineLayout,
-        render_pass: VkRenderPass,
-        subpass: u32,
-        base_pipeline_handle: VkPipeline,
-        base_pipeline_index: i32,
+        render_pass: Option<VkRenderPass>,
+        subpass: Option<u32>,
+        base_pipeline_handle: Option<VkPipeline>,
+        base_pipeline_index: Option<i32>,
     ) -> Self {
         Self {
             sType: VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_CREATE_INFO,
@@ -2583,18 +2694,51 @@ impl VkGraphicsPipelineCreateInfo {
             pStages: stages.as_ptr(),
             pVertexInputState: vertex_input_state,
             pInputAssemblyState: input_assembly_state,
-            pTessellationState: tessellation_state,
-            pViewportState: viewport_state,
-            pRasterizationState: rasterization_state,
-            pMultisampleState: multisample_state,
-            pDepthStencilState: depth_stencil_state,
-            pColorBlendState: color_blend_state,
-            pDynamicState: dynamic_state,
+            pTessellationState: match tessellation_state {
+                Some(x) => x,
+                None => std::ptr::null(),
+            },
+            pViewportState: match viewport_state {
+                Some(x) => x,
+                None => std::ptr::null(),
+            },
+            pRasterizationState: match rasterization_state {
+                Some(x) => x,
+                None => std::ptr::null(),
+            },
+            pMultisampleState: match multisample_state {
+                Some(x) => x,
+                None => std::ptr::null(),
+            },
+            pDepthStencilState: match depth_stencil_state {
+                Some(x) => x,
+                None => std::ptr::null(),
+            },
+            pColorBlendState: match color_blend_state {
+                Some(x) => x,
+                None => std::ptr::null(),
+            },
+            pDynamicState: match dynamic_state {
+                Some(x) => x,
+                None => std::ptr::null(),
+            },
             layout,
-            renderPass: render_pass,
-            subpass,
-            basePipelineHandle: base_pipeline_handle,
-            basePipelineIndex: base_pipeline_index,
+            renderPass: match render_pass {
+                Some(x) => x,
+                None => std::ptr::null_mut(),
+            },
+            subpass: match subpass {
+                Some(x) => x,
+                None => 0,
+            },
+            basePipelineHandle: match base_pipeline_handle {
+                Some(x) => x,
+                None => std::ptr::null_mut(),
+            },
+            basePipelineIndex: match base_pipeline_index {
+                Some(x) => x,
+                None => 0,
+            },
         }
     }
 }
@@ -2625,6 +2769,131 @@ impl VkSemaphoreCreateInfo {
     }
 }
 
+impl VkImageMemoryBarrier {
+    pub fn new(
+        p_next: Option<*const c_void>,
+        src_acc: VkAccessFlags,
+        dst_acc: VkAccessFlags,
+        old_lyt: VkImageLayout,
+        new_lyt: VkImageLayout,
+        src_q_fly_idx: u32,
+        dst_q_fly_idx: u32,
+        image: VkImage,
+        subresource_range: VkImageSubresourceRange,
+    ) -> Self {
+        Self {
+            sType: VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER,
+            pNext: match p_next {
+                Some(x) => x,
+                None => std::ptr::null(),
+            },
+            srcAccessMask: src_acc,
+            dstAccessMask: dst_acc,
+            oldLayout: old_lyt,
+            newLayout: new_lyt,
+            srcQueueFamilyIndex: src_q_fly_idx,
+            dstQueueFamilyIndex: dst_q_fly_idx,
+            image,
+            subresourceRange: subresource_range,
+        }
+    }
+}
+
+impl VkRenderingAttachmentInfo {
+    pub fn new(
+        p_next: Option<*const c_void>,
+        image_view: VkImageView,
+        image_layout: VkImageLayout,
+        resolve_mode: VkResolveModeFlagBits,
+        resolve_image_view: Option<VkImageView>,
+        resolve_image_layout: VkImageLayout,
+        load_op: VkAttachmentLoadOp,
+        store_op: VkAttachmentStoreOp,
+        clear_value: VkClearValue,
+    ) -> Self {
+        Self {
+            sType: VK_STRUCTURE_TYPE_RENDERING_ATTACHMENT_INFO,
+            pNext: match p_next {
+                Some(x) => x,
+                None => std::ptr::null(),
+            },
+            imageView: image_view,
+            imageLayout: image_layout,
+            resolveMode: resolve_mode,
+            resolveImageView: match resolve_image_view {
+                Some(x) => x,
+                None => std::ptr::null_mut(),
+            },
+            resolveImageLayout: resolve_image_layout,
+            loadOp: load_op,
+            storeOp: store_op,
+            clearValue: clear_value,
+        }
+    }
+}
+
+impl VkRenderingInfo {
+    pub fn new(
+        p_next: Option<*const c_void>,
+        flags: VkRenderingFlags,
+        render_area: VkRect2D,
+        layer_count: usize,
+        view_mask: u32,
+        color_attachments: &Vec<VkRenderingAttachmentInfo>,
+        depth_attachment: Option<&VkRenderingAttachmentInfo>,
+        stencil_attachment: Option<&VkRenderingAttachmentInfo>,
+    ) -> Self {
+        Self {
+            sType: VK_STRUCTURE_TYPE_RENDERING_INFO,
+            pNext: match p_next {
+                Some(x) => x,
+                None => std::ptr::null(),
+            },
+            flags,
+            renderArea: render_area,
+            layerCount: layer_count as u32,
+            viewMask: view_mask,
+            colorAttachmentCount: color_attachments.len() as u32,
+            pColorAttachments: color_attachments.as_ptr(),
+            pDepthAttachment: match depth_attachment {
+                Some(x) => x,
+                None => std::ptr::null(),
+            },
+            pStencilAttachment: match stencil_attachment {
+                Some(x) => x,
+                None => std::ptr::null(),
+            },
+        }
+    }
+}
+
+impl VkPresentInfoKHR {
+    pub fn new(
+        p_next: Option<*const c_void>,
+        wait_sems: &Vec<VkSemaphore>,
+        swapchains: &Vec<VkSwapchainKHR>,
+        image_indices: &Vec<u32>,
+        results: Option<&mut Vec<VkResult>>,
+    ) -> Self {
+        Self {
+            sType: VK_STRUCTURE_TYPE_PRESENT_INFO_KHR,
+            pNext: match p_next {
+                Some(x) => x,
+                None => std::ptr::null(),
+            },
+            waitSemaphoreCount: wait_sems.len() as u32,
+            pWaitSemaphores: wait_sems.as_ptr(),
+            swapchainCount: swapchains.len() as u32,
+            pSwapchains: swapchains.as_ptr(),
+            pImageIndices: image_indices.as_ptr(),
+            pResults: match results {
+                Some(x) => x.as_mut_ptr(),
+                None => std::ptr::null_mut(),
+            },
+        }
+    }
+}
+
 #[derive(Clone)]
 pub struct ImageInfo {
     req_mem_types: VkMemoryPropertyFlags,
@@ -2643,8 +2912,10 @@ pub struct Vk {
     pub instance: Instance,
     pub phy_dev: PhysicalDevice,
     pub surface: VkSurfaceKHR,
+    pub surf_extent: VkExtent2D,
     pub device: Device,
     pub swapchain: VkSwapchainKHR,
+    pub sc_images: Vec<VkImage>,
     pub sc_image_views: Vec<VkImageView>,
     pub sc_depth_imgs: Vec<VkImage>,
     pub sc_depth_img_mems: Vec<VkDeviceMemory>,
@@ -2657,6 +2928,7 @@ pub struct Vk {
     pub view_pipes: Vec<VkPipeline>,
     pub sc_cmd_pool: VkCommandPool,
     pub sc_cmd_buff: CommandBuffer,
+    pub lyt_chng_cmd_buff: CommandBuffer,
     pub img_lyt_chng_fnc: VkFence,
     pub acq_sem: VkSemaphore,
     pub sc_img_lyt_chng_sems: Vec<VkSemaphore>,
@@ -2664,6 +2936,9 @@ pub struct Vk {
     pub uni_buff: VkBuffer,
     pub uni_mem: VkDeviceMemory,
     pub min_uni_buff_align: VkDeviceSize,
+    pub q_fly_idx: u32,
+    pub gfx_q: Queue,
+    pub xfer_q: Queue,
 }
 
 impl Default for Vk {
@@ -2676,10 +2951,15 @@ impl Default for Vk {
                 phy_dev: std::ptr::null_mut(),
             },
             surface: std::ptr::null_mut(),
+            surf_extent: VkExtent2D {
+                width: 0,
+                height: 0,
+            },
             device: Device {
                 device: std::ptr::null_mut(),
             },
             swapchain: std::ptr::null_mut(),
+            sc_images: vec![],
             sc_image_views: vec![],
             sc_depth_imgs: vec![],
             sc_depth_img_mems: vec![],
@@ -2692,6 +2972,7 @@ impl Default for Vk {
             view_pipes: vec![],
             sc_cmd_pool: std::ptr::null_mut(),
             sc_cmd_buff: CommandBuffer { cmd_buffs: vec![] },
+            lyt_chng_cmd_buff: CommandBuffer { cmd_buffs: vec![] },
             img_lyt_chng_fnc: std::ptr::null_mut(),
             acq_sem: std::ptr::null_mut(),
             sc_img_lyt_chng_sems: vec![],
@@ -2699,6 +2980,13 @@ impl Default for Vk {
             uni_buff: std::ptr::null_mut(),
             uni_mem: std::ptr::null_mut(),
             min_uni_buff_align: 0,
+            q_fly_idx: 0,
+            gfx_q: Queue {
+                q: std::ptr::null_mut(),
+            },
+            xfer_q: Queue {
+                q: std::ptr::null_mut(),
+            },
         }
     }
 }
@@ -2750,6 +3038,7 @@ impl Vk {
                 _ => std::ptr::null_mut(),
             },
         );
+
         let surface = match instance.create_win32_surface_khr(&surface_ci, None) {
             Ok(surface) => surface,
             Err(result) => {
@@ -2848,7 +3137,7 @@ impl Vk {
             None,
         );
 
-        let device = match Device::create(&phy_dev, device_ci, None) {
+        let device = match Device::create(&phy_dev, &device_ci, None) {
             Ok(device) => device,
             Err(result) => {
                 panic!("ERR Create device {}", result);
@@ -2871,7 +3160,7 @@ impl Vk {
             VK_COMPOSITE_ALPHA_OPAQUE_BIT_KHR,
             present_mode,
             1,
-            std::ptr::null_mut(),
+            None,
         );
 
         let swapchain = match device.create_swapchain_khr(&sc_ci, None) {
@@ -2881,7 +3170,7 @@ impl Vk {
             }
         };
 
-        let sw_images = match device.swapchain_images_khr(swapchain) {
+        let sc_images = match device.swapchain_images_khr(swapchain) {
             Ok(imgs) => imgs,
             Err(result) => {
                 panic!("ERR get swapchain images {}", result);
@@ -2906,7 +3195,7 @@ impl Vk {
             },
         );
 
-        for sw_img in &sw_images {
+        for sw_img in &sc_images {
             iv_ci.image = *sw_img;
             sc_image_views.push(match device.create_image_view(&iv_ci, None) {
                 Ok(iv) => iv,
@@ -2933,7 +3222,7 @@ impl Vk {
             sharing_mode: VK_SHARING_MODE_EXCLUSIVE,
         };
 
-        let sc_d_img_infos = vec![sc_d_img_info; sw_images.len()];
+        let sc_d_img_infos = vec![sc_d_img_info; sc_images.len()];
 
         let (sc_depth_imgs, sc_depth_img_vs, sc_depth_img_mems) =
             create_imgs_and_memory(&phy_dev, &device, &sc_d_img_infos, &vec![q_fly_idx]);
@@ -3108,7 +3397,7 @@ impl Vk {
         let mut desc_set_lyts = vec![];
         for desc_set_lyt_ci in desc_set_lyt_cis {
             desc_set_lyts.push(
-                match device.create_descriptor_set_layout(desc_set_lyt_ci, None) {
+                match device.create_descriptor_set_layout(&desc_set_lyt_ci, None) {
                     Ok(x) => x,
                     Err(result) => {
                         panic!("ERR create descriptor set layout {}", result);
@@ -3130,7 +3419,7 @@ impl Vk {
 
         let desc_pool_ci = VkDescriptorPoolCreateInfo::new(None, 0, 10, &desc_pool_sizes);
 
-        let desc_pool = match device.create_descriptor_pool(desc_pool_ci, None) {
+        let desc_pool = match device.create_descriptor_pool(&desc_pool_ci, None) {
             Ok(x) => x,
             Err(result) => {
                 panic!("ERR create descriptor pool {}", result);
@@ -3139,7 +3428,7 @@ impl Vk {
 
         let pl_ci = VkPipelineLayoutCreateInfo::new(None, 0, &desc_set_lyts, &vec![]);
 
-        let pipe_lyt = match device.create_pipeline_layout(pl_ci, None) {
+        let pipe_lyt = match device.create_pipeline_layout(&pl_ci, None) {
             Ok(x) => x,
             Err(result) => {
                 panic!("ERR create pipeline layout {}", result);
@@ -3176,28 +3465,26 @@ impl Vk {
             &pipe_stages,
             &pvis_ci,
             &pias_ci,
-            &VkPipelineTessellationStateCreateInfo::default(),
-            &pvs_ci,
-            &prs_ci,
-            &pms_ci,
-            &dss_ci,
-            &pcbs_ci,
-            &VkPipelineDynamicStateCreateInfo::default(),
+            None,
+            Some(&pvs_ci),
+            Some(&prs_ci),
+            Some(&pms_ci),
+            Some(&dss_ci),
+            Some(&pcbs_ci),
+            None,
             pipe_lyt,
-            std::ptr::null_mut(),
-            0,
-            std::ptr::null_mut(),
-            0,
+            None,
+            None,
+            None,
+            None,
         );
 
-        let view_pipes =
-            match device.create_graphics_pipelines(std::ptr::null_mut(), &vec![view_pipe_ci], None)
-            {
-                Ok(x) => x,
-                Err(result) => {
-                    panic!("ERR create graphics pipeline {}", result);
-                }
-            };
+        let view_pipes = match device.create_graphics_pipelines(None, &vec![view_pipe_ci], None) {
+            Ok(x) => x,
+            Err(result) => {
+                panic!("ERR create graphics pipeline {}", result);
+            }
+        };
 
         let sc_cmd_pool_ci = VkCommandPoolCreateInfo::new(
             None,
@@ -3219,6 +3506,16 @@ impl Vk {
             sc_ci.minImageCount as usize,
         );
 
+        let lyt_chng_cmd_buff_ai =
+            VkCommandBufferAllocateInfo::new(None, sc_cmd_pool, VK_COMMAND_BUFFER_LEVEL_PRIMARY, 1);
+
+        let lyt_chng_cmd_buff = match device.allocate_command_buffers(&lyt_chng_cmd_buff_ai) {
+            Ok(x) => x,
+            Err(err) => {
+                panic!("ERR allocate commmand buffers {}", err);
+            }
+        };
+
         let sc_cmd_buff = match device.allocate_command_buffers(&sc_cmd_buff_ai) {
             Ok(x) => x,
             Err(err) => {
@@ -3226,7 +3523,7 @@ impl Vk {
             }
         };
 
-        let lyt_fnc_ci = VkFenceCreateInfo::new(None, 0);
+        let lyt_fnc_ci = VkFenceCreateInfo::new(None, VK_FENCE_CREATE_SIGNALED_BIT as u32);
 
         let img_lyt_chng_fnc = match device.create_fence(&lyt_fnc_ci, None) {
             Ok(x) => x,
@@ -3247,7 +3544,7 @@ impl Vk {
         let mut sc_img_lyt_chng_sems = vec![];
         let mut rndr_sems = vec![];
 
-        for _ in 0..sw_images.len() {
+        for _ in 0..sc_images.len() {
             sc_img_lyt_chng_sems.push(match device.create_semaphore(&sem_ci, None) {
                 Ok(x) => x,
                 Err(err) => {
@@ -3276,7 +3573,7 @@ impl Vk {
         );
 
         let desc_set_ai = VkDescriptorSetAllocateInfo::new(None, desc_pool, &desc_set_lyts);
-        let desc_sets = match device.allocate_descriptor_sets(desc_set_ai) {
+        let desc_sets = match device.allocate_descriptor_sets(&desc_set_ai) {
             Ok(x) => x,
             Err(err) => {
                 panic!("ERR allocate descriptor sets {}", err);
@@ -3298,7 +3595,7 @@ impl Vk {
             VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER,
             &vec![],
             &vec![desc_buff_info],
-            std::ptr::null_mut(),
+            None,
         );
 
         device.update_descriptor_sets(&vec![w_desc_set_0_bind_0], &vec![]);
@@ -3306,9 +3603,11 @@ impl Vk {
         Self {
             instance,
             surface,
+            surf_extent: surf_caps.currentExtent,
             phy_dev,
             device,
             swapchain,
+            sc_images,
             sc_depth_imgs,
             sc_depth_img_mems,
             sc_image_views,
@@ -3321,6 +3620,7 @@ impl Vk {
             view_pipes,
             sc_cmd_pool,
             sc_cmd_buff,
+            lyt_chng_cmd_buff,
             img_lyt_chng_fnc,
             acq_sem,
             sc_img_lyt_chng_sems,
@@ -3328,6 +3628,9 @@ impl Vk {
             uni_buff,
             uni_mem,
             min_uni_buff_align,
+            q_fly_idx,
+            gfx_q,
+            xfer_q,
         }
     }
 
@@ -3346,7 +3649,161 @@ impl Vk {
         }
     }
 
+    pub fn render(&self) {
+        let img_idx = match self.device.acquire_next_image_khr(
+            self.swapchain,
+            u64::MAX,
+            Some(self.acq_sem),
+            None,
+        ) {
+            Ok(x) => x,
+            Err(err) => {
+                panic!("ERR acquire next image khr {}", err);
+            }
+        };
+
+        change_image_layout(
+            &self.device,
+            self.sc_images[img_idx],
+            VK_IMAGE_LAYOUT_UNDEFINED,
+            VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
+            VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT as u32,
+            VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT as u32,
+            0,
+            0,
+            &self.lyt_chng_cmd_buff,
+            0,
+            VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT as u32,
+            &vec![self.acq_sem],
+            &vec![self.sc_img_lyt_chng_sems[img_idx]],
+            self.img_lyt_chng_fnc,
+            self.q_fly_idx,
+            &self.xfer_q,
+        );
+
+        let color_attachments = vec![VkRenderingAttachmentInfo::new(
+            None,
+            self.sc_image_views[img_idx],
+            VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
+            0,
+            None,
+            0,
+            VK_ATTACHMENT_LOAD_OP_CLEAR,
+            VK_ATTACHMENT_STORE_OP_STORE,
+            VkClearValue {
+                color: VkClearColorValue {
+                    float32: [0.0, 0.0, 0.0, 1.0],
+                },
+            },
+        )];
+
+        let depth_attachment = VkRenderingAttachmentInfo::new(
+            None,
+            self.sc_depth_img_vs[img_idx],
+            VK_IMAGE_LAYOUT_DEPTH_ATTACHMENT_OPTIMAL,
+            0,
+            None,
+            0,
+            VK_ATTACHMENT_LOAD_OP_CLEAR,
+            VK_ATTACHMENT_STORE_OP_STORE,
+            VkClearValue {
+                depthStencil: VkClearDepthStencilValue {
+                    depth: 0.0,
+                    stencil: 0,
+                },
+            },
+        );
+
+        let dyn_rend_info = VkRenderingInfo::new(
+            None,
+            0,
+            VkRect2D {
+                extent: self.surf_extent,
+                offset: VkOffset2D { x: 0, y: 0 },
+            },
+            1,
+            0,
+            &color_attachments,
+            Some(&depth_attachment),
+            None,
+        );
+
+        let cmd_buff_bi = VkCommandBufferBeginInfo::new(
+            None,
+            VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT as u32,
+            None,
+        );
+
+        match self.sc_cmd_buff.begin(img_idx, &cmd_buff_bi) {
+            Ok(_) => (),
+            Err(err) => {
+                panic!("ERR begin command buffer {}", err);
+            }
+        };
+
+        match self.sc_cmd_buff.end(img_idx) {
+            Ok(_) => (),
+            Err(err) => {
+                panic!("ERR begin command buffer {}", err);
+            }
+        };
+
+        let wait_stage_msk = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT as u32;
+
+        let si = VkSubmitInfo::new(
+            None,
+            &vec![self.sc_img_lyt_chng_sems[img_idx]],
+            Some(&wait_stage_msk),
+            &vec![self.sc_cmd_buff.cmd_buffs[img_idx]],
+            &vec![self.rndr_sems[img_idx]],
+        );
+
+        match self.gfx_q.submit(&vec![si], None) {
+            Ok(_) => (),
+            Err(err) => {
+                panic!("ERR queue submit {}", err);
+            }
+        };
+
+        let q_wait_stg_msk = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT as u32;
+
+        change_image_layout(
+            &self.device,
+            self.sc_images[img_idx],
+            VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
+            VK_IMAGE_LAYOUT_PRESENT_SRC_KHR,
+            VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT as u32,
+            VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT as u32,
+            VK_ACCESS_COLOR_ATTACHMENT_READ_BIT as u32,
+            0,
+            &self.lyt_chng_cmd_buff,
+            0,
+            q_wait_stg_msk,
+            &vec![self.rndr_sems[img_idx]],
+            &vec![self.sc_img_lyt_chng_sems[img_idx]],
+            self.img_lyt_chng_fnc,
+            self.q_fly_idx,
+            &self.xfer_q,
+        );
+
+        let pi = VkPresentInfoKHR::new(
+            None,
+            &vec![self.sc_img_lyt_chng_sems[img_idx]],
+            &vec![self.swapchain],
+            &vec![img_idx as u32],
+            None,
+        );
+
+        match self.gfx_q.present(&pi) {
+            Ok(_) => (),
+            Err(err) => {
+                panic!("ERR queue present {}", err);
+            }
+        };
+    }
+
     pub fn shutdown(&self) {
+        self.gfx_q.wait_idle();
         self.device.destroy_buffer(self.uni_buff, None);
         self.device.free_memory(self.uni_mem, None);
 
@@ -3589,6 +4046,100 @@ pub fn create_buffer_and_memory(
     };
 
     (buff, mem)
+}
+
+pub fn change_image_layout(
+    device: &Device,
+    image: VkImage,
+    old_lyt: VkImageLayout,
+    new_lyt: VkImageLayout,
+    src_stg_msk: VkPipelineStageFlags,
+    dst_stg_msk: VkPipelineStageFlags,
+    src_acc: VkAccessFlags,
+    dst_acc: VkAccessFlags,
+    cmd_buff: &CommandBuffer,
+    cmd_buff_idx: usize,
+    q_wait_stg_msk: VkPipelineStageFlags,
+    wait_sems: &Vec<VkSemaphore>,
+    sig_sems: &Vec<VkSemaphore>,
+    lyt_chng_fence: VkFence,
+    q_fly_idx: u32,
+    q: &Queue,
+) {
+    match device.wait_for_fences(&vec![lyt_chng_fence], true, u64::MAX) {
+        Ok(_) => (),
+        Err(err) => {
+            panic!("ERR wait for fences {}", err);
+        }
+    }
+
+    match device.reset_fences(&vec![lyt_chng_fence]) {
+        Ok(_) => (),
+        Err(err) => {
+            panic!("ERR reset fences {}", err);
+        }
+    }
+
+    let sub_re_rng = VkImageSubresourceRange {
+        aspectMask: VK_IMAGE_ASPECT_COLOR_BIT as u32,
+        levelCount: 1,
+        layerCount: 1,
+        baseArrayLayer: 0,
+        baseMipLevel: 0,
+    };
+
+    let img_mem_bar = VkImageMemoryBarrier::new(
+        None,
+        src_acc,
+        dst_acc,
+        old_lyt,
+        new_lyt,
+        q_fly_idx as u32,
+        q_fly_idx as u32,
+        image,
+        sub_re_rng,
+    );
+
+    let cmd_buff_bi = VkCommandBufferBeginInfo::new(None, 0, None);
+
+    match cmd_buff.begin(cmd_buff_idx, &cmd_buff_bi) {
+        Ok(_) => (),
+        Err(err) => {
+            panic!("ERR begin command buffer {}", err);
+        }
+    };
+
+    cmd_buff.pipeline_barrier(
+        cmd_buff_idx,
+        src_stg_msk,
+        dst_stg_msk,
+        0,
+        &vec![],
+        &vec![],
+        &vec![img_mem_bar],
+    );
+
+    match cmd_buff.end(cmd_buff_idx) {
+        Ok(_) => (),
+        Err(err) => {
+            panic!("ERR end command buffer {}", err);
+        }
+    };
+
+    let si = VkSubmitInfo::new(
+        None,
+        wait_sems,
+        Some(&q_wait_stg_msk),
+        &vec![cmd_buff.cmd_buffs[cmd_buff_idx]],
+        sig_sems,
+    );
+
+    match q.submit(&vec![si], Some(lyt_chng_fence)) {
+        Ok(_) => (),
+        Err(err) => {
+            panic!("ERR queue submit {}", err);
+        }
+    };
 }
 
 /*

@@ -15,10 +15,13 @@ pub struct Application {
 
 impl ApplicationHandler for Application {
     fn resumed(&mut self, event_loop: &winit::event_loop::ActiveEventLoop) {
+        let window_size = PhysicalSize::new(1280, 720);
         self.window = Some(
             event_loop
                 .create_window(
-                    Window::default_attributes().with_inner_size(PhysicalSize::new(1280, 720)),
+                    Window::default_attributes()
+                        .with_max_inner_size(window_size)
+                        .with_min_inner_size(window_size),
                 )
                 .unwrap(),
         );
@@ -44,6 +47,10 @@ impl ApplicationHandler for Application {
                 device_id,
                 position,
             } => {}
+            WindowEvent::RedrawRequested => {
+                self.vk.render();
+                self.window.as_ref().unwrap().request_redraw();
+            }
             WindowEvent::CloseRequested => event_loop.exit(),
             _ => (),
         }
@@ -90,7 +97,7 @@ impl ApplicationHandler for Application {
 
 fn main() -> Result<(), Box<dyn Error>> {
     let event_loop = EventLoop::new()?;
-    event_loop.set_control_flow(winit::event_loop::ControlFlow::Poll);
+    event_loop.set_control_flow(winit::event_loop::ControlFlow::Wait);
     let mut app = Application::default();
     event_loop.run_app(&mut app)?;
 
