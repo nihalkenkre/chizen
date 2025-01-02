@@ -96,10 +96,18 @@ impl ApplicationHandler for Application {
 }
 
 fn main() -> Result<(), Box<dyn Error>> {
+    println!("Hello");
     let event_loop = EventLoop::new()?;
     event_loop.set_control_flow(winit::event_loop::ControlFlow::Wait);
     let mut app = Application::default();
     event_loop.run_app(&mut app)?;
 
+    // println!("Press any key to continue...");
+    // let mut buf = String::new();
+    // std::io::stdin()
+    //     .read_line(&mut buf)
+    //     .expect("failed to continue");
+
+    println!("Bye");
     Ok(())
 }

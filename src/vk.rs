@@ -2392,6 +2392,7 @@ impl Queue {
         fence: Option<VkFence>,
     ) -> Result<(), VkResult> {
         let mut result = VK_SUCCESS;
+
         unsafe {
             result = vkQueueSubmit(
                 self.q,
@@ -3144,6 +3145,7 @@ impl Vk {
             }
         };
 
+        let q_fly_idxs = vec![q_fly_idx];
         let sc_ci = VkSwapchainCreateInfoKHR::new(
             None,
             0,
@@ -3155,7 +3157,7 @@ impl Vk {
             1,
             surf_caps.supportedUsageFlags,
             VK_SHARING_MODE_EXCLUSIVE,
-            &vec![q_fly_idx],
+            &q_fly_idxs,
             surf_caps.currentTransform,
             VK_COMPOSITE_ALPHA_OPAQUE_BIT_KHR,
             present_mode,
@@ -3215,7 +3217,7 @@ impl Vk {
             },
             samples: VK_SAMPLE_COUNT_1_BIT as u32,
             tiling: VK_IMAGE_TILING_OPTIMAL,
-            format: VK_FORMAT_D32_SFLOAT,
+            format: VK_FORMAT_D24_UNORM_S8_UINT,
             img_type: VK_IMAGE_TYPE_2D,
             view_type: VK_IMAGE_VIEW_TYPE_2D,
             usage: VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT as u32,
@@ -3225,7 +3227,7 @@ impl Vk {
         let sc_d_img_infos = vec![sc_d_img_info; sc_images.len()];
 
         let (sc_depth_imgs, sc_depth_img_vs, sc_depth_img_mems) =
-            create_imgs_and_memory(&phy_dev, &device, &sc_d_img_infos, &vec![q_fly_idx]);
+            create_imgs_and_memory(&phy_dev, &device, &sc_d_img_infos, &q_fly_idxs);
 
         let vfd = match std::fs::read("shaders/vert.spv") {
             Ok(x) => x,
@@ -3566,7 +3568,7 @@ impl Vk {
         let (uni_buff, uni_mem) = create_buffer_and_memory(
             &phy_dev,
             &device,
-            &vec![q_fly_idx],
+            &q_fly_idxs,
             (size_of::<glam::Mat4>() * 3 + size_of::<glam::Vec4>()) as VkDeviceSize,
             VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT as u32,
             (VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT) as u32,
@@ -3586,6 +3588,7 @@ impl Vk {
             range: (size_of::<glam::Mat4>() * 2) as VkDeviceSize,
         };
 
+        let desc_buff_infos = vec![desc_buff_info];
         let w_desc_set_0_bind_0 = VkWriteDescriptorSet::new(
             None,
             desc_sets[0],
@@ -3594,7 +3597,7 @@ impl Vk {
             1,
             VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER,
             &vec![],
-            &vec![desc_buff_info],
+            &desc_buff_infos,
             None,
         );
 
@@ -3662,6 +3665,10 @@ impl Vk {
             }
         };
 
+        let mut wait_sems = vec![self.acq_sem];
+        let mut sig_sems = vec![self.sc_img_lyt_chng_sems[img_idx]];
+        let mut cmd_buffs = vec![];
+
         change_image_layout(
             &self.device,
             self.sc_images[img_idx],
@@ -3674,8 +3681,8 @@ impl Vk {
             &self.lyt_chng_cmd_buff,
             0,
             VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT as u32,
-            &vec![self.acq_sem],
-            &vec![self.sc_img_lyt_chng_sems[img_idx]],
+            &wait_sems,
+            &sig_sems,
             self.img_lyt_chng_fnc,
             self.q_fly_idx,
             &self.xfer_q,
@@ -3750,12 +3757,16 @@ impl Vk {
 
         let wait_stage_msk = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT as u32;
 
+        wait_sems = vec![self.sc_img_lyt_chng_sems[img_idx]];
+        sig_sems = vec![self.rndr_sems[img_idx]];
+        cmd_buffs = vec![self.sc_cmd_buff.cmd_buffs[img_idx]];
+
         let si = VkSubmitInfo::new(
             None,
-            &vec![self.sc_img_lyt_chng_sems[img_idx]],
+            &wait_sems,
             Some(&wait_stage_msk),
-            &vec![self.sc_cmd_buff.cmd_buffs[img_idx]],
-            &vec![self.rndr_sems[img_idx]],
+            &cmd_buffs,
+            &sig_sems,
         );
 
         match self.gfx_q.submit(&vec![si], None) {
@@ -3766,6 +3777,9 @@ impl Vk {
         };
 
         let q_wait_stg_msk = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT as u32;
+
+        wait_sems = vec![self.rndr_sems[img_idx]];
+        sig_sems = vec![self.sc_img_lyt_chng_sems[img_idx]];
 
         change_image_layout(
             &self.device,
@@ -3779,20 +3793,17 @@ impl Vk {
             &self.lyt_chng_cmd_buff,
             0,
             q_wait_stg_msk,
-            &vec![self.rndr_sems[img_idx]],
-            &vec![self.sc_img_lyt_chng_sems[img_idx]],
+            &wait_sems,
+            &sig_sems,
             self.img_lyt_chng_fnc,
             self.q_fly_idx,
             &self.xfer_q,
         );
 
-        let pi = VkPresentInfoKHR::new(
-            None,
-            &vec![self.sc_img_lyt_chng_sems[img_idx]],
-            &vec![self.swapchain],
-            &vec![img_idx as u32],
-            None,
-        );
+        wait_sems = vec![self.sc_img_lyt_chng_sems[img_idx]];
+        let swapchains = vec![self.swapchain];
+        let img_idxs = vec![img_idx as u32];
+        let pi = VkPresentInfoKHR::new(None, &wait_sems, &swapchains, &img_idxs, None);
 
         match self.gfx_q.present(&pi) {
             Ok(_) => (),
@@ -4100,7 +4111,11 @@ pub fn change_image_layout(
         sub_re_rng,
     );
 
-    let cmd_buff_bi = VkCommandBufferBeginInfo::new(None, 0, None);
+    let cmd_buff_bi = VkCommandBufferBeginInfo::new(
+        None,
+        VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT as u32,
+        None,
+    );
 
     match cmd_buff.begin(cmd_buff_idx, &cmd_buff_bi) {
         Ok(_) => (),
@@ -4126,13 +4141,8 @@ pub fn change_image_layout(
         }
     };
 
-    let si = VkSubmitInfo::new(
-        None,
-        wait_sems,
-        Some(&q_wait_stg_msk),
-        &vec![cmd_buff.cmd_buffs[cmd_buff_idx]],
-        sig_sems,
-    );
+    let cmd_buffs = vec![cmd_buff.cmd_buffs[cmd_buff_idx]];
+    let si = VkSubmitInfo::new(None, wait_sems, Some(&q_wait_stg_msk), &cmd_buffs, sig_sems);
 
     match q.submit(&vec![si], Some(lyt_chng_fence)) {
         Ok(_) => (),
