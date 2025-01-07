@@ -754,6 +754,36 @@ impl PhysicalDevice {
         }
     }
 
+    pub fn surface_support_khr(
+        &self,
+        q_fly_idx: usize,
+        surface: VkSurfaceKHR,
+    ) -> Result<bool, i32> {
+        let mut result = VK_SUCCESS;
+        let mut is_supported = 0;
+
+        unsafe {
+            result = vkGetPhysicalDeviceSurfaceSupportKHR(
+                self.phy_dev,
+                q_fly_idx as u32,
+                surface,
+                &mut is_supported,
+            );
+        }
+
+        if result >= VK_SUCCESS {
+            Ok(is_supported != 0)
+        } else {
+            Err(result)
+        }
+    }
+
+    pub fn win32_presentation_support_khr(&self, q_fly_idx: usize) -> bool {
+        unsafe {
+            vkGetPhysicalDeviceWin32PresentationSupportKHR(self.phy_dev, q_fly_idx as u32) != 0
+        }
+    }
+
     pub fn features(&self) -> VkPhysicalDeviceFeatures {
         let mut features = VkPhysicalDeviceFeatures::default();
 
@@ -2224,7 +2254,7 @@ impl VkImageViewCreateInfo {
     pub fn new(
         p_next: Option<*const c_void>,
         flags: VkImageViewCreateFlags,
-        image: VkImage,
+        image: Option<VkImage>,
         view_type: VkImageViewType,
         format: VkFormat,
         components: VkComponentMapping,
@@ -2237,7 +2267,10 @@ impl VkImageViewCreateInfo {
                 None => std::ptr::null(),
             },
             flags,
-            image,
+            image: match image {
+                Some(x) => x,
+                None => std::ptr::null_mut(),
+            },
             viewType: view_type,
             format,
             components,
@@ -3057,30 +3090,27 @@ impl Vk {
             {
                 let q_fly_props = pd.queue_family_properties();
 
-                let mut is_supported: u32 = 1;
-                unsafe {
-                    vkGetPhysicalDeviceSurfaceSupportKHR(
-                        pd.phy_dev,
-                        q_fly_q_cnt,
-                        surface,
-                        &mut is_supported,
-                    );
-                }
-
-                for (q, q_fly_prop) in q_fly_props.iter().enumerate() {
-                    if (q_fly_prop.queueFlags & VK_QUEUE_GRAPHICS_BIT as u32)
+                match q_fly_props.iter().enumerate().position(|(q_idx, q_fly_prop)| {
+                    q_fly_prop.queueCount;
+                    (q_fly_prop.queueFlags & VK_QUEUE_GRAPHICS_BIT as u32)
                         == VK_QUEUE_GRAPHICS_BIT as u32
-                        && (is_supported == 1)
-                        && (unsafe {
-                            vkGetPhysicalDeviceWin32PresentationSupportKHR(pd.phy_dev, q as u32)
-                        } == 1)
-                    {
+                        && match pd.surface_support_khr(q_idx, surface) {
+                            Ok(x) => x,
+                            Err(err) => {
+                                panic!("ERR get physical device surface support khr {}", err)
+                            }
+                        }
+                        && pd.win32_presentation_support_khr(q_idx)
+                }) {
+                    Some(q_idx) => {
+                        q_fly_q_cnt = q_fly_props[q_idx].queueCount;
                         phy_dev = pd;
-                        q_fly_idx = q as u32;
-                        q_fly_q_cnt = q_fly_prop.queueCount;
+                        q_fly_idx = q_idx as u32;
                         min_sto_buff_align = phy_dev_props.limits.minStorageBufferOffsetAlignment;
                         min_uni_buff_align = phy_dev_props.limits.minUniformBufferOffsetAlignment;
-                        break;
+                    }
+                    None => {
+                        panic!("ERR Could not find suitable physical device");
                     }
                 }
             }
@@ -3093,34 +3123,32 @@ impl Vk {
             }
         };
 
-        let surf_forms = match phy_dev.surface_formats_khr(&surface) {
-            Ok(forms) => forms,
+        let surf_format = match phy_dev.surface_formats_khr(&surface) {
+            Ok(forms) => match forms
+                .iter()
+                .find(|sf| sf.format == VK_FORMAT_R8G8B8A8_UNORM)
+            {
+                Some(x) => *x,
+                None => VkSurfaceFormatKHR::default(),
+            },
             Err(result) => {
                 panic!("ERR get surface formats {}", result);
             }
         };
 
-        let mut surf_format = VkSurfaceFormatKHR::default();
+        let present_mode = match phy_dev.surface_present_modes_khr(&surface) {
+            Ok(present_modes) => match present_modes
+                .iter()
+                .find(|pm| **pm == VK_PRESENT_MODE_MAILBOX_KHR)
+            {
+                Some(x) => *x,
+                None => VK_PRESENT_MODE_FIFO_KHR,
+            },
 
-        for sf in &surf_forms {
-            if sf.format == VK_FORMAT_R8G8B8A8_UNORM {
-                surf_format = *sf;
-            }
-        }
-
-        let present_modes = match phy_dev.surface_present_modes_khr(&surface) {
-            Ok(present_modes) => present_modes,
             Err(result) => {
                 panic!("ERR get surface present modes {}", result);
             }
         };
-
-        let mut present_mode = VK_PRESENT_MODE_FIFO_KHR;
-        for pm in present_modes {
-            if pm == VK_PRESENT_MODE_MAILBOX_KHR {
-                present_mode = pm;
-            }
-        }
 
         let priorities: Vec<f32> = vec![1.0; q_fly_q_cnt as usize];
         let q_ci = VkDeviceQueueCreateInfo::new(None, 0, q_fly_idx, q_fly_q_cnt, &priorities);
@@ -3184,7 +3212,7 @@ impl Vk {
         let mut iv_ci = VkImageViewCreateInfo::new(
             None,
             0,
-            std::ptr::null_mut(),
+            None,
             VK_IMAGE_VIEW_TYPE_2D,
             surf_format.format,
             VkComponentMapping::default(),
@@ -3652,18 +3680,39 @@ impl Vk {
         }
     }
 
-    pub fn render(&self) {
-        let img_idx = match self.device.acquire_next_image_khr(
-            self.swapchain,
-            u64::MAX,
-            Some(self.acq_sem),
-            None,
-        ) {
-            Ok(x) => x,
-            Err(err) => {
-                panic!("ERR acquire next image khr {}", err);
-            }
-        };
+    pub fn draw_gui(
+        &self,
+        clipped_primitives: &Vec<egui::ClippedPrimitive>,
+        full_output: egui::FullOutput,
+        img_idx: usize,
+    ) {
+    }
+
+    pub fn draw_scene(&self) {}
+
+    pub fn render(
+        &self,
+        clipped_primitives: &Vec<egui::ClippedPrimitive>,
+        full_output: egui::FullOutput,
+    ) {
+        let img_idx_res =
+            self.device
+                .acquire_next_image_khr(self.swapchain, u64::MAX, Some(self.acq_sem), None);
+
+        match img_idx_res {
+            Ok(_) => (),
+            Err(err) => match err {
+                VK_ERROR_OUT_OF_DATE_KHR => {
+                    println!("recreate swapchain");
+                    return;
+                }
+                _ => {
+                    panic!("ERR acquire next image khr {}", err)
+                }
+            },
+        }
+
+        let img_idx = img_idx_res.ok().unwrap();
 
         let mut wait_sems = vec![self.acq_sem];
         let mut sig_sems = vec![self.sc_img_lyt_chng_sems[img_idx]];
@@ -3807,9 +3856,14 @@ impl Vk {
 
         match self.gfx_q.present(&pi) {
             Ok(_) => (),
-            Err(err) => {
-                panic!("ERR queue present {}", err);
-            }
+            Err(err) => match err {
+                VK_ERROR_OUT_OF_DATE_KHR => {
+                    println!("recreate swapchain");
+                }
+                _ => {
+                    panic!("ERR acquire next image khr {}", err)
+                }
+            },
         };
     }
 
@@ -3988,7 +4042,7 @@ pub fn create_imgs_and_memory(
         let img_v_ci = VkImageViewCreateInfo::new(
             None,
             0,
-            imgs[i],
+            Some(imgs[i]),
             img_info.view_type,
             img_info.format,
             VkComponentMapping::default(),
