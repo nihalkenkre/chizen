@@ -635,6 +635,7 @@ impl Instance {
     }
 }
 
+#[derive(Copy, Clone)]
 pub struct PhysicalDevice {
     pub phy_dev: VkPhysicalDevice,
 }
@@ -3027,12 +3028,6 @@ impl Default for Vk {
 
 impl Vk {
     pub fn init(window_handle: winit::raw_window_handle::RawWindowHandle) -> Self {
-        let mut phy_dev = PhysicalDevice::default();
-        let mut q_fly_idx = 0u32;
-        let mut q_fly_q_cnt = 0;
-        let mut min_sto_buff_align = 0;
-        let mut min_uni_buff_align = 0;
-
         let ai = VkApplicationInfo::new(
             None,
             c"Chizen",
@@ -3080,41 +3075,49 @@ impl Vk {
             }
         };
 
-        let phy_devs = instance.get_physical_devices();
+        let (phy_dev, q_fly_q_cnt, q_fly_idx, min_sto_buff_align, min_uni_buff_align) =
+            match instance.get_physical_devices().iter().find(|pd| {
+                let phy_dev_props = pd.properties();
+                phy_dev_props.deviceType == VK_PHYSICAL_DEVICE_TYPE_DISCRETE_GPU
+                    || phy_dev_props.deviceType == VK_PHYSICAL_DEVICE_TYPE_INTEGRATED_GPU
+            }) {
+                Some(pd) => {
+                    match pd.queue_family_properties().iter().enumerate().find(
+                        |(q_fly_idx, q_fly_prop)| {
+                            (q_fly_prop.queueFlags & VK_QUEUE_GRAPHICS_BIT as u32)
+                                == VK_QUEUE_GRAPHICS_BIT as u32
+                                && match pd.surface_support_khr(*q_fly_idx, surface) {
+                                    Ok(x) => x,
+                                    Err(err) => {
+                                        panic!(
+                                            "ERR get physical device surface support khr {}",
+                                            err
+                                        )
+                                    }
+                                }
+                                && pd.win32_presentation_support_khr(*q_fly_idx)
+                        },
+                    ) {
+                        Some((q_idx, q_fly_prop)) => {
+                            let phy_dev_props = pd.properties();
 
-        for pd in phy_devs {
-            let phy_dev_props = pd.properties();
-
-            if phy_dev_props.deviceType == VK_PHYSICAL_DEVICE_TYPE_DISCRETE_GPU
-                || phy_dev_props.deviceType == VK_PHYSICAL_DEVICE_TYPE_INTEGRATED_GPU
-            {
-                let q_fly_props = pd.queue_family_properties();
-
-                match q_fly_props.iter().enumerate().position(|(q_idx, q_fly_prop)| {
-                    q_fly_prop.queueCount;
-                    (q_fly_prop.queueFlags & VK_QUEUE_GRAPHICS_BIT as u32)
-                        == VK_QUEUE_GRAPHICS_BIT as u32
-                        && match pd.surface_support_khr(q_idx, surface) {
-                            Ok(x) => x,
-                            Err(err) => {
-                                panic!("ERR get physical device surface support khr {}", err)
-                            }
+                            (
+                                *pd,
+                                q_fly_prop.queueCount,
+                                q_idx as u32,
+                                phy_dev_props.limits.minStorageBufferOffsetAlignment,
+                                phy_dev_props.limits.minUniformBufferOffsetAlignment,
+                            )
                         }
-                        && pd.win32_presentation_support_khr(q_idx)
-                }) {
-                    Some(q_idx) => {
-                        q_fly_q_cnt = q_fly_props[q_idx].queueCount;
-                        phy_dev = pd;
-                        q_fly_idx = q_idx as u32;
-                        min_sto_buff_align = phy_dev_props.limits.minStorageBufferOffsetAlignment;
-                        min_uni_buff_align = phy_dev_props.limits.minUniformBufferOffsetAlignment;
-                    }
-                    None => {
-                        panic!("ERR Could not find suitable physical device");
+                        None => {
+                            panic!("ERR could not find suitable physical device");
+                        }
                     }
                 }
-            }
-        }
+                None => {
+                    panic!("ERR could not find suitable physical device");
+                }
+            };
 
         let surf_caps = match phy_dev.surface_capabilities_khr(&surface) {
             Ok(caps) => caps,
@@ -3686,6 +3689,7 @@ impl Vk {
         full_output: egui::FullOutput,
         img_idx: usize,
     ) {
+        // self.sc_cmd_buff.
     }
 
     pub fn draw_scene(&self) {}
@@ -3925,25 +3929,18 @@ pub fn get_memory_id(
     mem_reqs: &VkMemoryRequirements,
     req_types: VkMemoryPropertyFlags,
 ) -> Result<u32, i32> {
-    let mut idx = -1;
-
-    for (mt, mem_type) in mem_props.memoryTypes.into_iter().enumerate() {
-        if mem_reqs.memoryTypeBits & (1 << mt) == (1 << mt) {
-            if mem_type.propertyFlags == req_types {
-                if mem_props.memoryHeaps[mem_props.memoryTypes[mt as usize].heapIndex as usize].size
+    match mem_props
+        .memoryTypes
+        .iter()
+        .enumerate()
+        .find(|(id, mem_type)| {
+            (mem_reqs.memoryTypeBits & (1 << id)) == (1 << id)
+                && mem_type.propertyFlags == req_types
+                && mem_props.memoryHeaps[mem_props.memoryTypes[*id].heapIndex as usize].size
                     > mem_reqs.size
-                {
-                    idx = mt as i32;
-                    break;
-                }
-            }
-        }
-    }
-
-    if idx >= 0 {
-        Ok(idx as u32)
-    } else {
-        Err(idx)
+        }) {
+        Some((id, _)) => Ok(id as u32),
+        None => Err(-1),
     }
 }
 
