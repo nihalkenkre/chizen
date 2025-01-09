@@ -1,4 +1,14 @@
 @echo off
 
-%VULKAN_SDK%/Bin/glslc.exe -fshader-stage=vertex shaders/vert.glsl -o shaders/vert.spv
-%VULKAN_SDK%/Bin/glslc.exe -fshader-stage=fragment shaders/frag.glsl -o shaders/frag.spv
+%VULKAN_SDK%/Bin/glslc.exe -fshader-stage=vertex shaders/scene_vert.glsl -o shaders/scene_vert.spv
+%VULKAN_SDK%/Bin/glslc.exe -fshader-stage=fragment shaders/scene_frag.glsl -o shaders/scene_frag.spv
+
+%VULKAN_SDK%/Bin/glslc.exe -fshader-stage=vertex shaders/gui_vert.glsl -o shaders/gui_vert.spv
+%VULKAN_SDK%/Bin/glslc.exe -fshader-stage=fragment shaders/gui_frag.glsl -o shaders/gui_frag.spv
+
+echo:
+echo Copying shaders to target\debug\shaders...
+xcopy /i /y shaders\*.spv target\debug\shaders\
+echo:
+echo Copying shaders to target\release\shaders...
+xcopy /i /y shaders\*.spv target\release\shaders\

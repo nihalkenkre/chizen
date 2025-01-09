@@ -11,6 +11,7 @@ use winit::{
 pub struct Application {
     window: Option<Window>,
     vk: vk::Vk,
+    egui_ctx: egui::Context,
 }
 
 impl ApplicationHandler for Application {
@@ -20,7 +21,7 @@ impl ApplicationHandler for Application {
             event_loop
                 .create_window(
                     Window::default_attributes()
-                        .with_max_inner_size(window_size)
+                        // .with_max_inner_size(window_size)
                         .with_min_inner_size(window_size),
                 )
                 .unwrap(),
@@ -48,10 +49,66 @@ impl ApplicationHandler for Application {
                 position,
             } => {}
             WindowEvent::RedrawRequested => {
-                self.vk.render();
+                let input = egui::RawInput::default();
+                let full_output = self.egui_ctx.run(input, |ctx| {
+                    egui::CentralPanel::default().show(&ctx, |ui| {
+                        ui.label("Hello World!!!");
+                    });
+                });
+
+                let clipped_prims = self
+                    .egui_ctx
+                    .tessellate(full_output.shapes.clone(), full_output.pixels_per_point);
+
+                self.vk.render(&clipped_prims, full_output);
                 self.window.as_ref().unwrap().request_redraw();
             }
-            WindowEvent::CloseRequested => event_loop.exit(),
+            WindowEvent::Resized(new_size) => {
+                println!("new size: {:?}", new_size);
+            }
+            WindowEvent::CloseRequested => {
+                let input = egui::RawInput::default();
+                let full_output = self.egui_ctx.run(input, |ctx| {
+                    egui::CentralPanel::default().show(&ctx, |ui| {
+                        ui.label("Hello World!!!");
+                    });
+                });
+
+                let clipped_prims = self
+                    .egui_ctx
+                    .tessellate(full_output.shapes.clone(), full_output.pixels_per_point);
+
+                // for clipped_prim in clipped_prims {
+                    // match clipped_prim.primitive {
+                    // egui::epaint::Primitive::Mesh(mesh) => {
+                    //     for vert in mesh.vertices {
+                    //         println!(
+                    //             "pos: {:?} color: {} {} {} {} uv: {:?}",
+                    //             vert.pos,
+                    //             vert.color.r(),
+                    //             vert.color.g(),
+                    //             vert.color.b(),
+                    //             vert.color.a(),
+                    //             vert.uv
+                    //         );
+                    //     }
+                    //     println!("texture id: {:?}", mesh.texture_id);
+                    // }
+
+                    // egui::epaint::Primitive::Callback(cb) => {
+                    //     println!("cb {:?}", cb);
+                    // }
+                    // }
+                // }
+
+                // println!(
+                //     "tex delta set len: {} free len: {}",
+                //     full_output.textures_delta.set.len(),
+                //     full_output.textures_delta.free.len()
+                // );
+
+                event_loop.exit();
+            }
             _ => (),
         }
     }
