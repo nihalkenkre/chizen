@@ -5,7 +5,7 @@
 #![allow(unused_variables)]
 #![allow(unused_assignments)]
 
-use std::{ffi::CStr, os::raw::c_void, process::Command, ptr::null, u64};
+use std::{ffi::CStr, os::raw::c_void};
 
 include!(concat!(env!("OUT_DIR"), "/vk_wrapper.rs"));
 
@@ -1361,7 +1361,7 @@ impl Device {
         }
     }
 
-    pub fn free_command_buffers(&self, cmd_pool: VkCommandPool, cmd_buff: CommandBuffer) {
+    pub fn free_command_buffers(&self, cmd_pool: VkCommandPool, cmd_buff: CommandBuffers) {
         unsafe {
             vkFreeCommandBuffers(
                 self.device,
@@ -2318,13 +2318,13 @@ impl ImageView {
     }
 }
 
-pub struct CommandBuffer {
+pub struct CommandBuffers {
     pub cmd_buffs: Vec<VkCommandBuffer>,
     command_pool: VkCommandPool,
     device: VkDevice,
 }
 
-impl Default for CommandBuffer {
+impl Default for CommandBuffers {
     fn default() -> Self {
         Self {
             cmd_buffs: vec![],
@@ -2334,7 +2334,7 @@ impl Default for CommandBuffer {
     }
 }
 
-impl Drop for CommandBuffer {
+impl Drop for CommandBuffers {
     fn drop(&mut self) {
         if self.cmd_buffs.len() > 0 && self.device != std::ptr::null_mut() {
             println!("Dropping command buffer");
@@ -2350,11 +2350,11 @@ impl Drop for CommandBuffer {
     }
 }
 
-impl CommandBuffer {
+impl CommandBuffers {
     pub fn allocate(
         device: VkDevice,
         allocate_info: &VkCommandBufferAllocateInfo,
-    ) -> Result<CommandBuffer, VkResult> {
+    ) -> Result<CommandBuffers, VkResult> {
         let mut result = VK_SUCCESS;
         let mut vk_cmd_buffs =
             vec![std::ptr::null_mut(); allocate_info.commandBufferCount as usize];
@@ -2364,7 +2364,7 @@ impl CommandBuffer {
         }
 
         if result >= VK_SUCCESS {
-            let mut cmd_buff = CommandBuffer {
+            let mut cmd_buff = CommandBuffers {
                 cmd_buffs: Vec::with_capacity(allocate_info.commandBufferCount as usize),
                 device,
                 command_pool: allocate_info.commandPool,
@@ -2885,6 +2885,74 @@ impl VkFenceCreateInfo {
     }
 }
 
+pub struct Fence {
+    pub fence: VkFence,
+    device: VkDevice,
+    allocator: Option<VkAllocationCallbacks>,
+}
+
+impl Default for Fence {
+    fn default() -> Self {
+        Self {
+            fence: std::ptr::null_mut(),
+            device: std::ptr::null_mut(),
+            allocator: Option::default(),
+        }
+    }
+}
+
+impl Drop for Fence {
+    fn drop(&mut self) {
+        if self.fence != std::ptr::null_mut() && self.device != std::ptr::null_mut() {
+            println!("Dropping fence");
+
+            unsafe {
+                vkDestroyFence(
+                    self.device,
+                    self.fence,
+                    match self.allocator {
+                        Some(x) => &x,
+                        None => std::ptr::null(),
+                    },
+                );
+            }
+        }
+    }
+}
+
+impl Fence {
+    pub fn create(
+        device: VkDevice,
+        create_info: &VkFenceCreateInfo,
+        allocator: Option<VkAllocationCallbacks>,
+    ) -> Result<Self, VkResult> {
+        let mut result = VK_SUCCESS;
+        let mut fence = std::ptr::null_mut();
+
+        unsafe {
+            result = vkCreateFence(
+                device,
+                create_info,
+                match allocator {
+                    Some(x) => &x,
+                    None => std::ptr::null(),
+                },
+                &mut fence,
+            )
+        }
+
+        if result >= VK_SUCCESS {
+            Ok(Self {
+                fence,
+                device,
+                allocator,
+            })
+        } else {
+            Err(result)
+        }
+    }
+}
+
 impl VkSemaphoreCreateInfo {
     pub fn new(p_next: Option<*const c_void>, flags: VkSemaphoreCreateFlags) -> Self {
         Self {
@@ -2898,6 +2966,145 @@ impl VkSemaphoreCreateInfo {
     }
 }
 
+pub struct Semaphore {
+    pub semaphore: VkSemaphore,
+    device: VkDevice,
+    allocator: Option<VkAllocationCallbacks>,
+}
+
+impl Default for Semaphore {
+    fn default() -> Self {
+        Self {
+            semaphore: std::ptr::null_mut(),
+            device: std::ptr::null_mut(),
+            allocator: Option::default(),
+        }
+    }
+}
+
+impl Drop for Semaphore {
+    fn drop(&mut self) {
+        if self.semaphore != std::ptr::null_mut() && self.device != std::ptr::null_mut() {
+            println!("Dropping semaphore");
+
+            unsafe {
+                vkDestroySemaphore(
+                    self.device,
+                    self.semaphore,
+                    match self.allocator {
+                        Some(x) => &x,
+                        None => std::ptr::null(),
+                    },
+                );
+            }
+        }
+    }
+}
+
+impl Semaphore {
+    pub fn create(
+        device: VkDevice,
+        create_info: &VkSemaphoreCreateInfo,
+        allocator: Option<VkAllocationCallbacks>,
+    ) -> Result<Self, VkResult> {
+        let mut result = VK_SUCCESS;
+        let mut semaphore: VkSemaphore = std::ptr::null_mut();
+
+        unsafe {
+            result = vkCreateSemaphore(
+                device,
+                create_info,
+                match allocator {
+                    Some(x) => &x,
+                    None => std::ptr::null(),
+                },
+                &mut semaphore,
+            );
+        }
+
+        if result >= VK_SUCCESS {
+            Ok(Self {
+                device,
+                semaphore,
+                allocator,
+            })
+        } else {
+            Err(result)
+        }
+    }
+}
+pub struct Semaphores {
+    pub semaphores: Vec<VkSemaphore>,
+    device: VkDevice,
+    allocator: Option<VkAllocationCallbacks>,
+}
+
+impl Default for Semaphores {
+    fn default() -> Self {
+        Self {
+            semaphores: vec![],
+            device: std::ptr::null_mut(),
+            allocator: Option::default(),
+        }
+    }
+}
+
+impl Drop for Semaphores {
+    fn drop(&mut self) {
+        if self.semaphores.len() > 0 && self.device != std::ptr::null_mut() {
+            println!("Dropping semaphores");
+
+            for semaphore in &self.semaphores {
+                unsafe {
+                    vkDestroySemaphore(
+                        self.device,
+                        *semaphore,
+                        match self.allocator {
+                            Some(x) => &x,
+                            None => std::ptr::null(),
+                        },
+                    );
+                }
+            }
+        }
+    }
+}
+
+impl Semaphores {
+    pub fn create(
+        device: VkDevice,
+        semaphore_count: usize,
+        create_info: &VkSemaphoreCreateInfo,
+        allocator: Option<VkAllocationCallbacks>,
+    ) -> Result<Self, VkResult> {
+        let mut result = VK_SUCCESS;
+        let mut semaphores = vec![std::ptr::null_mut(); semaphore_count];
+
+        for semaphore in &mut semaphores {
+            unsafe {
+                result = vkCreateSemaphore(
+                    device,
+                    create_info,
+                    match allocator {
+                        Some(x) => &x,
+                        None => std::ptr::null(),
+                    },
+                    semaphore,
+                );
+
+                if result < VK_SUCCESS {
+                    return Err(result);
+                }
+            }
+        }
+
+        Ok(Self {
+            device,
+            semaphores,
+            allocator,
+        })
+    }
+}
 impl VkImageMemoryBarrier {
     pub fn new(
         p_next: Option<*const c_void>,

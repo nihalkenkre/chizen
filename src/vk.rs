@@ -5,7 +5,7 @@
 #![allow(unused_assignments)]
 
 use core::panic;
-use std::{ffi::CStr, os::raw::c_void, process::Command, u64};
+use std::{ffi::CStr, os::raw::c_void};
 
 mod backend;
 use backend::*;
@@ -64,8 +64,12 @@ pub struct ImageInfo {
 }
 
 pub struct Vk {
-    pub lyt_chng_cmd_buff: CommandBuffer,
-    pub sc_cmd_buff: CommandBuffer,
+    pub img_lyt_chng_fnc: Fence,
+    pub acq_sem: Semaphore,
+    pub sc_img_lyt_chng_sems: Semaphores,
+    pub rndr_sems: Semaphores,
+    pub lyt_chng_cmd_buff: CommandBuffers,
+    pub sc_cmd_buff: CommandBuffers,
     pub sc_cmd_pool: CommandPool,
     pub vert_sh_mod: ShaderModule,
     pub frag_sh_mod: ShaderModule,
@@ -84,10 +88,6 @@ pub struct Vk {
     pub desc_pool: VkDescriptorPool,
     pub pipe_lyt: VkPipelineLayout,
     pub view_pipes: Vec<VkPipeline>,
-    pub img_lyt_chng_fnc: VkFence,
-    pub acq_sem: VkSemaphore,
-    pub sc_img_lyt_chng_sems: Vec<VkSemaphore>,
-    pub rndr_sems: Vec<VkSemaphore>,
     pub uni_buff: VkBuffer,
     pub uni_mem: VkDeviceMemory,
     pub min_uni_buff_align: VkDeviceSize,
@@ -122,12 +122,12 @@ impl Default for Vk {
             pipe_lyt: std::ptr::null_mut(),
             view_pipes: vec![],
             sc_cmd_pool: CommandPool::default(),
-            sc_cmd_buff: CommandBuffer::default(),
-            lyt_chng_cmd_buff: CommandBuffer::default(),
-            img_lyt_chng_fnc: std::ptr::null_mut(),
-            acq_sem: std::ptr::null_mut(),
-            sc_img_lyt_chng_sems: vec![],
-            rndr_sems: vec![],
+            sc_cmd_buff: CommandBuffers::default(),
+            lyt_chng_cmd_buff: CommandBuffers::default(),
+            img_lyt_chng_fnc: Fence::default(),
+            acq_sem: Semaphore::default(),
+            sc_img_lyt_chng_sems: Semaphores::default(),
+            rndr_sems: Semaphores::default(),
             uni_buff: std::ptr::null_mut(),
             uni_mem: std::ptr::null_mut(),
             min_uni_buff_align: 0,
@@ -800,11 +800,11 @@ impl Vk {
             }
         };
 
-        let sc_cmd_pool_ci = VkCommandPoolCreateInfo::new(
-            None,
-            VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT as u32,
-            q_fly_idx as usize,
-        );
+        // let sc_cmd_pool_ci = VkCommandPoolCreateInfo::new(
+        //     None,
+        //     VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT as u32,
+        //     q_fly_idx as usize,
+        // );
 
         let sc_cmd_pool = match CommandPool::create(
             device.device,
@@ -828,31 +828,50 @@ impl Vk {
             sc_images.len(),
         );
 
-        let lyt_chng_cmd_buff_ai = VkCommandBufferAllocateInfo::new(
-            None,
-            sc_cmd_pool.command_pool,
-            VK_COMMAND_BUFFER_LEVEL_PRIMARY,
-            1,
-        );
+        // let lyt_chng_cmd_buff_ai = VkCommandBufferAllocateInfo::new(
+        //     None,
+        //     sc_cmd_pool.command_pool,
+        //     VK_COMMAND_BUFFER_LEVEL_PRIMARY,
+        //     1,
+        // );
 
-        let lyt_chng_cmd_buff = match CommandBuffer::allocate(device.device, &lyt_chng_cmd_buff_ai)
-        {
+        let lyt_chng_cmd_buff = match CommandBuffers::allocate(
+            device.device,
+            &VkCommandBufferAllocateInfo::new(
+                None,
+                sc_cmd_pool.command_pool,
+                VK_COMMAND_BUFFER_LEVEL_PRIMARY,
+                1,
+            ),
+        ) {
             Ok(x) => x,
             Err(err) => {
                 panic!("ERR allocate commmand buffers {}", err);
             }
         };
 
-        let sc_cmd_buff = match CommandBuffer::allocate(device.device, &sc_cmd_buff_ai) {
+        let sc_cmd_buff = match CommandBuffers::allocate(
+            device.device,
+            &VkCommandBufferAllocateInfo::new(
+                None,
+                sc_cmd_pool.command_pool,
+                VK_COMMAND_BUFFER_LEVEL_PRIMARY,
+                sc_images.len(),
+            ),
+        ) {
             Ok(x) => x,
             Err(err) => {
                 panic!("ERR allocate command buffers {}", err);
             }
         };
 
-        let lyt_fnc_ci = VkFenceCreateInfo::new(None, VK_FENCE_CREATE_SIGNALED_BIT as u32);
+        // let lyt_fnc_ci = VkFenceCreateInfo::new(None, VK_FENCE_CREATE_SIGNALED_BIT as u32);
 
-        let img_lyt_chng_fnc = match device.create_fence(&lyt_fnc_ci, None) {
+        let img_lyt_chng_fnc = match Fence::create(
+            device.device,
+            &VkFenceCreateInfo::new(None, VK_FENCE_CREATE_SIGNALED_BIT as u32),
+            None,
+        ) {
             Ok(x) => x,
             Err(err) => {
                 panic!("ERR create fence {}", err);
@@ -861,31 +880,43 @@ impl Vk {
 
         let sem_ci = VkSemaphoreCreateInfo::new(None, 0);
 
-        let acq_sem = match device.create_semaphore(&sem_ci, None) {
+        let acq_sem = match Semaphore::create(device.device, &sem_ci, None) {
             Ok(x) => x,
             Err(err) => {
                 panic!("ERR create semaphore {}", err);
             }
         };
 
-        let mut sc_img_lyt_chng_sems = vec![];
-        let mut rndr_sems = vec![];
-
-        for _ in 0..sc_images.len() {
-            sc_img_lyt_chng_sems.push(match device.create_semaphore(&sem_ci, None) {
+        let sc_img_lyt_chng_sems =
+            match Semaphores::create(device.device, sc_images.len(), &sem_ci, None) {
                 Ok(x) => x,
                 Err(err) => {
-                    panic!("ERR create semaphore {}", err)
+                    panic!("ERR create semaphore {}", err);
                 }
-            });
+            };
 
-            rndr_sems.push(match device.create_semaphore(&sem_ci, None) {
-                Ok(x) => x,
-                Err(err) => {
-                    panic!("ERR create semaphore {}", err)
-                }
-            });
-        }
+        let rndr_sems = match Semaphores::create(device.device, sc_images.len(), &sem_ci, None) {
+            Ok(x) => x,
+            Err(err) => {
+                panic!("ERR create semaphore {}", err);
+            }
+        };
+
+        // for _ in 0..sc_images.len() {
+        //     sc_img_lyt_chng_sems.push(match Semaphore::create(device.device, &sem_ci, None) {
+        //         Ok(x) => x,
+        //         Err(err) => {
+        //             panic!("ERR create semaphore {}", err)
+        //         }
+        //     });
+
+        //     rndr_sems.push(match Semaphore::create(device.device, &sem_ci, None) {
+        //         Ok(x) => x,
+        //         Err(err) => {
+        //             panic!("ERR create semaphore {}", err)
+        //         }
+        //     });
+        // }
 
         let gfx_q = device.get_queue(q_fly_idx, 0);
         let xfer_q = device.get_queue(q_fly_idx, 1);
@@ -996,7 +1027,7 @@ impl Vk {
         let img_idx_res = self.device.acquire_next_image_khr(
             self.swapchain.swapchain,
             u64::MAX,
-            Some(self.acq_sem),
+            Some(self.acq_sem.semaphore),
             None,
         );
 
@@ -1015,8 +1046,8 @@ impl Vk {
 
         let img_idx = img_idx_res.ok().unwrap();
 
-        let mut wait_sems = vec![self.acq_sem];
-        let mut sig_sems = vec![self.sc_img_lyt_chng_sems[img_idx]];
+        let mut wait_sems = vec![self.acq_sem.semaphore];
+        let mut sig_sems = vec![self.sc_img_lyt_chng_sems.semaphores[img_idx]];
         let mut cmd_buffs = vec![];
 
         change_image_layout(
@@ -1033,7 +1064,7 @@ impl Vk {
             VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT as u32,
             &wait_sems,
             &sig_sems,
-            self.img_lyt_chng_fnc,
+            self.img_lyt_chng_fnc.fence,
             self.q_fly_idx,
             &self.xfer_q,
         );
@@ -1121,8 +1152,8 @@ impl Vk {
 
         let wait_stage_msk = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT as u32;
 
-        wait_sems = vec![self.sc_img_lyt_chng_sems[img_idx]];
-        sig_sems = vec![self.rndr_sems[img_idx]];
+        wait_sems = vec![self.sc_img_lyt_chng_sems.semaphores[img_idx]];
+        sig_sems = vec![self.rndr_sems.semaphores[img_idx]];
         cmd_buffs = vec![self.sc_cmd_buff.cmd_buffs[img_idx]];
 
         let si = VkSubmitInfo::new(
@@ -1142,8 +1173,8 @@ impl Vk {
 
         let q_wait_stg_msk = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT as u32;
 
-        wait_sems = vec![self.rndr_sems[img_idx]];
-        sig_sems = vec![self.sc_img_lyt_chng_sems[img_idx]];
+        wait_sems = vec![self.rndr_sems.semaphores[img_idx]];
+        sig_sems = vec![self.sc_img_lyt_chng_sems.semaphores[img_idx]];
 
         change_image_layout(
             &self.device,
@@ -1159,12 +1190,12 @@ impl Vk {
             q_wait_stg_msk,
             &wait_sems,
             &sig_sems,
-            self.img_lyt_chng_fnc,
+            self.img_lyt_chng_fnc.fence,
             self.q_fly_idx,
             &self.xfer_q,
         );
 
-        wait_sems = vec![self.sc_img_lyt_chng_sems[img_idx]];
+        wait_sems = vec![self.sc_img_lyt_chng_sems.semaphores[img_idx]];
         let swapchains = vec![self.swapchain.swapchain];
         let img_idxs = vec![img_idx as u32];
         let pi = VkPresentInfoKHR::new(None, &wait_sems, &swapchains, &img_idxs, None);
@@ -1187,17 +1218,17 @@ impl Vk {
         self.device.destroy_buffer(self.uni_buff, None);
         self.device.free_memory(self.uni_mem, None);
 
-        for sem in &self.sc_img_lyt_chng_sems {
-            self.device.destroy_semaphore(*sem, None);
-        }
+        // for sem in &self.sc_img_lyt_chng_sems {
+        //     self.device.destroy_semaphore(*sem, None);
+        // }
 
-        for sem in &self.rndr_sems {
-            self.device.destroy_semaphore(*sem, None);
-        }
+        // for sem in &self.rndr_sems {
+        //     self.device.destroy_semaphore(*sem, None);
+        // }
 
-        self.device.destroy_semaphore(self.acq_sem, None);
+        // self.device.destroy_semaphore(self.acq_sem, None);
 
-        self.device.destroy_fence(self.img_lyt_chng_fnc, None);
+        // self.device.destroy_fence(self.img_lyt_chng_fnc, None);
         // self.device.destroy_command_pool(self.sc_cmd_pool, None);
         self.device.destroy_pipeline_layout(self.pipe_lyt, None);
         self.device.destroy_pipelines(&self.view_pipes, None);
@@ -1465,7 +1496,7 @@ pub fn change_image_layout(
     dst_stg_msk: VkPipelineStageFlags,
     src_acc: VkAccessFlags,
     dst_acc: VkAccessFlags,
-    cmd_buff: &CommandBuffer,
+    cmd_buff: &CommandBuffers,
     cmd_buff_idx: usize,
     q_wait_stg_msk: VkPipelineStageFlags,
     wait_sems: &Vec<VkSemaphore>,
