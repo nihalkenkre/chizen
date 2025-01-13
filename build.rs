@@ -170,6 +170,7 @@ fn main() {
         .allowlist_function("vkCmdEndRendering")
         .allowlist_function("vkQueuePresentKHR")
         .allowlist_function("vkQueueWaitIdle")
+        .derive_default(true)
         .prepend_enum_name(false)
         .parse_callbacks(Box::new(bindgen::CargoCallbacks::new()))
         .clang_arg("-I".to_owned() + &vk_sdk + "/Include")

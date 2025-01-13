@@ -6,6 +6,7 @@ edition = "2021"
 [dependencies]
 winit = "*"
 glam = "*"
+egui = "*"
 
 [dependencies.gltf]
 version = "*"
