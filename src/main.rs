@@ -93,7 +93,6 @@ impl ApplicationHandler for Application {
 
     fn exiting(&mut self, event_loop: &winit::event_loop::ActiveEventLoop) {
         let _ = event_loop;
-        self.vk.shutdown();
     }
 
     fn memory_warning(&mut self, event_loop: &winit::event_loop::ActiveEventLoop) {
@@ -102,18 +101,25 @@ impl ApplicationHandler for Application {
 }
 
 fn main() -> Result<(), Box<dyn Error>> {
+    let cmd_args: Vec<String> = std::env::args().collect();
+
     println!("Hello");
-    let event_loop = EventLoop::new()?;
-    event_loop.set_control_flow(winit::event_loop::ControlFlow::Wait);
-    let mut app = Application::default();
-    event_loop.run_app(&mut app)?;
 
-    // println!("Press any key to continue...");
-    // let mut buf = String::new();
-    // std::io::stdin()
-    //     .read_line(&mut buf)
-    //     .expect("failed to continue");
+    if cmd_args.len() > 0 {
+        println!("{:?}", cmd_args);
+    } else {
+        let event_loop = EventLoop::new()?;
+        event_loop.set_control_flow(winit::event_loop::ControlFlow::Wait);
+        let mut app = Application::default();
+        event_loop.run_app(&mut app)?;
 
+        // println!("Press any key to continue...");
+        // let mut buf = String::new();
+        // std::io::stdin()
+        //     .read_line(&mut buf)
+        //     .expect("failed to continue");
+    }
     println!("Bye");
+
     Ok(())
 }

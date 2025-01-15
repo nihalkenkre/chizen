@@ -279,6 +279,14 @@ pub struct PhysicalDevice {
     pub phy_dev: VkPhysicalDevice,
 }
 
+impl Default for PhysicalDevice {
+    fn default() -> Self {
+        Self {
+            phy_dev: std::ptr::null_mut(),
+        }
+    }
+}
+
 impl PhysicalDevice {
     pub fn properties(&self) -> VkPhysicalDeviceProperties {
         let mut phy_dev_props = VkPhysicalDeviceProperties::default();
@@ -1200,31 +1208,33 @@ impl Device {
         }
     }
 
-    // pub fn allocate_command_buffers(
-    //     &self,
-    //     alloc_info: &VkCommandBufferAllocateInfo,
-    // ) -> Result<CommandBuffer, VkResult> {
-    //     let mut result = VK_SUCCESS;
-    //     let mut vk_cmd_buffs = vec![std::ptr::null_mut(); alloc_info.commandBufferCount as usize];
+    pub fn allocate_command_buffers(
+        &self,
+        alloc_info: &VkCommandBufferAllocateInfo,
+    ) -> Result<CommandBuffers, VkResult> {
+        let mut result = VK_SUCCESS;
+        let mut vk_cmd_buffs = vec![std::ptr::null_mut(); alloc_info.commandBufferCount as usize];
 
-    //     unsafe {
-    //         result = vkAllocateCommandBuffers(self.device, alloc_info, vk_cmd_buffs.as_mut_ptr());
-    //     }
+        unsafe {
+            result = vkAllocateCommandBuffers(self.device, alloc_info, vk_cmd_buffs.as_mut_ptr());
+        }
 
-    //     if result >= VK_SUCCESS {
-    //         let mut cmd_buff = CommandBuffer {
-    //             cmd_buffs: Vec::with_capacity(alloc_info.commandBufferCount as usize),
-    //         };
+        if result >= VK_SUCCESS {
+            let mut cmd_buff = CommandBuffers {
+                device: self.device,
+                cmd_buffs: Vec::with_capacity(alloc_info.commandBufferCount as usize),
+                command_pool: alloc_info.commandPool,
+            };
 
-    //         for vk_cmd_buff in vk_cmd_buffs {
-    //             cmd_buff.cmd_buffs.push(vk_cmd_buff);
-    //         }
+            for vk_cmd_buff in vk_cmd_buffs {
+                cmd_buff.cmd_buffs.push(vk_cmd_buff);
+            }
 
-    //         Ok(cmd_buff)
-    //     } else {
-    //         Err(result)
-    //     }
-    // }
+            Ok(cmd_buff)
+        } else {
+            Err(result)
+        }
+    }
 
     pub fn get_queue(&self, q_fly_idx: u32, q_idx: u32) -> Queue {
         let mut q: Queue = Queue {
@@ -1358,6 +1368,20 @@ impl Device {
                     None => std::ptr::null(),
                 },
             );
+        }
+    }
+
+    pub fn wait_idle(&self) -> Result<(), VkResult> {
+        let mut result = VK_SUCCESS;
+
+        unsafe {
+            result = vkDeviceWaitIdle(self.device);
+        }
+
+        if result >= VK_SUCCESS {
+            Ok(())
+        } else {
+            Err(result)
         }
     }
 
@@ -1684,6 +1708,102 @@ impl VkBufferCreateInfo {
     }
 }
 
+pub struct Buffer {
+    pub buffer: VkBuffer,
+    device: VkDevice,
+    allocator: Option<VkAllocationCallbacks>,
+}
+
+impl Default for Buffer {
+    fn default() -> Self {
+        Self {
+            buffer: std::ptr::null_mut(),
+            device: std::ptr::null_mut(),
+            allocator: Option::default(),
+        }
+    }
+}
+
+impl Drop for Buffer {
+    fn drop(&mut self) {
+        if self.buffer != std::ptr::null_mut() && self.device != std::ptr::null_mut() {
+            println!("Dropping buffer");
+
+            unsafe {
+                vkDestroyBuffer(
+                    self.device,
+                    self.buffer,
+                    match self.allocator {
+                        Some(x) => &x,
+                        None => std::ptr::null_mut(),
+                    },
+                );
+            }
+        }
+    }
+}
+
+impl Buffer {
+    pub fn create(
+        device: VkDevice,
+        create_info: &VkBufferCreateInfo,
+        allocator: Option<VkAllocationCallbacks>,
+    ) -> Result<Self, VkResult> {
+        let mut buffer = std::ptr::null_mut();
+        let mut result = VK_SUCCESS;
+
+        unsafe {
+            result = vkCreateBuffer(
+                device,
+                create_info,
+                match allocator {
+                    Some(x) => &x,
+                    None => std::ptr::null(),
+                },
+                &mut buffer,
+            );
+        }
+
+        if result >= VK_SUCCESS {
+            Ok(Self {
+                device,
+                buffer,
+                allocator,
+            })
+        } else {
+            Err(result)
+        }
+    }
+
+    pub fn memory_requirements(&self) -> VkMemoryRequirements {
+        let mut mem_reqs = VkMemoryRequirements::default();
+
+        unsafe {
+            vkGetBufferMemoryRequirements(self.device, self.buffer, &mut mem_reqs);
+        }
+
+        mem_reqs
+    }
+
+    pub fn bind_memory(
+        &self,
+        memory: VkDeviceMemory,
+        offset: VkDeviceSize,
+    ) -> Result<(), VkResult> {
+        let mut result = VK_SUCCESS;
+
+        unsafe {
+            result = vkBindBufferMemory(self.device, self.buffer, memory, offset);
+        }
+
+        if result >= VK_SUCCESS {
+            Ok(())
+        } else {
+            Err(result)
+        }
+    }
+}
+
 impl VkMemoryAllocateInfo {
     pub fn new(
         p_next: Option<*const c_void>,
@@ -1698,6 +1818,74 @@ impl VkMemoryAllocateInfo {
             },
             allocationSize: allocation_size,
             memoryTypeIndex: memory_type_index,
+        }
+    }
+}
+
+pub struct DeviceMemory {
+    pub device_memory: VkDeviceMemory,
+    device: VkDevice,
+    allocator: Option<VkAllocationCallbacks>,
+}
+
+impl Default for DeviceMemory {
+    fn default() -> Self {
+        Self {
+            device_memory: std::ptr::null_mut(),
+            device: std::ptr::null_mut(),
+            allocator: Option::default(),
+        }
+    }
+}
+
+impl Drop for DeviceMemory {
+    fn drop(&mut self) {
+        if self.device_memory != std::ptr::null_mut() && self.device != std::ptr::null_mut() {
+            println!("Dropping device memory");
+
+            unsafe {
+                vkFreeMemory(
+                    self.device,
+                    self.device_memory,
+                    match self.allocator {
+                        Some(x) => &x,
+                        None => std::ptr::null(),
+                    },
+                );
+            }
+        }
+    }
+}
+
+impl DeviceMemory {
+    pub fn allocate(
+        device: VkDevice,
+        allocate_info: &VkMemoryAllocateInfo,
+        allocator: Option<VkAllocationCallbacks>,
+    ) -> Result<Self, VkResult> {
+        let mut device_memory = std::ptr::null_mut();
+        let mut result = VK_SUCCESS;
+
+        unsafe {
+            result = vkAllocateMemory(
+                device,
+                allocate_info,
+                match allocator {
+                    Some(x) => &x,
+                    None => std::ptr::null(),
+                },
+                &mut device_memory,
+            );
+        }
+
+        if result >= VK_SUCCESS {
+            Ok(Self {
+                device_memory,
+                device,
+                allocator,
+            })
+        } else {
+            Err(result)
         }
     }
 }
@@ -1811,6 +1999,74 @@ impl VkDescriptorPoolCreateInfo {
     }
 }
 
+pub struct DescriptorPool {
+    pub descriptor_pool: VkDescriptorPool,
+    device: VkDevice,
+    allocator: Option<VkAllocationCallbacks>,
+}
+
+impl Default for DescriptorPool {
+    fn default() -> Self {
+        Self {
+            descriptor_pool: std::ptr::null_mut(),
+            device: std::ptr::null_mut(),
+            allocator: Option::default(),
+        }
+    }
+}
+
+impl Drop for DescriptorPool {
+    fn drop(&mut self) {
+        if self.descriptor_pool != std::ptr::null_mut() && self.device != std::ptr::null_mut() {
+            println!("Dropping descriptor pool");
+
+            unsafe {
+                vkDestroyDescriptorPool(
+                    self.device,
+                    self.descriptor_pool,
+                    match self.allocator {
+                        Some(x) => &x,
+                        None => std::ptr::null(),
+                    },
+                );
+            }
+        }
+    }
+}
+
+impl DescriptorPool {
+    pub fn create(
+        device: VkDevice,
+        create_info: &VkDescriptorPoolCreateInfo,
+        allocator: Option<VkAllocationCallbacks>,
+    ) -> Result<DescriptorPool, VkResult> {
+        let mut result = VK_SUCCESS;
+        let mut descriptor_pool = std::ptr::null_mut();
+
+        unsafe {
+            result = vkCreateDescriptorPool(
+                device,
+                create_info,
+                match allocator {
+                    Some(x) => &x,
+                    None => std::ptr::null(),
+                },
+                &mut descriptor_pool,
+            );
+        }
+
+        if result >= VK_SUCCESS {
+            Ok(Self {
+                descriptor_pool,
+                device,
+                allocator,
+            })
+        } else {
+            Err(result)
+        }
+    }
+}
+
 impl VkDescriptorSetLayoutBinding {
     pub fn new(
         binding: u32,
@@ -1851,10 +2107,86 @@ impl VkDescriptorSetLayoutCreateInfo {
     }
 }
 
+pub struct DescriptorSetLayouts {
+    pub descriptor_set_layouts: Vec<VkDescriptorSetLayout>,
+    device: VkDevice,
+    allocator: Option<VkAllocationCallbacks>,
+}
+
+impl Default for DescriptorSetLayouts {
+    fn default() -> Self {
+        Self {
+            descriptor_set_layouts: vec![],
+            device: std::ptr::null_mut(),
+            allocator: Option::default(),
+        }
+    }
+}
+
+impl Drop for DescriptorSetLayouts {
+    fn drop(&mut self) {
+        if self.descriptor_set_layouts.len() > 0 && self.device != std::ptr::null_mut() {
+            println!("Dropping descriptor set layouts");
+
+            for descriptor_set_layout in &self.descriptor_set_layouts {
+                unsafe {
+                    vkDestroyDescriptorSetLayout(
+                        self.device,
+                        *descriptor_set_layout,
+                        match self.allocator {
+                            Some(x) => &x,
+                            None => std::ptr::null(),
+                        },
+                    );
+                }
+            }
+        }
+    }
+}
+
+impl DescriptorSetLayouts {
+    pub fn create(
+        device: VkDevice,
+        create_infos: &Vec<VkDescriptorSetLayoutCreateInfo>,
+        allocator: Option<VkAllocationCallbacks>,
+    ) -> Result<DescriptorSetLayouts, VkResult> {
+        let mut result = VK_SUCCESS;
+        let mut descriptor_set_layouts = Vec::with_capacity(create_infos.len());
+
+        for create_info in create_infos {
+            let mut descriptor_set_layout = std::ptr::null_mut();
+
+            unsafe {
+                result = vkCreateDescriptorSetLayout(
+                    device,
+                    create_info,
+                    match allocator {
+                        Some(x) => &x,
+                        None => std::ptr::null(),
+                    },
+                    &mut descriptor_set_layout,
+                );
+            }
+
+            if result < VK_SUCCESS {
+                return Err(result);
+            }
+
+            descriptor_set_layouts.push(descriptor_set_layout);
+        }
+
+        Ok(Self {
+            descriptor_set_layouts,
+            device,
+            allocator,
+        })
+    }
+}
+
 impl VkDescriptorSetAllocateInfo {
     pub fn new(
         p_next: Option<*const c_void>,
-        desc_pool: VkDescriptorPool,
+        desc_pool: &VkDescriptorPool,
         desc_set_lyts: &Vec<VkDescriptorSetLayout>,
     ) -> Self {
         Self {
@@ -1863,9 +2195,67 @@ impl VkDescriptorSetAllocateInfo {
                 Some(x) => x,
                 None => std::ptr::null(),
             },
-            descriptorPool: desc_pool,
+            descriptorPool: *desc_pool,
             descriptorSetCount: desc_set_lyts.len() as u32,
             pSetLayouts: desc_set_lyts.as_ptr(),
+        }
+    }
+}
+
+pub struct DescriptorSets {
+    pub descriptor_sets: Vec<VkDescriptorSet>,
+    descriptor_pool: VkDescriptorPool,
+    device: VkDevice,
+}
+
+impl Default for DescriptorSets {
+    fn default() -> Self {
+        Self {
+            descriptor_sets: vec![],
+            descriptor_pool: std::ptr::null_mut(),
+            device: std::ptr::null_mut(),
+        }
+    }
+}
+
+impl Drop for DescriptorSets {
+    fn drop(&mut self) {
+        if self.descriptor_sets.len() > 0 && self.device != std::ptr::null_mut() {
+            println!("Dropping descriptor sets");
+
+            unsafe {
+                vkFreeDescriptorSets(
+                    self.device,
+                    self.descriptor_pool,
+                    self.descriptor_sets.len() as u32,
+                    self.descriptor_sets.as_ptr(),
+                );
+            }
+        }
+    }
+}
+
+impl DescriptorSets {
+    pub fn allocate(
+        device: VkDevice,
+        allocate_info: &VkDescriptorSetAllocateInfo,
+    ) -> Result<DescriptorSets, VkResult> {
+        let mut result = VK_SUCCESS;
+        let mut descriptor_sets =
+            vec![std::ptr::null_mut(); allocate_info.descriptorSetCount as usize];
+
+        unsafe {
+            result = vkAllocateDescriptorSets(device, allocate_info, descriptor_sets.as_mut_ptr());
+        }
+
+        if result >= VK_SUCCESS {
+            Ok(Self {
+                descriptor_sets,
+                descriptor_pool: allocate_info.descriptorPool,
+                device,
+            })
+        } else {
+            Err(result)
         }
     }
 }
@@ -1888,6 +2278,74 @@ impl VkPipelineLayoutCreateInfo {
             pSetLayouts: desc_set_lyts.as_ptr(),
             pushConstantRangeCount: push_consts_rng.len() as u32,
             pPushConstantRanges: push_consts_rng.as_ptr(),
+        }
+    }
+}
+
+pub struct PipelineLayout {
+    pub pipeline_layout: VkPipelineLayout,
+    device: VkDevice,
+    allocator: Option<VkAllocationCallbacks>,
+}
+
+impl Default for PipelineLayout {
+    fn default() -> Self {
+        Self {
+            pipeline_layout: std::ptr::null_mut(),
+            device: std::ptr::null_mut(),
+            allocator: Option::default(),
+        }
+    }
+}
+
+impl Drop for PipelineLayout {
+    fn drop(&mut self) {
+        if self.pipeline_layout != std::ptr::null_mut() && self.device != std::ptr::null_mut() {
+            println!("Dropping pipeline layout");
+
+            unsafe {
+                vkDestroyPipelineLayout(
+                    self.device,
+                    self.pipeline_layout,
+                    match self.allocator {
+                        Some(x) => &x,
+                        None => std::ptr::null(),
+                    },
+                );
+            }
+        }
+    }
+}
+
+impl PipelineLayout {
+    pub fn create(
+        device: VkDevice,
+        create_info: &VkPipelineLayoutCreateInfo,
+        allocator: Option<VkAllocationCallbacks>,
+    ) -> Result<Self, VkResult> {
+        let mut result = VK_SUCCESS;
+        let mut pipeline_layout = std::ptr::null_mut();
+
+        unsafe {
+            result = vkCreatePipelineLayout(
+                device,
+                create_info,
+                match allocator {
+                    Some(x) => &x,
+                    None => std::ptr::null(),
+                },
+                &mut pipeline_layout,
+            );
+        }
+
+        if result >= VK_SUCCESS {
+            Ok(Self {
+                pipeline_layout,
+                device,
+                allocator,
+            })
+        } else {
+            Err(result)
         }
     }
 }
@@ -2147,6 +2605,7 @@ impl VkImageCreateInfo {
     }
 }
 
+#[derive(Clone)]
 pub struct Image {
     pub image: VkImage,
     device: VkDevice,
@@ -2221,6 +2680,24 @@ impl Image {
         }
 
         mem_reqs
+    }
+
+    pub fn bind_memory(
+        &self,
+        memory: VkDeviceMemory,
+        offset: VkDeviceSize,
+    ) -> Result<(), VkResult> {
+        let mut result = VK_SUCCESS;
+
+        unsafe {
+            result = vkBindImageMemory(self.device, self.image, memory, offset);
+        }
+
+        if result >= VK_SUCCESS {
+            Ok(())
+        } else {
+            Err(result)
+        }
     }
 }
 
@@ -2337,7 +2814,7 @@ impl Default for CommandBuffers {
 impl Drop for CommandBuffers {
     fn drop(&mut self) {
         if self.cmd_buffs.len() > 0 && self.device != std::ptr::null_mut() {
-            println!("Dropping command buffer");
+            println!("Dropping command buffers");
             unsafe {
                 vkFreeCommandBuffers(
                     self.device,
@@ -2379,6 +2856,7 @@ impl CommandBuffers {
             Err(result)
         }
     }
+
     pub fn begin(
         &self,
         buff_idx: usize,
@@ -2511,6 +2989,14 @@ impl VkSubmitInfo {
 
 pub struct Queue {
     pub q: VkQueue,
+}
+
+impl Default for Queue {
+    fn default() -> Self {
+        Self {
+            q: std::ptr::null_mut(),
+        }
+    }
 }
 
 impl Queue {
@@ -2868,6 +3354,82 @@ impl VkGraphicsPipelineCreateInfo {
                 Some(x) => x,
                 None => 0,
             },
+        }
+    }
+}
+
+pub struct GraphicsPipelines {
+    pub pipelines: Vec<VkPipeline>,
+    device: VkDevice,
+    allocator: Option<VkAllocationCallbacks>,
+}
+
+impl Default for GraphicsPipelines {
+    fn default() -> Self {
+        Self {
+            pipelines: vec![],
+            device: std::ptr::null_mut(),
+            allocator: Option::default(),
+        }
+    }
+}
+
+impl Drop for GraphicsPipelines {
+    fn drop(&mut self) {
+        if self.pipelines.len() > 0 && self.device != std::ptr::null_mut() {
+            println!("Dropping graphics pipelines");
+
+            for pipeline in &self.pipelines {
+                unsafe {
+                    vkDestroyPipeline(
+                        self.device,
+                        *pipeline,
+                        match self.allocator {
+                            Some(x) => &x,
+                            None => std::ptr::null(),
+                        },
+                    );
+                }
+            }
+        }
+    }
+}
+
+impl GraphicsPipelines {
+    pub fn create(
+        device: VkDevice,
+        pipeline_cache: Option<VkPipelineCache>,
+        create_infos: &Vec<VkGraphicsPipelineCreateInfo>,
+        allocator: Option<VkAllocationCallbacks>,
+    ) -> Result<GraphicsPipelines, VkResult> {
+        let mut result = VK_SUCCESS;
+        let mut pipelines = vec![std::ptr::null_mut(); create_infos.len() as usize];
+
+        unsafe {
+            result = vkCreateGraphicsPipelines(
+                device,
+                match pipeline_cache {
+                    Some(x) => x,
+                    None => std::ptr::null_mut(),
+                },
+                create_infos.len() as u32,
+                create_infos.as_ptr(),
+                match allocator {
+                    Some(x) => &x,
+                    None => std::ptr::null(),
+                },
+                pipelines.as_mut_ptr(),
+            );
+        }
+
+        if result >= VK_SUCCESS {
+            Ok(Self {
+                pipelines,
+                device,
+                allocator,
+            })
+        } else {
+            Err(result)
         }
     }
 }

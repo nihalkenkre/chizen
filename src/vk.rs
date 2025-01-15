@@ -63,7 +63,224 @@ pub struct ImageInfo {
     tiling: VkImageTiling,
 }
 
+#[derive(Default)]
+pub struct RenderingPath {
+    descriptor_pool: DescriptorPool,
+    descriptor_set_layouts: DescriptorSetLayouts,
+    descriptor_sets: DescriptorSets,
+    pipeline_layout: PipelineLayout,
+    vertex_shader: ShaderModule,
+    fragment_shader: ShaderModule,
+    graphics_pipelines: GraphicsPipelines,
+    uniform_buffer: Buffer,
+    uniform_memory: DeviceMemory,
+    geometry_buffer: Buffer,
+    geometry_memory: DeviceMemory,
+    min_uni_buff_align: VkDeviceSize,
+}
+
+impl Drop for RenderingPath {
+    fn drop(&mut self) {
+        println!("Dropping rendering path");
+    }
+}
+
+impl RenderingPath {
+    pub fn create(device: VkDevice, surface_extent: &VkExtent2D) -> RenderingPath {
+        let descriptor_set_layouts = match DescriptorSetLayouts::create(
+            device,
+            &vec![VkDescriptorSetLayoutCreateInfo::new(
+                None,
+                0,
+                &vec![VkDescriptorSetLayoutBinding::new(
+                    0,
+                    VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
+                    1,
+                    VK_SHADER_STAGE_FRAGMENT_BIT as u32,
+                    None,
+                )],
+            )],
+            None,
+        ) {
+            Ok(x) => x,
+            Err(err) => {
+                panic!("ERR create descriptor set layouts {}", err);
+            }
+        };
+
+        let descriptor_pool = match DescriptorPool::create(
+            device,
+            &VkDescriptorPoolCreateInfo::new(
+                None,
+                0,
+                10,
+                &vec![VkDescriptorPoolSize {
+                    descriptorCount: 1,
+                    type_: VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
+                }],
+            ),
+            None,
+        ) {
+            Ok(x) => x,
+            Err(err) => {
+                panic!("ERR create descriptor pool {}", err);
+            }
+        };
+
+        let descriptor_sets = match DescriptorSets::allocate(
+            device,
+            &VkDescriptorSetAllocateInfo::new(
+                None,
+                &descriptor_pool.descriptor_pool,
+                &descriptor_set_layouts.descriptor_set_layouts,
+            ),
+        ) {
+            Ok(x) => x,
+            Err(err) => {
+                panic!("ERR allocate descriptor sets {}", err);
+            }
+        };
+
+        let pipeline_layout = match PipelineLayout::create(
+            device,
+            &VkPipelineLayoutCreateInfo::new(
+                None,
+                0,
+                &descriptor_set_layouts.descriptor_set_layouts,
+                &vec![],
+            ),
+            None,
+        ) {
+            Ok(x) => x,
+            Err(err) => {
+                panic!("ERR create pipeline layout {}", err);
+            }
+        };
+
+        let vertex_shader = match ShaderModule::create(
+            device,
+            &VkShaderModuleCreateInfo::new(
+                None,
+                0,
+                &match std::fs::read("shaders/gui_vert.spv") {
+                    Ok(x) => x,
+                    Err(err) => {
+                        panic!("ERR reading gui vertex shader file {}", err);
+                    }
+                },
+            ),
+            None,
+        ) {
+            Ok(x) => x,
+            Err(err) => {
+                panic!("ERR create shader module gui vertex {}", err);
+            }
+        };
+
+        let fragment_shader = match ShaderModule::create(
+            device,
+            &VkShaderModuleCreateInfo::new(
+                None,
+                0,
+                &match std::fs::read("shaders/gui_frag.spv") {
+                    Ok(x) => x,
+                    Err(err) => {
+                        panic!("ERR reading gui fragment shader file {}", err);
+                    }
+                },
+            ),
+            None,
+        ) {
+            Ok(x) => x,
+            Err(err) => {
+                panic!("ERR create shader module gui fragment {}", err);
+            }
+        };
+
+        // let graphics_pipelines = match GraphicsPipelines::create(
+        //     device,
+        //     None,
+        //     &vec![VkGraphicsPipelineCreateInfo::new(
+        //         None,
+        //         0,
+        //         &vec![
+        //             VkPipelineShaderStageCreateInfo::new(
+        //                 None,
+        //                 0,
+        //                 VK_SHADER_STAGE_VERTEX_BIT,
+        //                 vertex_shader.shader_module,
+        //                 c"main",
+        //                 None,
+        //             ),
+        //             VkPipelineShaderStageCreateInfo::new(
+        //                 None,
+        //                 0,
+        //                 VK_SHADER_STAGE_FRAGMENT_BIT,
+        //                 fragment_shader.shader_module,
+        //                 c"main",
+        //                 None,
+        //             ),
+        //         ],
+        //         &VkPipelineVertexInputStateCreateInfo::new(
+        //             None,
+        //             0,
+        //             &vec![
+        //                 VkVertexInputBindingDescription {
+        //                     binding: 0,
+        //                     stride: (size_of::<f32>() * 3) as u32,
+        //                     inputRate: VK_VERTEX_INPUT_RATE_VERTEX,
+        //                 },
+        //                 VkVertexInputBindingDescription {
+        //                     binding: 1,
+        //                     stride: (size_of::<f32>() * 3) as u32,
+        //                     inputRate: VK_VERTEX_INPUT_RATE_VERTEX,
+        //                 },
+        //                 VkVertexInputBindingDescription {
+        //                     binding: 1,
+        //                     stride: (size_of::<f32>() * 2) as u32,
+        //                     inputRate: VK_VERTEX_INPUT_RATE_VERTEX,
+        //                 },
+        //             ],
+        //             &vec![
+        //                 VkVertexInputAttributeDescription::new(0, 0, VK_FORMAT_R32G32B32_SFLOAT, 0),
+        //                 VkVertexInputAttributeDescription::new(1, 1, VK_FORMAT_R32G32B32_SFLOAT, 0),
+        //                 VkVertexInputAttributeDescription::new(2, 2, VK_FORMAT_R32G32_SFLOAT, 0),
+        //             ],
+        //         ),
+        //         &VkPipelineInputAssemblyStateCreateInfo::new(
+        //             None,
+        //             0,
+        //             VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST,
+        //             0,
+        //         ),
+        //         None,
+        //         ..Default::default(),
+        //     )],
+        //     None,
+        // ) {
+        //     Ok(x) => x,
+        //     Err(err) => {
+        //         panic!("ERR create graphics pipelines {}", err);
+        //     }
+        // };
+
+        RenderingPath::default()
+    }
+
+    pub fn draw(&self) {}
+}
+
+#[derive(Default)]
 pub struct Vk {
+    pub gui_path: RenderingPath,
+    pub view_pipes: GraphicsPipelines,
+    pub sc_depth_img_mems: Vec<DeviceMemory>,
+    pub desc_sets: DescriptorSets,
+    pub desc_set_lyts: DescriptorSetLayouts,
+    pub desc_pool: DescriptorPool,
+    pub pipe_lyt: PipelineLayout,
+    pub uni_buff: Buffer,
+    pub uni_mem: DeviceMemory,
     pub img_lyt_chng_fnc: Fence,
     pub acq_sem: Semaphore,
     pub sc_img_lyt_chng_sems: Semaphores,
@@ -83,61 +300,23 @@ pub struct Vk {
     pub phy_dev: PhysicalDevice,
     pub surf_extent: VkExtent2D,
     pub sc_images: Vec<VkImage>,
-    pub sc_depth_img_mems: Vec<VkDeviceMemory>,
-    pub desc_set_lyts: Vec<VkDescriptorSetLayout>,
-    pub desc_pool: VkDescriptorPool,
-    pub pipe_lyt: VkPipelineLayout,
-    pub view_pipes: Vec<VkPipeline>,
-    pub uni_buff: VkBuffer,
-    pub uni_mem: VkDeviceMemory,
     pub min_uni_buff_align: VkDeviceSize,
     pub q_fly_idx: u32,
     pub gfx_q: Queue,
     pub xfer_q: Queue,
 }
 
-impl Default for Vk {
-    fn default() -> Self {
-        Self {
-            instance: Instance::default(),
-            phy_dev: PhysicalDevice {
-                phy_dev: std::ptr::null_mut(),
-            },
-            surface: Surface::default(),
-            surf_extent: VkExtent2D {
-                width: 0,
-                height: 0,
-            },
-            device: Device::default(),
-            swapchain: Swapchain::default(),
-            sc_images: vec![],
-            sc_image_views: vec![],
-            sc_depth_imgs: vec![],
-            sc_depth_img_mems: vec![],
-            sc_depth_img_vs: vec![],
-            vert_sh_mod: ShaderModule::default(),
-            frag_sh_mod: ShaderModule::default(),
-            desc_set_lyts: vec![],
-            desc_pool: std::ptr::null_mut(),
-            pipe_lyt: std::ptr::null_mut(),
-            view_pipes: vec![],
-            sc_cmd_pool: CommandPool::default(),
-            sc_cmd_buff: CommandBuffers::default(),
-            lyt_chng_cmd_buff: CommandBuffers::default(),
-            img_lyt_chng_fnc: Fence::default(),
-            acq_sem: Semaphore::default(),
-            sc_img_lyt_chng_sems: Semaphores::default(),
-            rndr_sems: Semaphores::default(),
-            uni_buff: std::ptr::null_mut(),
-            uni_mem: std::ptr::null_mut(),
-            min_uni_buff_align: 0,
-            q_fly_idx: 0,
-            gfx_q: Queue {
-                q: std::ptr::null_mut(),
-            },
-            xfer_q: Queue {
-                q: std::ptr::null_mut(),
-            },
+impl Drop for Vk {
+    fn drop(&mut self) {
+        if self.device.device != std::ptr::null_mut() {
+            println!("Dropping vk");
+
+            match self.device.wait_idle() {
+                Ok(_) => (),
+                Err(err) => {
+                    panic!("ERR device wait idle {}", err);
+                }
+            }
         }
     }
 }
@@ -532,6 +711,8 @@ impl Vk {
         //     },
         // );
 
+        let gui_path = RenderingPath::create(device.device, &surf_caps.currentExtent);
+
         let vert_sh_mod = match ShaderModule::create(
             device.device,
             &VkShaderModuleCreateInfo::new(
@@ -708,17 +889,24 @@ impl Vk {
             VkDescriptorSetLayoutCreateInfo::new(None, 0, &desc_set_1_lyt_binds),
         ];
 
-        let mut desc_set_lyts = vec![];
-        for desc_set_lyt_ci in desc_set_lyt_cis {
-            desc_set_lyts.push(
-                match device.create_descriptor_set_layout(&desc_set_lyt_ci, None) {
-                    Ok(x) => x,
-                    Err(result) => {
-                        panic!("ERR create descriptor set layout {}", result);
-                    }
-                },
-            );
-        }
+        // let mut desc_set_lyts = vec![];
+        // for desc_set_lyt_ci in desc_set_lyt_cis {
+        //     desc_set_lyts.push(
+        //         match DescriptorSetLayouts::create(device.device, &desc_set_lyt_ci, None) {
+        //             Ok(x) => x,
+        //             Err(result) => {
+        //                 panic!("ERR create descriptor set layout {}", result);
+        //             }
+        //         },
+        //     );
+        // }
+        let desc_set_lyts =
+            match DescriptorSetLayouts::create(device.device, &desc_set_lyt_cis, None) {
+                Ok(x) => x,
+                Err(err) => {
+                    panic!("ERR create descriptor set layouts {}", err);
+                }
+            };
 
         let desc_pool_sizes = vec![
             VkDescriptorPoolSize {
@@ -731,18 +919,31 @@ impl Vk {
             },
         ];
 
-        let desc_pool_ci = VkDescriptorPoolCreateInfo::new(None, 0, 10, &desc_pool_sizes);
+        // let desc_pool_ci = VkDescriptorPoolCreateInfo::new(None, 0, 10, &desc_pool_sizes);
 
-        let desc_pool = match device.create_descriptor_pool(&desc_pool_ci, None) {
+        let desc_pool = match DescriptorPool::create(
+            device.device,
+            &VkDescriptorPoolCreateInfo::new(None, 0, 10, &desc_pool_sizes),
+            None,
+        ) {
             Ok(x) => x,
             Err(result) => {
                 panic!("ERR create descriptor pool {}", result);
             }
         };
 
-        let pl_ci = VkPipelineLayoutCreateInfo::new(None, 0, &desc_set_lyts, &vec![]);
+        // let pl_ci = VkPipelineLayoutCreateInfo::new(None, 0, &desc_set_lyts, &vec![]);
 
-        let pipe_lyt = match device.create_pipeline_layout(&pl_ci, None) {
+        let pipe_lyt = match PipelineLayout::create(
+            device.device,
+            &VkPipelineLayoutCreateInfo::new(
+                None,
+                0,
+                &desc_set_lyts.descriptor_set_layouts,
+                &vec![],
+            ),
+            None,
+        ) {
             Ok(x) => x,
             Err(result) => {
                 panic!("ERR create pipeline layout {}", result);
@@ -786,19 +987,20 @@ impl Vk {
             Some(&dss_ci),
             Some(&pcbs_ci),
             None,
-            pipe_lyt,
+            pipe_lyt.pipeline_layout,
             None,
             None,
             None,
             None,
         );
 
-        let view_pipes = match device.create_graphics_pipelines(None, &vec![view_pipe_ci], None) {
-            Ok(x) => x,
-            Err(result) => {
-                panic!("ERR create graphics pipeline {}", result);
-            }
-        };
+        let view_pipes =
+            match GraphicsPipelines::create(device.device, None, &vec![view_pipe_ci], None) {
+                Ok(x) => x,
+                Err(result) => {
+                    panic!("ERR create graphics pipeline {}", result);
+                }
+            };
 
         // let sc_cmd_pool_ci = VkCommandPoolCreateInfo::new(
         //     None,
@@ -930,8 +1132,16 @@ impl Vk {
             (VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT) as u32,
         );
 
-        let desc_set_ai = VkDescriptorSetAllocateInfo::new(None, desc_pool, &desc_set_lyts);
-        let desc_sets = match device.allocate_descriptor_sets(&desc_set_ai) {
+        // let desc_set_ai =
+        //     VkDescriptorSetAllocateInfo::new(None, desc_pool.descriptor_pool, &desc_set_lyts);
+        let desc_sets = match DescriptorSets::allocate(
+            device.device,
+            &VkDescriptorSetAllocateInfo::new(
+                None,
+                &desc_pool.descriptor_pool,
+                &desc_set_lyts.descriptor_set_layouts,
+            ),
+        ) {
             Ok(x) => x,
             Err(err) => {
                 panic!("ERR allocate descriptor sets {}", err);
@@ -939,7 +1149,7 @@ impl Vk {
         };
 
         let desc_buff_info = VkDescriptorBufferInfo {
-            buffer: uni_buff,
+            buffer: uni_buff.buffer,
             offset: 0,
             range: (size_of::<glam::Mat4>() * 2) as VkDeviceSize,
         };
@@ -947,7 +1157,7 @@ impl Vk {
         let desc_buff_infos = vec![desc_buff_info];
         let w_desc_set_0_bind_0 = VkWriteDescriptorSet::new(
             None,
-            desc_sets[0],
+            desc_sets.descriptor_sets[0],
             0,
             0,
             1,
@@ -958,6 +1168,8 @@ impl Vk {
         );
 
         device.update_descriptor_sets(&vec![w_desc_set_0_bind_0], &vec![]);
+
+        let gui_path = RenderingPath::create(device.device, &surf_caps.currentExtent);
 
         Self {
             instance,
@@ -973,6 +1185,7 @@ impl Vk {
             sc_depth_img_vs,
             vert_sh_mod,
             frag_sh_mod,
+            desc_sets,
             desc_set_lyts,
             desc_pool,
             pipe_lyt,
@@ -990,6 +1203,7 @@ impl Vk {
             q_fly_idx,
             gfx_q,
             xfer_q,
+            gui_path,
         }
     }
 
@@ -1212,58 +1426,6 @@ impl Vk {
             },
         };
     }
-
-    pub fn shutdown(&self) {
-        self.gfx_q.wait_idle();
-        self.device.destroy_buffer(self.uni_buff, None);
-        self.device.free_memory(self.uni_mem, None);
-
-        // for sem in &self.sc_img_lyt_chng_sems {
-        //     self.device.destroy_semaphore(*sem, None);
-        // }
-
-        // for sem in &self.rndr_sems {
-        //     self.device.destroy_semaphore(*sem, None);
-        // }
-
-        // self.device.destroy_semaphore(self.acq_sem, None);
-
-        // self.device.destroy_fence(self.img_lyt_chng_fnc, None);
-        // self.device.destroy_command_pool(self.sc_cmd_pool, None);
-        self.device.destroy_pipeline_layout(self.pipe_lyt, None);
-        self.device.destroy_pipelines(&self.view_pipes, None);
-
-        self.device.destroy_descriptor_pool(self.desc_pool, None);
-
-        for desc_set_lyt in &self.desc_set_lyts {
-            self.device
-                .destroy_descriptor_set_layout(*desc_set_lyt, None);
-        }
-
-        // for sc_depth_img in &self.sc_depth_imgs {
-        //     self.device.destroy_image(*sc_depth_img, None);
-        // }
-
-        // for sc_depth_iv in &self.sc_depth_img_vs {
-        //     self.device.destroy_image_view(*sc_depth_iv, None);
-        // }
-
-        for sc_depth_img_mem in &self.sc_depth_img_mems {
-            self.device.free_memory(*sc_depth_img_mem, None);
-        }
-
-        // for sc_image_view in &self.sc_image_views {
-        //     self.device.destroy_image_view(*sc_image_view, None);
-        // }
-
-        // self.device.destroy_shader_module(self.vert_sh_mod, None);
-        // self.device.destroy_shader_module(self.frag_sh_mod, None);
-
-        // self.device.destroy_swapchain_khr(self.swapchain, None);
-        // self.device.destroy(None);
-        // self.instance.destroy_surface_khr(self.surface, None);
-        // self.instance.destroy(None);
-    }
 }
 
 pub fn get_memory_id(
@@ -1291,59 +1453,63 @@ pub fn create_imgs_and_memory(
     device: &Device,
     img_infos: &Vec<ImageInfo>,
     q_fly_idx: &Vec<u32>,
-) -> (Vec<Image>, Vec<ImageView>, Vec<VkDeviceMemory>) {
-    let mut imgs = vec![];
+) -> (Vec<Image>, Vec<ImageView>, Vec<DeviceMemory>) {
+    let mut images = vec![];
     let mut img_views = vec![];
     let mut mem_ais: Vec<VkMemoryAllocateInfo> = Vec::new();
     let mut mems = vec![];
 
-    let mut mem_ais_imgs = Vec::<Vec<(VkImage, u64)>>::new();
+    let mut mem_ais_imgs = Vec::<Vec<(&Image, u64)>>::new();
 
     for img_info in img_infos {
-        let img_ci = VkImageCreateInfo::new(
-            None,
-            0,
-            img_info.img_type,
-            img_info.format,
-            img_info.extent,
-            1,
-            1,
-            img_info.samples,
-            img_info.tiling,
-            img_info.usage,
-            img_info.sharing_mode,
-            q_fly_idx,
-            VK_IMAGE_LAYOUT_UNDEFINED,
-        );
+        // let img_ci = VkImageCreateInfo::new(
+        // None,
+        //     0,
+        //     img_info.img_type,
+        //     img_info.format,
+        //     img_info.extent,
+        //     1,
+        //     1,
+        //     img_info.samples,
+        //     img_info.tiling,
+        //     img_info.usage,
+        //     img_info.sharing_mode,
+        //     q_fly_idx,
+        //     VK_IMAGE_LAYOUT_UNDEFINED,
+        // );
 
-        let image = match Image::create(
-            device.device,
-            &VkImageCreateInfo::new(
+        images.push(
+            match Image::create(
+                device.device,
+                &VkImageCreateInfo::new(
+                    None,
+                    0,
+                    img_info.img_type,
+                    img_info.format,
+                    img_info.extent,
+                    1,
+                    1,
+                    img_info.samples,
+                    img_info.tiling,
+                    img_info.usage,
+                    img_info.sharing_mode,
+                    q_fly_idx,
+                    VK_IMAGE_LAYOUT_UNDEFINED,
+                ),
                 None,
-                0,
-                img_info.img_type,
-                img_info.format,
-                img_info.extent,
-                1,
-                1,
-                img_info.samples,
-                img_info.tiling,
-                img_info.usage,
-                img_info.sharing_mode,
-                q_fly_idx,
-                VK_IMAGE_LAYOUT_UNDEFINED,
-            ),
-            None,
-        ) {
-            Ok(img) => img,
-            Err(result) => {
-                panic!("ERR create image {}", result);
-            }
-        };
+            ) {
+                Ok(img) => img,
+                Err(result) => {
+                    panic!("ERR create image {}", result);
+                }
+            },
+        );
+    }
 
+    for (i, image) in images.iter().enumerate() {
         let mem_props = phy_dev.memory_properties();
         let mem_reqs = image.memory_requirements();
-        let mem_id = match get_memory_id(&mem_props, &mem_reqs, img_info.req_mem_types) {
+        let mem_id = match get_memory_id(&mem_props, &mem_reqs, img_infos[i].req_mem_types) {
             Ok(id) => id,
             Err(result) => {
                 panic!("ERR get memory id {}", result);
@@ -1357,7 +1523,7 @@ pub fn create_imgs_and_memory(
                 mem_ai.allocationSize += mem_reqs.size;
                 mem_ai_found = true;
 
-                mem_ais_imgs[i].push((image.image, mem_reqs.size));
+                mem_ais_imgs[i].push((&image, mem_reqs.size));
 
                 break;
             }
@@ -1365,14 +1531,14 @@ pub fn create_imgs_and_memory(
 
         if !mem_ai_found {
             mem_ais.push(VkMemoryAllocateInfo::new(None, mem_reqs.size, mem_id));
-            mem_ais_imgs.push(vec![(image.image, mem_reqs.size)]);
+            mem_ais_imgs.push(vec![(&image, mem_reqs.size)]);
         }
 
-        imgs.push(image);
+        // imgs.push(image);
     }
 
     for mem_ai in &mem_ais {
-        mems.push(match device.allocate_memory(mem_ai, None) {
+        mems.push(match DeviceMemory::allocate(device.device, mem_ai, None) {
             Ok(mem) => mem,
             Err(result) => {
                 panic!("ERR allocate memory {}", result);
@@ -1384,7 +1550,7 @@ pub fn create_imgs_and_memory(
         let mut offset = 0;
 
         for img in &mem_ais_imgs[m] {
-            match device.bind_image_memory(img.0, *mem, offset) {
+            match img.0.bind_memory(mem.device_memory, offset) {
                 Ok(()) => (),
                 Err(result) => {
                     panic!("ERR bind image memory {}", result);
@@ -1417,7 +1583,7 @@ pub fn create_imgs_and_memory(
             &VkImageViewCreateInfo::new(
                 None,
                 0,
-                imgs[i].image,
+                images[i].image,
                 img_info.view_type,
                 img_info.format,
                 VkComponentMapping::default(),
@@ -1439,7 +1605,7 @@ pub fn create_imgs_and_memory(
         img_views.push(img_view);
     }
 
-    (imgs, img_views, mems)
+    (images, img_views, mems)
 }
 
 pub fn create_buffer_and_memory(
@@ -1449,10 +1615,14 @@ pub fn create_buffer_and_memory(
     size: VkDeviceSize,
     usage: VkBufferUsageFlags,
     req_types: VkMemoryPropertyFlags,
-) -> (VkBuffer, VkDeviceMemory) {
-    let buffer_ci =
-        VkBufferCreateInfo::new(None, 0, size, usage, VK_SHARING_MODE_EXCLUSIVE, q_fly_idx);
-    let buff = match device.create_buffer(&buffer_ci, None) {
+) -> (Buffer, DeviceMemory) {
+    // let buffer_ci =
+    // VkBufferCreateInfo::new(None, 0, size, usage, VK_SHARING_MODE_EXCLUSIVE, q_fly_idx);
+    let buff = match Buffer::create(
+        device.device,
+        &VkBufferCreateInfo::new(None, 0, size, usage, VK_SHARING_MODE_EXCLUSIVE, q_fly_idx),
+        None,
+    ) {
         Ok(x) => x,
         Err(err) => {
             panic!("ERR create buffer {}", err);
@@ -1460,7 +1630,7 @@ pub fn create_buffer_and_memory(
     };
 
     let mem_props = phy_dev.memory_properties();
-    let mem_req = device.buffer_memory_requirements(buff);
+    let mem_req = buff.memory_requirements();
     let mem_id = match get_memory_id(&mem_props, &mem_req, req_types) {
         Ok(id) => id,
         Err(err) => {
@@ -1468,16 +1638,20 @@ pub fn create_buffer_and_memory(
         }
     };
 
-    let mem_ai = VkMemoryAllocateInfo::new(None, mem_req.size, mem_id);
+    // let mem_ai = VkMemoryAllocateInfo::new(None, mem_req.size, mem_id);
 
-    let mem = match device.allocate_memory(&mem_ai, None) {
+    let mem = match DeviceMemory::allocate(
+        device.device,
+        &VkMemoryAllocateInfo::new(None, mem_req.size, mem_id),
+        None,
+    ) {
         Ok(mem) => mem,
         Err(err) => {
             panic!("ERR allocate memory {}", err);
         }
     };
 
-    match device.bind_buffer_memory(buff, mem, 0) {
+    match buff.bind_memory(mem.device_memory, 0) {
         Ok(()) => (),
         Err(err) => {
             panic!("ERR bind buffer memory {}", err);
