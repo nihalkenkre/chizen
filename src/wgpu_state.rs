@@ -1,3 +1,7 @@
+use core::panic;
+use std::sync::Arc;
+
+use wgpu::BufferViewMut;
 use winit::{dpi::PhysicalSize, event::WindowEvent, window::Window};
 
 pub struct State<'window> {
@@ -5,16 +9,15 @@ pub struct State<'window> {
     device: wgpu::Device,
     queue: wgpu::Queue,
     config: wgpu::SurfaceConfiguration,
-    size: winit::dpi::PhysicalSize<u32>,
-    window: &'window Window,
+    pub size: winit::dpi::PhysicalSize<u32>,
 }
 
 impl<'window> State<'window> {
-    pub fn new(window: &'window Window) -> Option<State<'window>> {
+    pub fn new(window: Arc<Window>) -> State<'window> {
         pollster::block_on(State::new_async(window))
     }
 
-    async fn new_async(window: &'window Window) -> Option<State<'window>> {
+    async fn new_async(window: Arc<Window>) -> State<'window> {
         let size = window.inner_size();
 
         let instance = wgpu::Instance::new(wgpu::InstanceDescriptor {
@@ -22,7 +25,13 @@ impl<'window> State<'window> {
             ..Default::default()
         });
 
-        let surface = instance.create_surface(window).unwrap();
+        let surface = match instance.create_surface(window) {
+            Ok(x) => x,
+            Err(err) => {
+                panic!("ERR create surface {}", err);
+            }
+        };
+
         let adapter = instance
             .request_adapter(&wgpu::RequestAdapterOptions {
                 power_preference: wgpu::PowerPreference::default(),
@@ -78,18 +87,13 @@ impl<'window> State<'window> {
             desired_maximum_frame_latency: 2,
         };
 
-        Some(Self {
+        Self {
             device,
             surface,
             queue,
             config,
             size,
-            window,
-        })
-    }
-
-    pub fn window(&self) -> &Window {
-        &self.window
+        }
     }
 
     pub fn resize(&mut self, new_size: PhysicalSize<u32>) {
@@ -101,15 +105,50 @@ impl<'window> State<'window> {
         }
     }
 
-    fn input(&mut self, event: &WindowEvent) -> bool {
+    pub fn input(&mut self, event: &WindowEvent) -> bool {
         false
     }
 
-    fn update(&mut self) {
-        todo!()
-    }
+    pub fn update(&mut self) {}
 
-    fn render(&mut self) -> Result<(), wgpu::SurfaceError> {
-        todo!()
+    pub fn render(&mut self) -> Result<(), wgpu::SurfaceError> {
+        let output = self
+            .surface
+            .get_current_texture()
+            .expect("get current texture");
+        let view = output
+            .texture
+            .create_view(&wgpu::TextureViewDescriptor::default());
+        let mut render_encoder =
+            self.device
+                .create_command_encoder(&wgpu::CommandEncoderDescriptor {
+                    label: Some("Render Encoder"),
+                });
+        {
+            let render_pass = render_encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
+                label: Some("Render Pass"),
+                color_attachments: &[Some(wgpu::RenderPassColorAttachment {
+                    view: &view,
+                    resolve_target: None,
+                    ops: wgpu::Operations {
+                        load: wgpu::LoadOp::Clear(wgpu::Color {
+                            r: 0.1,
+                            g: 0.2,
+                            b: 0.3,
+                            a: 1.0,
+                        }),
+                        store: wgpu::StoreOp::Store,
+                    },
+                })],
+                depth_stencil_attachment: None,
+                occlusion_query_set: None,
+                timestamp_writes: None,
+            });
+        }
+
+        self.queue.submit(Some(render_encoder.finish()));
+        output.present();
+
+        Ok(())
     }
 }

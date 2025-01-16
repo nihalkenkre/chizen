@@ -1,4 +1,4 @@
-use std::error::Error;
+use std::{error::Error, sync::Arc};
 use wgpu_state::State;
 use winit::{
     application::ApplicationHandler, dpi::PhysicalSize, event::WindowEvent, event_loop::EventLoop,
@@ -9,7 +9,7 @@ mod wgpu_state;
 
 #[derive(Default)]
 pub struct Application<'window> {
-    window: Option<Window>,
+    window: Option<Arc<Window>>,
     wgpu_state: Option<wgpu_state::State<'window>>,
 }
 
@@ -52,15 +52,25 @@ impl<'window> ApplicationHandler for Application<'window> {
     }
 
     fn resumed(&mut self, event_loop: &winit::event_loop::ActiveEventLoop) {
+        if !self.window.is_none() {
+            return;
+        }
+
         let window_size = PhysicalSize::new(1280, 720);
 
-        self.window = Some(
-            event_loop
+        let window = Arc::new(
+            match event_loop
                 .create_window(Window::default_attributes().with_inner_size(window_size))
-                .unwrap(),
+            {
+                Ok(x) => x,
+                Err(err) => {
+                    panic!("ERR create window {}", err);
+                }
+            },
         );
 
-        // self.wgpu_state = State::new(&self.window.as_ref().unwrap());
+        self.window = Some(window.clone());
+        self.wgpu_state = Some(State::new(window.clone()));
     }
 
     fn window_event(
@@ -75,8 +85,26 @@ impl<'window> ApplicationHandler for Application<'window> {
 
         match event {
             WindowEvent::Resized(new_size) => {
-                println!("Resized {:?}", new_size);
                 self.wgpu_state.as_mut().unwrap().resize(new_size);
+            }
+            WindowEvent::RedrawRequested => {
+                self.window.as_ref().unwrap().request_redraw();
+                self.wgpu_state.as_mut().unwrap().update();
+
+                match self.wgpu_state.as_mut().unwrap().render() {
+                    Ok(_) => {}
+                    Err(wgpu::SurfaceError::Lost | wgpu::SurfaceError::Outdated) => {
+                        let size = self.wgpu_state.as_ref().unwrap().size;
+                        self.wgpu_state.as_mut().unwrap().resize(size);
+                    }
+                    Err(wgpu::SurfaceError::OutOfMemory) => {
+                        event_loop.exit();
+                        println!("ERR out of memory");
+                    }
+                    Err(wgpu::SurfaceError::Timeout) => {
+                        println!("Surface timeout");
+                    }
+                }
             }
             WindowEvent::CloseRequested => {
                 event_loop.exit();
