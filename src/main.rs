@@ -77,13 +77,13 @@ impl<'window> ApplicationHandler for Application<'window> {
         &mut self,
         event_loop: &winit::event_loop::ActiveEventLoop,
         window_id: winit::window::WindowId,
-        event: winit::event::WindowEvent,
+        window_event: winit::event::WindowEvent,
     ) {
         if window_id != self.window.as_ref().unwrap().id() {
             return;
         }
 
-        match event {
+        match window_event {
             WindowEvent::Resized(new_size) => {
                 self.wgpu_state.as_mut().unwrap().resize(new_size);
             }
@@ -105,6 +105,19 @@ impl<'window> ApplicationHandler for Application<'window> {
                         println!("Surface timeout");
                     }
                 }
+            }
+            WindowEvent::KeyboardInput {
+                device_id,
+                event,
+                is_synthetic,
+            } => {
+                self.wgpu_state.as_mut().unwrap().keyboard_input(&event);
+            }
+            WindowEvent::CursorMoved {
+                device_id,
+                position,
+            } => {
+                self.wgpu_state.as_mut().unwrap().mouse_move(&window_event);
             }
             WindowEvent::CloseRequested => {
                 event_loop.exit();
