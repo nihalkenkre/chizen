@@ -7,3 +7,6 @@ edition = "2021"
 winit = "*"
 wgpu = "*"
 pollster = "*"
+bytemuck = { version = "*", features = ["derive"] }
+image = { version ="*", features =["png", "jpeg"] }
+anyhow = "*"
