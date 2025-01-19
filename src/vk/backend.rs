@@ -2220,18 +2220,18 @@ impl Default for DescriptorSets {
 
 impl Drop for DescriptorSets {
     fn drop(&mut self) {
-        if self.descriptor_sets.len() > 0 && self.device != std::ptr::null_mut() {
-            println!("Dropping descriptor sets");
+        // if self.descriptor_sets.len() > 0 && self.device != std::ptr::null_mut() {
+        //     println!("Dropping descriptor sets");
 
-            unsafe {
-                vkFreeDescriptorSets(
-                    self.device,
-                    self.descriptor_pool,
-                    self.descriptor_sets.len() as u32,
-                    self.descriptor_sets.as_ptr(),
-                );
-            }
-        }
+        //     unsafe {
+        //         vkFreeDescriptorSets(
+        //             self.device,
+        //             self.descriptor_pool,
+        //             self.descriptor_sets.len() as u32,
+        //             self.descriptor_sets.as_ptr(),
+        //         );
+        //     }
+        // }
     }
 }
 

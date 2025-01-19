@@ -9,6 +9,7 @@ use std::{ffi::CStr, os::raw::c_void};
 
 mod backend;
 use backend::*;
+use winit::dpi::PhysicalSize;
 
 #[macro_export]
 macro_rules! VK_MAKE_API_VERSION {
@@ -1206,6 +1207,114 @@ impl Vk {
             gui_path,
         }
     }
+
+    pub fn recreate_swapchain(&mut self, size: PhysicalSize<u32>) {
+        let surf_caps = match self.phy_dev.surface_capabilities_khr(&self.surface.surface) {
+            Ok(caps) => caps,
+            Err(result) => {
+                panic!("ERR get surface capabilities {}", result);
+            }
+        };
+
+        let surf_format = match self.phy_dev.surface_formats_khr(&self.surface.surface) {
+            Ok(forms) => match forms
+                .iter()
+                .find(|sf| sf.format == VK_FORMAT_R8G8B8A8_UNORM)
+            {
+                Some(x) => *x,
+                None => VkSurfaceFormatKHR::default(),
+            },
+            Err(result) => {
+                panic!("ERR get surface formats {}", result);
+            }
+        };
+
+        let present_mode = match self
+            .phy_dev
+            .surface_present_modes_khr(&self.surface.surface)
+        {
+            Ok(present_modes) => match present_modes
+                .iter()
+                .find(|pm| **pm == VK_PRESENT_MODE_MAILBOX_KHR)
+            {
+                Some(x) => *x,
+                None => VK_PRESENT_MODE_FIFO_KHR,
+            },
+
+            Err(result) => {
+                panic!("ERR get surface present modes {}", result);
+            }
+        };
+
+        self.surf_extent = surf_caps.currentExtent;
+
+        self.swapchain = match Swapchain::create(
+            self.device.device,
+            &VkSwapchainCreateInfoKHR::new(
+                None,
+                0,
+                self.surface.surface,
+                surf_caps.minImageCount + 1,
+                surf_format.format,
+                surf_format.colorSpace,
+                surf_caps.currentExtent,
+                1,
+                surf_caps.supportedUsageFlags,
+                VK_SHARING_MODE_EXCLUSIVE,
+                &vec![self.q_fly_idx],
+                surf_caps.currentTransform,
+                VK_COMPOSITE_ALPHA_OPAQUE_BIT_KHR,
+                present_mode,
+                1,
+                Some(self.swapchain.swapchain),
+            ),
+            None,
+        ) {
+            Ok(x) => x,
+            Err(err) => {
+                panic!("ERR create swapchain {}", err);
+            }
+        };
+
+        self.sc_images = match self.swapchain.get_images() {
+            Ok(x) => x,
+            Err(err) => {
+                panic!("ERR get swapchain images");
+            }
+        };
+
+        let mut sc_image_views = Vec::with_capacity(self.sc_images.len());
+
+        for sc_img in &self.sc_images {
+            sc_image_views.push(
+                match ImageView::create(
+                    self.device.device,
+                    &VkImageViewCreateInfo::new(
+                        None,
+                        0,
+                        *sc_img,
+                        VK_IMAGE_VIEW_TYPE_2D,
+                        surf_format.format,
+                        VkComponentMapping::default(),
+                        VkImageSubresourceRange {
+                            aspectMask: VK_IMAGE_ASPECT_COLOR_BIT as u32,
+                            levelCount: 1,
+                            layerCount: 1,
+                            ..Default::default()
+                        },
+                    ),
+                    None,
+                ) {
+                    Ok(iv) => iv,
+                    Err(result) => {
+                        panic!("ERR create image view {}", result);
+                    }
+                },
+            );
+        }
+    }
+
+    fn cleanup_swapchain(&self) {}
 
     pub fn scene_init(&self, path: &str) {
         let (gltf, buffers, images) = match gltf::import(path) {

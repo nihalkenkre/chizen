@@ -24,11 +24,7 @@ impl ApplicationHandler for Application {
         let window_size = PhysicalSize::new(1280, 720);
         self.window = Some(
             event_loop
-                .create_window(
-                    Window::default_attributes()
-                        .with_max_inner_size(window_size)
-                        .with_min_inner_size(window_size),
-                )
+                .create_window(Window::default_attributes().with_inner_size(window_size))
                 .unwrap(),
         );
 
@@ -53,6 +49,10 @@ impl ApplicationHandler for Application {
                 device_id,
                 position,
             } => {}
+            WindowEvent::Resized(new_size) => {
+                println!("{:?}", new_size);
+                self.vk.recreate_swapchain(new_size);
+            }
             WindowEvent::RedrawRequested => {
                 self.vk.render();
                 self.window.as_ref().unwrap().request_redraw();
@@ -105,7 +105,7 @@ fn main() -> Result<(), Box<dyn Error>> {
 
     println!("Hello");
 
-    if cmd_args.len() > 0 {
+    if cmd_args.len() > 2 {
         println!("{:?}", cmd_args);
     } else {
         let event_loop = EventLoop::new()?;
