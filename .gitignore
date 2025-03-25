@@ -1,0 +1,21 @@
+# Build
+
+*.obj
+*.pdb
+*.exp
+*.ilk
+*.lib
+*.dll
+*.exe
+
+# VS Code
+*.vscode
+
+# SPIR-V
+*.spv
+
+# Init Files
+*.ini
+
+# Config Files
+*.conf*
