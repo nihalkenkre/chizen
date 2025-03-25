@@ -72,18 +72,16 @@ dx12_renderer::dx12_renderer(const HWND h_wnd)
 
     GetWindowRect(h_wnd, &wnd_rect);
     wnd_rect.right -= wnd_rect.left;
-    wnd_rect.left -= wnd_rect.left;
+    wnd_rect.left = 0;
     wnd_rect.bottom -= wnd_rect.top;
-    wnd_rect.top -= wnd_rect.top;
+    wnd_rect.top = 0;
 
     const DXGI_SWAP_CHAIN_DESC1 sc_desc1 = {
-        .Width = UINT(wnd_rect.right - wnd_rect.left),
-        .Height = UINT(wnd_rect.bottom - wnd_rect.top),
         .Format = DXGI_FORMAT_R8G8B8A8_UNORM,
         .SampleDesc = {
             .Count = 1,
         },
-        .BufferUsage = DXGI_USAGE_RENDER_TARGET_OUTPUT,
+        .BufferUsage = DXGI_USAGE_RENDER_TARGET_OUTPUT | DXGI_USAGE_BACK_BUFFER,
         .BufferCount = RENDER_TARGET_COUNT,
         .SwapEffect = DXGI_SWAP_EFFECT_FLIP_DISCARD,
     };
@@ -91,8 +89,6 @@ dx12_renderer::dx12_renderer(const HWND h_wnd)
     ComPtr<IDXGISwapChain1> swapchain1;
     DX_CHECK("create swapchain", factory7->CreateSwapChainForHwnd(cmd_queue.Get(), h_wnd, &sc_desc1, nullptr, nullptr, &swapchain1));
     swapchain1.As(&swapchain4);
-
-    img_idx = swapchain4->GetCurrentBackBufferIndex();
 
     const D3D12_DESCRIPTOR_HEAP_DESC rtv_heap_desc = {
         .Type = D3D12_DESCRIPTOR_HEAP_TYPE_RTV,
@@ -105,7 +101,7 @@ dx12_renderer::dx12_renderer(const HWND h_wnd)
 
     for (UINT f = 0; f < RENDER_TARGET_COUNT; ++f)
     {
-        DX_CHECK("create render target", swapchain4->GetBuffer(f, IID_PPV_ARGS(&rt[f])));
+        DX_CHECK("get render target buffer", swapchain4->GetBuffer(f, IID_PPV_ARGS(&rt[f])));
 
         const D3D12_RENDER_TARGET_VIEW_DESC rtv_desc = {
             .Format = DXGI_FORMAT_R8G8B8A8_UNORM_SRGB,
@@ -121,10 +117,48 @@ dx12_renderer::dx12_renderer(const HWND h_wnd)
 
         rt_fnc_vals[f] = 0;
     }
+
+    is_inited = true;
 }
 
 void dx12_renderer::import_scene(cgltf_data *data)
 {
+}
+
+void dx12_renderer::resize(const WORD width, const WORD height)
+{
+    wnd_rect.right = width;
+    wnd_rect.bottom = height;
+
+    for (UINT f = 0; f < RENDER_TARGET_COUNT; ++f)
+    {
+        if (rt_fncs[f]->GetCompletedValue() < rt_fnc_vals[f])
+        {
+            HANDLE wait_idle_event = CreateEventA(nullptr, FALSE, FALSE, nullptr);
+
+            DX_CHECK("set wait idle event", rt_fncs[f]->SetEventOnCompletion(rt_fnc_vals[f], wait_idle_event));
+
+            WaitForSingleObject(wait_idle_event, UINT64_MAX);
+            CloseHandle(wait_idle_event);
+        }
+        rt[f].Reset();
+    }
+
+    DX_CHECK("swapchain resize buffers", swapchain4->ResizeBuffers(0, 0, 0, DXGI_FORMAT_UNKNOWN, 0));
+
+    D3D12_CPU_DESCRIPTOR_HANDLE rtv_desc_heap_hnd = rtv_desc_heap->GetCPUDescriptorHandleForHeapStart();
+    const D3D12_RENDER_TARGET_VIEW_DESC rtv_desc = {
+        .Format = DXGI_FORMAT_R8G8B8A8_UNORM_SRGB,
+        .ViewDimension = D3D12_RTV_DIMENSION_TEXTURE2D,
+    };
+
+    for (UINT f = 0; f < RENDER_TARGET_COUNT; ++f)
+    {
+        DX_CHECK("swapchain get buffer", swapchain4->GetBuffer(f, IID_PPV_ARGS(&rt[f])));
+
+        rtv_desc_heap_hnd.ptr += f * device10->GetDescriptorHandleIncrementSize(D3D12_DESCRIPTOR_HEAP_TYPE_RTV);
+        device10->CreateRenderTargetView(rt[f].Get(), &rtv_desc, rtv_desc_heap_hnd);
+    }
 }
 
 void dx12_renderer::render_background(const POINT pt)
@@ -150,6 +184,25 @@ void dx12_renderer::render_background(const POINT pt)
     };
 
     rt_cmd_lists[img_idx]->ResourceBarrier(1, &prsnt_to_rt_barr);
+
+    // const D3D12_VIEWPORT viewports[] = {
+    //     {
+    //         .TopLeftX = 0,
+    //         .TopLeftY = 0,
+    //         .Width = (float)wnd_rect.left,
+    //         .Height = (float)wnd_rect.bottom,
+    //         .MinDepth = 0.0,
+    //         .MaxDepth = 1.0,
+    //     },
+    // };
+
+    // const D3D12_RECT scissors[] = {
+    //     wnd_rect,
+    // };
+
+    // rt_cmd_lists[img_idx]->RSSetViewports(_countof(viewports), viewports);
+    // rt_cmd_lists[img_idx]->RSSetScissorRects(_countof(scissors), scissors);
+
     rt_cmd_lists[img_idx]->ClearRenderTargetView(curr_rtv_hnd, clear_color, 1, &wnd_rect);
 
     const D3D12_RESOURCE_BARRIER rt_to_prsnt_barr = {
@@ -173,6 +226,7 @@ void dx12_renderer::render_background(const POINT pt)
 
     ++rt_fnc_vals[img_idx];
     cmd_queue->Signal(rt_fncs[img_idx].Get(), rt_fnc_vals[img_idx]);
+
     if (rt_fncs[img_idx]->GetCompletedValue() < rt_fnc_vals[img_idx])
     {
         HANDLE wait_idle_event = CreateEventA(nullptr, FALSE, FALSE, nullptr);

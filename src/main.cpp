@@ -138,6 +138,10 @@ LRESULT CALLBACK WindowProc(HWND h_wnd, UINT msg, WPARAM w_param, LPARAM l_param
         break;
 
     case WM_SIZE:
+        if (r.get() != nullptr && r->is_inited)
+        {
+            r->resize(LOWORD(l_param), HIWORD(l_param));
+        }
         break;
 
     default:

@@ -17,6 +17,7 @@ class dx12_renderer : public renderer
 public:
     dx12_renderer(const HWND h_wnd);
     void import_scene(cgltf_data *data) override;
+    void resize(const WORD width, const WORD height) override;
     void render_background(const POINT pt) override;
     ~dx12_renderer();
 
