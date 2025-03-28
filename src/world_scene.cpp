@@ -1,11 +1,10 @@
 #include "world_scene.hpp"
 #include "dx12_renderer.hpp"
-#include "vulkan_renderer.hpp"
 
 #define CGLTF_IMPLEMENTATION
 #include <cgltf/cgltf.h>
 
-world_scene::world_scene(const std::string &path, renderer *r)
+world_scene::world_scene(const std::string &path)
 {
     std::cout << __FUNCTION__ << " " << path << '\n';
     cgltf_options options = {};
@@ -18,7 +17,7 @@ world_scene::world_scene(const std::string &path, renderer *r)
     else
     {
         this->import_scene(data);
-        r->import_scene(data);
+        cgltf_free(data);
     }
 }
 
@@ -37,6 +36,7 @@ void world_scene::update()
 
 void world_scene::render(renderer *r)
 {
+    r->render_background(this->mouse_pos);
 }
 
 world_scene::~world_scene()

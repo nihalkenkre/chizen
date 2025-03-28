@@ -1,7 +1,6 @@
 #pragma once
 
 #include "scene.hpp"
-#include "vulkan_renderer.hpp"
 #include "dx12_renderer.hpp"
 
 #include <string>

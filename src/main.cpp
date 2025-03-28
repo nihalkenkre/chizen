@@ -15,7 +15,9 @@ using Microsoft::WRL::ComPtr;
 
 #define FILE_MENU_OPEN 10
 
-HWND h_wnd = nullptr;
+bool pause_h_wnd_msg_queue = false;
+
+HWND h_scene_wnd = nullptr;
 HWND h_ctrl_pnl = nullptr;
 
 std::unique_ptr<scene> s;
@@ -74,11 +76,14 @@ void open_file(const HWND h_wnd)
                 PWSTR wfile_path;
                 if SUCCEEDED (open_file->GetDisplayName(SIGDN_FILESYSPATH, &wfile_path))
                 {
-
                     char file_path[MAX_PATH];
                     wcstombs(file_path, wfile_path, MAX_PATH);
 
-                    s = std::make_unique<world_scene>(file_path, r.get());
+                    r.reset(nullptr);
+                    r = std::make_unique<dx12_renderer>(h_scene_wnd, file_path);
+
+                    s.reset(nullptr);
+                    s = std::make_unique<world_scene>(file_path);
                 }
                 else
                 {
@@ -117,7 +122,11 @@ LRESULT CALLBACK WindowProc(HWND h_wnd, UINT msg, WPARAM w_param, LPARAM l_param
         switch (w_param)
         {
         case FILE_MENU_OPEN:
+
+            pause_h_wnd_msg_queue = true;
             open_file(h_wnd);
+            pause_h_wnd_msg_queue = false;
+
             break;
         default:
             break;
@@ -177,28 +186,32 @@ int main(int argc, char **argv)
     }
 
     h_ctrl_pnl = create_control_panel(h_instance);
-    h_wnd = create_wnd(h_instance);
+    h_scene_wnd = create_wnd(h_instance);
 
-    ShowWindow(h_wnd, 1);
+    ShowWindow(h_scene_wnd, 1);
     ShowWindow(h_ctrl_pnl, 1);
 
+    r = std::make_unique<dx12_renderer>(h_scene_wnd, "");
     s = std::make_unique<default_scene>();
-    r = std::make_unique<dx12_renderer>(h_wnd);
 
     MSG msg = {0};
 
-    while (TRUE)
+    // while (TRUE)
+    // {
+    while (GetMessageA(&msg, nullptr, 0, 0))
     {
-        if (PeekMessageA(&msg, nullptr, 0, 0, PM_REMOVE))
+        if (msg.message == WM_QUIT || msg.message == WM_CLOSE || msg.message == WM_DESTROY)
         {
-            if (msg.message == WM_QUIT || msg.message == WM_CLOSE || msg.message == WM_DESTROY)
-            {
-                break;
-            }
+            break;
+        }
+
+        if (!pause_h_wnd_msg_queue)
+        {
             TranslateMessage(&msg);
             DispatchMessageA(&msg);
         }
     }
+    // }
 
     CoUninitialize();
 
