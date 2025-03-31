@@ -7,10 +7,11 @@
 world_scene::world_scene(const std::string &path)
 {
     std::cout << __FUNCTION__ << " " << path << '\n';
+
     cgltf_options options = {};
     cgltf_data *data = nullptr;
 
-    if (!(cgltf_parse_file(&options, path.c_str(), &data) == cgltf_result_success && cgltf_validate(data) == cgltf_result_success && cgltf_load_buffers(&options, data, path.c_str()) == cgltf_result_success))
+    if ((cgltf_parse_file(&options, path.c_str(), &data) == cgltf_result_success && cgltf_validate(data) == cgltf_result_success && cgltf_load_buffers(&options, data, path.c_str()) != cgltf_result_success))
     {
         std::cerr << "ERR Could not parse gltf file\n";
     }
@@ -36,7 +37,6 @@ void world_scene::update()
 
 void world_scene::render(renderer *r)
 {
-    r->render_background(this->mouse_pos);
 }
 
 world_scene::~world_scene()

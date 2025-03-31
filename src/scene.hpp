@@ -18,12 +18,3 @@ public:
 protected:
     POINT mouse_pos;
 };
-
-// namespace scene
-// {
-//     void (*init)(const std::string path);
-//     void (*set_renderer)(const renderer &r);
-//     void (*update)(void);
-//     void (*render)(void);
-//     void (*shutdown)(void);
-// }

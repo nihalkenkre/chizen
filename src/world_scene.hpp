@@ -18,28 +18,3 @@ public:
 private:
     void import_scene(const cgltf_data* data);
 };
-
-// namespace world_scene
-// {
-//     void init(const std::string path = "")
-//     {
-//         std::cout << "world_scene init\n";
-//     }
-
-//     void set_renderer(const renderer &r)
-//     {
-//         std::cout << "world_scene set_renderer\n";
-//     }
-
-//     void update()
-//     {
-//         std::cout << "world_scene update\n";
-//     }
-
-//     void render()
-//     {
-//         std::cout << "world_scene render\n";
-//     }
-
-//     void shutdown() {}
-// }

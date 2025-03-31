@@ -103,7 +103,7 @@ void dx12_renderer::create_pipelines()
                     L"rootsig_1_1",
                     L"-Fo",
                     output_cso.c_str(),
-
+                    L"-Qstrip_reflect",
                 };
 
                 IDxcResult *results;
@@ -125,6 +125,7 @@ void dx12_renderer::create_pipelines()
             else
             {
                 auto shader_types = tokenize(file_name_tokens[0], '_');
+                IDxcBlobUtf16 *name;
 
                 for (size_t i = 0; i < shader_types.size(); ++i)
                 {
@@ -138,81 +139,135 @@ void dx12_renderer::create_pipelines()
                     auto ref_name = base_name + ".ref";
                     auto output_ref = std::wstring(std::begin(ref_name), std::end(ref_name));
 
-                    std::vector<LPCWSTR> args;
-                    args.push_back(file.path().c_str());
-
-                    args.push_back(L"-Fo");
-                    args.push_back(output_cso.c_str());
-                    args.push_back(L"-Fd");
-                    args.push_back(output_pdb.c_str());
-                    args.push_back(L"-Fre");
-                    args.push_back(output_ref.c_str());
-
                     if (shader_types[i] == "as")
                     {
-                        args.push_back(L"-E");
-                        args.push_back(L"asmain");
-                        args.push_back(L"-T");
-                        args.push_back(L"as_6_6");
-                    }
-                    else if (shader_types[i] == "ms")
-                    {
-                        args.push_back(L"-E");
-                        args.push_back(L"msmain");
-                        args.push_back(L"-T");
-                        args.push_back(L"ms_6_6");
-                    }
-                    else if (shader_types[i] == "ps")
-                    {
-                        args.push_back(L"-E");
-                        args.push_back(L"psmain");
-                        args.push_back(L"-T");
-                        args.push_back(L"ps_6_6");
-                    }
+                        LPCWSTR args[] = {
+                            file.path().c_str(),
+                            L"-Fo",
+                            output_cso.c_str(),
+                            L"-Fd",
+                            output_pdb.c_str(),
+                            L"-Fre",
+                            output_ref.c_str(),
+                            L"-E",
+                            L"asmain",
+                            L"-T",
+                            L"as_6_6",
+                            L"-Zi",
+                            L"-Qstrip_reflect",
+                        };
 
-                    args.push_back(L"-Zi");
-                    args.push_back(L"-Qstrip_reflect");
+                        IDxcResult *results;
+                        DX_CHECK("compile shader source", compiler->Compile(&source, args, _countof(args), include_handler, IID_PPV_ARGS(&results)));
 
-                    IDxcResult *results;
-                    DX_CHECK("compile shader source", compiler->Compile(&source, args.data(), args.size(), include_handler, IID_PPV_ARGS(&results)));
+                        IDxcBlobEncoding *errors;
+                        DX_CHECK("get error buffer", results->GetErrorBuffer(&errors));
 
-                    IDxcBlobEncoding *errors;
-                    DX_CHECK("get error buffer", results->GetErrorBuffer(&errors));
-
-                    if (errors != nullptr && errors->GetBufferSize() > 0)
-                    {
-                        std::cout << reinterpret_cast<char *>(errors->GetBufferPointer()) << '\n';
-                        std::exit(0xdeadbeef);
-                    }
-
-                    IDxcBlobUtf16 *name;
-                    if (shader_types[i] == "as")
-                    {
+                        if (errors != nullptr && errors->GetBufferSize() > 0)
+                        {
+                            std::cout << reinterpret_cast<char *>(errors->GetBufferPointer()) << '\n';
+                            std::exit(0xdeadbeef);
+                        }
                         DX_CHECK("get shader binary", results->GetOutput(DXC_OUT_OBJECT, IID_PPV_ARGS(&as), &name));
-                        // std::wcout << "bin name " << name->GetStringPointer() << '\n';
+
+                        IDxcBlob *pdb;
+                        DX_CHECK("get pdb", results->GetOutput(DXC_OUT_PDB, IID_PPV_ARGS(&pdb), &name));
+                        // std::wcout << "pdb name " << name->GetStringPointer() << '\n';
+
+                        std::ofstream pdb_file(name->GetStringPointer());
+                        pdb_file.write(reinterpret_cast<const char *>(pdb->GetBufferPointer()), pdb->GetBufferSize());
+                        pdb_file.close();
+
+                        IDxcBlob *reflection;
+                        DX_CHECK("get reflection", results->GetOutput(DXC_OUT_REFLECTION, IID_PPV_ARGS(&reflection), &name));
+                        // std::wcout << "ref name " << name->GetStringPointer() << '\n';
                     }
                     else if (shader_types[i] == "ms")
                     {
+                        LPCWSTR args[] = {
+                            file.path().c_str(),
+                            L"-Fo",
+                            output_cso.c_str(),
+                            L"-Fd",
+                            output_pdb.c_str(),
+                            L"-Fre",
+                            output_ref.c_str(),
+                            L"-E",
+                            L"msmain",
+                            L"-T",
+                            L"ms_6_6",
+                            L"-Zi",
+                            L"-Qstrip_reflect",
+                        };
+
+                        IDxcResult *results;
+                        DX_CHECK("compile shader source", compiler->Compile(&source, args, _countof(args), include_handler, IID_PPV_ARGS(&results)));
+
+                        IDxcBlobEncoding *errors;
+                        DX_CHECK("get error buffer", results->GetErrorBuffer(&errors));
+
+                        if (errors != nullptr && errors->GetBufferSize() > 0)
+                        {
+                            std::cout << reinterpret_cast<char *>(errors->GetBufferPointer()) << '\n';
+                            std::exit(0xdeadbeef);
+                        }
                         DX_CHECK("get shader binary", results->GetOutput(DXC_OUT_OBJECT, IID_PPV_ARGS(&ms), &name));
-                        // std::wcout << "bin name " << name->GetStringPointer() << '\n';
+
+                        IDxcBlob *pdb;
+                        DX_CHECK("get pdb", results->GetOutput(DXC_OUT_PDB, IID_PPV_ARGS(&pdb), &name));
+                        // std::wcout << "pdb name " << name->GetStringPointer() << '\n';
+
+                        std::ofstream pdb_file(name->GetStringPointer());
+                        pdb_file.write(reinterpret_cast<const char *>(pdb->GetBufferPointer()), pdb->GetBufferSize());
+                        pdb_file.close();
+
+                        IDxcBlob *reflection;
+                        DX_CHECK("get reflection", results->GetOutput(DXC_OUT_REFLECTION, IID_PPV_ARGS(&reflection), &name));
+                        // std::wcout << "ref name " << name->GetStringPointer() << '\n';
                     }
                     else if (shader_types[i] == "ps")
                     {
+                        LPCWSTR args[] = {
+                            file.path().c_str(),
+                            L"-Fo",
+                            output_cso.c_str(),
+                            L"-Fd",
+                            output_pdb.c_str(),
+                            L"-Fre",
+                            output_ref.c_str(),
+                            L"-E",
+                            L"psmain",
+                            L"-T",
+                            L"ps_6_6",
+                            L"-Zi",
+                            L"-Qstrip_reflect",
+                        };
+
+                        IDxcResult *results;
+                        DX_CHECK("compile shader source", compiler->Compile(&source, args, _countof(args), include_handler, IID_PPV_ARGS(&results)));
+
+                        IDxcBlobEncoding *errors;
+                        DX_CHECK("get error buffer", results->GetErrorBuffer(&errors));
+
+                        if (errors != nullptr && errors->GetBufferSize() > 0)
+                        {
+                            std::cout << reinterpret_cast<char *>(errors->GetBufferPointer()) << '\n';
+                            std::exit(0xdeadbeef);
+                        }
                         DX_CHECK("get shader binary", results->GetOutput(DXC_OUT_OBJECT, IID_PPV_ARGS(&ps), &name));
-                        // std::wcout << "bin name " << name->GetStringPointer() << '\n';
+
+                        IDxcBlob *pdb;
+                        DX_CHECK("get pdb", results->GetOutput(DXC_OUT_PDB, IID_PPV_ARGS(&pdb), &name));
+                        // std::wcout << "pdb name " << name->GetStringPointer() << '\n';
+
+                        std::ofstream pdb_file(name->GetStringPointer());
+                        pdb_file.write(reinterpret_cast<const char *>(pdb->GetBufferPointer()), pdb->GetBufferSize());
+                        pdb_file.close();
+
+                        IDxcBlob *reflection;
+                        DX_CHECK("get reflection", results->GetOutput(DXC_OUT_REFLECTION, IID_PPV_ARGS(&reflection), &name));
+                        // std::wcout << "ref name " << name->GetStringPointer() << '\n';}
                     }
-
-                    IDxcBlob *pdb;
-                    DX_CHECK("get pdb", results->GetOutput(DXC_OUT_PDB, IID_PPV_ARGS(&pdb), &name));
-                    // std::wcout << "pdb name " << name->GetStringPointer() << '\n';
-
-                    std::ofstream pdb_file(name->GetStringPointer());
-                    pdb_file.write(reinterpret_cast<const char *>(pdb->GetBufferPointer()), pdb->GetBufferSize());
-                    pdb_file.close();
-
-                    IDxcBlob *reflection;
-                    DX_CHECK("get reflection", results->GetOutput(DXC_OUT_REFLECTION, IID_PPV_ARGS(&reflection), &name));
-                    // std::wcout << "ref name " << name->GetStringPointer() << '\n';
                 }
             }
         }
@@ -221,7 +276,7 @@ void dx12_renderer::create_pipelines()
     DX_CHECK("create root signature", device10->CreateRootSignature(0, root_sig_blob->GetBufferPointer(), root_sig_blob->GetBufferSize(), IID_PPV_ARGS(&root_sig)));
 
     D3DX12_MESH_SHADER_PIPELINE_STATE_DESC pipeline_desc = {
-        .pRootSignature = root_sig,
+        .pRootSignature = root_sig.Get(),
         .MS = {
             .pShaderBytecode = ms->GetBufferPointer(),
             .BytecodeLength = ms->GetBufferSize(),
@@ -231,8 +286,6 @@ void dx12_renderer::create_pipelines()
             .BytecodeLength = ps->GetBufferSize(),
         },
         .BlendState = {
-            .AlphaToCoverageEnable = FALSE,
-            .IndependentBlendEnable = FALSE,
             .RenderTarget = {
                 {
                     .BlendEnable = FALSE,
@@ -273,7 +326,7 @@ void dx12_renderer::create_pipelines()
     pipelines.push_back(pipeline);
 }
 
-dx12_renderer::dx12_renderer(const HWND h_wnd, const std::string &path)
+dx12_renderer::dx12_renderer(const HWND h_wnd)
 {
     std::cout << __FUNCTION__ << '\n';
     UINT dxgi_factory_flags = 0;
@@ -285,7 +338,7 @@ dx12_renderer::dx12_renderer(const HWND h_wnd, const std::string &path)
 
     DX_CHECK("create dxgi factory", CreateDXGIFactory2(dxgi_factory_flags, IID_PPV_ARGS(&factory7)));
 
-    for (UINT i = 0; DXGI_ERROR_NOT_FOUND != factory7->EnumAdapterByGpuPreference(0, DXGI_GPU_PREFERENCE_HIGH_PERFORMANCE, IID_PPV_ARGS(&adapter4)); ++i)
+    for (UINT i = 0; DXGI_ERROR_NOT_FOUND != factory7->EnumAdapterByGpuPreference(i, DXGI_GPU_PREFERENCE_HIGH_PERFORMANCE, IID_PPV_ARGS(&adapter4)); ++i)
     {
         DXGI_ADAPTER_DESC3 adapter_desc3;
         adapter4->GetDesc3(&adapter_desc3);
@@ -295,13 +348,13 @@ dx12_renderer::dx12_renderer(const HWND h_wnd, const std::string &path)
             continue;
         }
 
-        if (SUCCEEDED(D3D12CreateDevice(reinterpret_cast<IUnknown *>(adapter4), D3D_FEATURE_LEVEL_12_2, IID_ID3D12Device10, nullptr)))
+        if (SUCCEEDED(D3D12CreateDevice(reinterpret_cast<IUnknown *>(adapter4.Get()), D3D_FEATURE_LEVEL_12_2, IID_ID3D12Device10, nullptr)))
         {
             break;
         }
     }
 
-    DX_CHECK("create device", D3D12CreateDevice(reinterpret_cast<IUnknown *>(adapter4), D3D_FEATURE_LEVEL_12_2, IID_PPV_ARGS(&device10)));
+    DX_CHECK("create device", D3D12CreateDevice(reinterpret_cast<IUnknown *>(adapter4.Get()), D3D_FEATURE_LEVEL_12_2, IID_PPV_ARGS(&device10)));
 
     const D3D_FEATURE_LEVEL feature_levels[] = {
         D3D_FEATURE_LEVEL_11_0,
@@ -357,10 +410,9 @@ dx12_renderer::dx12_renderer(const HWND h_wnd, const std::string &path)
         .SwapEffect = DXGI_SWAP_EFFECT_FLIP_DISCARD,
     };
 
-    IDXGISwapChain1 *swapchain1;
-    DX_CHECK("create swapchain", factory7->CreateSwapChainForHwnd(cmd_queue, h_wnd, &sc_desc1, nullptr, nullptr, &swapchain1));
-    // swapchain1.As(&swapchain4);
-    swapchain4 = reinterpret_cast<IDXGISwapChain4 *>(swapchain1);
+    ComPtr<IDXGISwapChain1> swapchain1;
+    DX_CHECK("create swapchain", factory7->CreateSwapChainForHwnd(cmd_queue.Get(), h_wnd, &sc_desc1, nullptr, nullptr, &swapchain1));
+    swapchain1.As(&swapchain4);
 
     const D3D12_DESCRIPTOR_HEAP_DESC rtv_heap_desc = {
         .Type = D3D12_DESCRIPTOR_HEAP_TYPE_RTV,
@@ -381,7 +433,7 @@ dx12_renderer::dx12_renderer(const HWND h_wnd, const std::string &path)
         };
 
         rtv_desc_heap_hnd.ptr += f * device10->GetDescriptorHandleIncrementSize(D3D12_DESCRIPTOR_HEAP_TYPE_RTV);
-        device10->CreateRenderTargetView(rt[f], &rtv_desc, rtv_desc_heap_hnd);
+        device10->CreateRenderTargetView(rt[f].Get(), &rtv_desc, rtv_desc_heap_hnd);
 
         DX_CHECK("create cmd allocator", device10->CreateCommandAllocator(D3D12_COMMAND_LIST_TYPE_DIRECT, IID_PPV_ARGS(&rt_cmd_allocs[f])));
         DX_CHECK("create cmd list", device10->CreateCommandList1(0, D3D12_COMMAND_LIST_TYPE_DIRECT, D3D12_COMMAND_LIST_FLAG_NONE, IID_PPV_ARGS(&rt_cmd_lists[f])));
@@ -390,92 +442,86 @@ dx12_renderer::dx12_renderer(const HWND h_wnd, const std::string &path)
         rt_fnc_vals[f] = 0;
     }
 
-    create_pipelines();
-
-    if (!path.empty())
-    {
-        cgltf_options options = {};
-        cgltf_data *data = nullptr;
-
-        if (!(cgltf_parse_file(&options, path.c_str(), &data) == cgltf_result_success && cgltf_validate(data) == cgltf_result_success && cgltf_load_buffers(&options, data, path.c_str()) == cgltf_result_success))
-        {
-            std::cerr << "ERR Could not parse gltf file\n";
-        }
-        else
-        {
-            this->import_scene(data);
-            cgltf_free(data);
-        }
-    }
+    // create_pipelines();
 
     is_inited = true;
 }
+// void dx12_renderer::import_scene(const std::string &path)
+// {
+//     if (path.empty())
+//         std::cerr << "scene path empty\n";
 
-void dx12_renderer::import_scene(const cgltf_data *data)
+//     cgltf_options options = {};
+//     cgltf_data *data = nullptr;
+
+//     if ((cgltf_parse_file(&options, path.c_str(), &data)) == cgltf_result_success && cgltf_validate(data) == cgltf_result_success && cgltf_load_buffers(&options, data, path.c_str()) != cgltf_result_success)
+//     {
+//         std::cerr << "ERR Could not parse gltf file\n";
+//     }
+
+//     // std::vector<uint32_t> indices;
+//     // std::vector<float> positions;
+
+//     // std::vector<meshopt_Meshlet> meshlets;
+//     // std::vector<uint32_t> meshlets_vertices;
+//     // std::vector<uint8_t> meshlets_triangles;
+
+//     // for (cgltf_size m = 0; m < data->meshes_count; ++m)
+//     // {
+//     //     cgltf_mesh *curr_mesh = data->meshes + m;
+//     //     for (cgltf_size p = 0; p < curr_mesh->primitives_count; ++p)
+//     //     {
+//     //         cgltf_primitive *curr_prim = curr_mesh->primitives + p;
+
+//     //         indices.resize(curr_prim->indices->count);
+
+//     //         if (curr_prim->indices->component_type == cgltf_component_type_r_16u)
+//     //         {
+//     //             for (cgltf_size i = 0; i < curr_prim->indices->count; ++i)
+//     //             {
+//     //                 indices[i] = *(uint16_t *)((ULONG_PTR)curr_prim->indices->buffer_view->buffer->data + curr_prim->indices->buffer_view->offset + curr_prim->indices->offset + i);
+//     //             }
+//     //         }
+//     //         else if (curr_prim->indices->component_type == cgltf_component_type_r_32u)
+//     //         {
+//     //             std::memcpy(indices.data(), (void *)((ULONG_PTR)curr_prim->indices->buffer_view->buffer->data + curr_prim->indices->buffer_view->offset + curr_prim->indices->offset), curr_prim->indices->buffer_view->size);
+//     //         }
+
+//     //         for (cgltf_size a = 0; a < curr_prim->attributes_count; ++a)
+//     //         {
+//     //             cgltf_attribute *curr_attr = curr_prim->attributes + a;
+
+//     //             if (std::strcmp(curr_attr->name, "POSITION") == 0)
+//     //             {
+//     //                 positions.resize(curr_attr->data->count);
+//     //                 std::memcpy(positions.data(), (void *)((ULONG_PTR)curr_attr->data->buffer_view->buffer->data + curr_attr->data->buffer_view->offset + curr_attr->data->offset), curr_attr->data->buffer_view->size);
+
+//     //                 break;
+//     //             }
+
+//     //             break;
+//     //         }
+
+//     //         break;
+//     //     }
+//     // }
+
+//     // size_t max_meshlets = meshopt_buildMeshletsBound(indices.size(), MAX_VERTICES, MAX_TRIANGLES);
+
+//     // meshlets.resize(max_meshlets);
+//     // meshlets_vertices.resize(max_meshlets * MAX_VERTICES);
+//     // meshlets_triangles.resize(max_meshlets * MAX_TRIANGLES * 3);
+
+//     // size_t meshlets_count = meshopt_buildMeshlets(meshlets.data(), meshlets_vertices.data(), meshlets_triangles.data(), indices.data(), indices.size(), reinterpret_cast<float *>(positions.data()), positions.size(), sizeof(float3), MAX_VERTICES, MAX_TRIANGLES, 0);
+
+//     // std::cout << "meshlet count " << meshlets_count << '\n';
+
+//     cgltf_free(data);
+// }
+
+void dx12_renderer::resize(const RECT &rect)
 {
-    Sleep(20);
-    // std::vector<uint32_t> indices;
-    // std::vector<float> positions;
-
-    // std::vector<meshopt_Meshlet> meshlets;
-    // std::vector<uint32_t> meshlets_vertices;
-    // std::vector<uint8_t> meshlets_triangles;
-
-    // for (cgltf_size m = 0; m < data->meshes_count; ++m)
-    // {
-    //     cgltf_mesh *curr_mesh = data->meshes + m;
-    //     for (cgltf_size p = 0; p < curr_mesh->primitives_count; ++p)
-    //     {
-    //         cgltf_primitive *curr_prim = curr_mesh->primitives + p;
-
-    //         indices.resize(curr_prim->indices->count);
-
-    //         if (curr_prim->indices->component_type == cgltf_component_type_r_16u)
-    //         {
-    //             for (cgltf_size i = 0; i < curr_prim->indices->count; ++i)
-    //             {
-    //                 indices[i] = *(uint16_t *)((ULONG_PTR)curr_prim->indices->buffer_view->buffer->data + curr_prim->indices->buffer_view->offset + curr_prim->indices->offset + i);
-    //             }
-    //         }
-    //         else if (curr_prim->indices->component_type == cgltf_component_type_r_32u)
-    //         {
-    //             std::memcpy(indices.data(), (void *)((ULONG_PTR)curr_prim->indices->buffer_view->buffer->data + curr_prim->indices->buffer_view->offset + curr_prim->indices->offset), curr_prim->indices->buffer_view->size);
-    //         }
-
-    //         for (cgltf_size a = 0; a < curr_prim->attributes_count; ++a)
-    //         {
-    //             cgltf_attribute *curr_attr = curr_prim->attributes + a;
-
-    //             if (std::strcmp(curr_attr->name, "POSITION") == 0)
-    //             {
-    //                 positions.resize(curr_attr->data->count);
-    //                 std::memcpy(positions.data(), (void *)((ULONG_PTR)curr_attr->data->buffer_view->buffer->data + curr_attr->data->buffer_view->offset + curr_attr->data->offset), curr_attr->data->buffer_view->size);
-
-    //                 break;
-    //             }
-
-    //             break;
-    //         }
-
-    //         break;
-    //     }
-    // }
-
-    // size_t max_meshlets = meshopt_buildMeshletsBound(indices.size(), MAX_VERTICES, MAX_TRIANGLES);
-
-    // meshlets.resize(max_meshlets);
-    // meshlets_vertices.resize(max_meshlets * MAX_VERTICES);
-    // meshlets_triangles.resize(max_meshlets * MAX_TRIANGLES * 3);
-
-    // size_t meshlets_count = meshopt_buildMeshlets(meshlets.data(), meshlets_vertices.data(), meshlets_triangles.data(), indices.data(), indices.size(), reinterpret_cast<float *>(positions.data()), positions.size(), sizeof(float3), MAX_VERTICES, MAX_TRIANGLES, 0);
-
-    // std::cout << "meshlet count " << meshlets_count << '\n';
-}
-
-void dx12_renderer::resize(const WORD width, const WORD height)
-{
-    wnd_rect.right = width;
-    wnd_rect.bottom = height;
+    wnd_rect = rect;
 
     for (UINT f = 0; f < RENDER_TARGET_COUNT; ++f)
     {
@@ -488,7 +534,7 @@ void dx12_renderer::resize(const WORD width, const WORD height)
             WaitForSingleObject(wait_idle_event, UINT64_MAX);
             CloseHandle(wait_idle_event);
         }
-        rt[f]->Release();
+        rt[f].Reset();
     }
 
     DX_CHECK("swapchain resize buffers", swapchain4->ResizeBuffers(0, 0, 0, DXGI_FORMAT_UNKNOWN, 0));
@@ -504,26 +550,21 @@ void dx12_renderer::resize(const WORD width, const WORD height)
         DX_CHECK("swapchain get buffer", swapchain4->GetBuffer(f, IID_PPV_ARGS(&rt[f])));
 
         rtv_desc_heap_hnd.ptr += f * device10->GetDescriptorHandleIncrementSize(D3D12_DESCRIPTOR_HEAP_TYPE_RTV);
-        device10->CreateRenderTargetView(rt[f], &rtv_desc, rtv_desc_heap_hnd);
+        device10->CreateRenderTargetView(rt[f].Get(), &rtv_desc, rtv_desc_heap_hnd);
     }
 }
 
-void dx12_renderer::render_background(const POINT pt)
+void dx12_renderer::begin_frame()
 {
     img_idx = swapchain4->GetCurrentBackBufferIndex();
 
-    D3D12_CPU_DESCRIPTOR_HANDLE curr_rtv_hnd = rtv_desc_heap->GetCPUDescriptorHandleForHeapStart();
-    curr_rtv_hnd.ptr += (img_idx * device10->GetDescriptorHandleIncrementSize(D3D12_DESCRIPTOR_HEAP_TYPE_RTV));
-
-    float clear_color[4] = {(float)pt.x / (wnd_rect.right - wnd_rect.left), (float)pt.y / (wnd_rect.bottom - wnd_rect.top), 1, 0};
-
     DX_CHECK("reset command allocator", rt_cmd_allocs[img_idx]->Reset());
-    DX_CHECK("reset command list", rt_cmd_lists[img_idx]->Reset(rt_cmd_allocs[img_idx], nullptr));
+    DX_CHECK("reset command list", rt_cmd_lists[img_idx]->Reset(rt_cmd_allocs[img_idx].Get(), nullptr));
 
     const D3D12_RESOURCE_BARRIER prsnt_to_rt_barr = {
         .Type = D3D12_RESOURCE_BARRIER_TYPE_TRANSITION,
         .Transition = {
-            .pResource = rt[img_idx],
+            .pResource = rt[img_idx].Get(),
             .Subresource = 0,
             .StateBefore = D3D12_RESOURCE_STATE_PRESENT,
             .StateAfter = D3D12_RESOURCE_STATE_RENDER_TARGET,
@@ -531,35 +572,22 @@ void dx12_renderer::render_background(const POINT pt)
     };
 
     rt_cmd_lists[img_idx]->ResourceBarrier(1, &prsnt_to_rt_barr);
+}
+
+void dx12_renderer::clear_frame(const float color[])
+{
+    D3D12_CPU_DESCRIPTOR_HANDLE curr_rtv_hnd = rtv_desc_heap->GetCPUDescriptorHandleForHeapStart();
+    curr_rtv_hnd.ptr += (img_idx * device10->GetDescriptorHandleIncrementSize(D3D12_DESCRIPTOR_HEAP_TYPE_RTV));
     rt_cmd_lists[img_idx]->OMSetRenderTargets(1, &curr_rtv_hnd, FALSE, nullptr);
-    rt_cmd_lists[img_idx]->ClearRenderTargetView(curr_rtv_hnd, clear_color, 1, &wnd_rect);
+    rt_cmd_lists[img_idx]->ClearRenderTargetView(curr_rtv_hnd, color, 1, &wnd_rect);
+}
 
-    const D3D12_VIEWPORT viewports[] = {
-        {
-            .TopLeftX = 0,
-            .TopLeftY = 0,
-            .Width = (float)wnd_rect.right,
-            .Height = (float)wnd_rect.bottom,
-            .MinDepth = 0.0,
-            .MaxDepth = 1.0,
-        },
-    };
-
-    const D3D12_RECT scissors[] = {
-        wnd_rect,
-    };
-
-    rt_cmd_lists[img_idx]->RSSetViewports(_countof(viewports), viewports);
-    rt_cmd_lists[img_idx]->RSSetScissorRects(_countof(scissors), scissors);
-
-    rt_cmd_lists[img_idx]->SetGraphicsRootSignature(root_sig);
-    rt_cmd_lists[img_idx]->SetPipelineState(pipelines[0]);
-    rt_cmd_lists[img_idx]->DispatchMesh(1, 1, 1);
-
+void dx12_renderer::end_frame()
+{
     const D3D12_RESOURCE_BARRIER rt_to_prsnt_barr = {
         .Type = D3D12_RESOURCE_BARRIER_TYPE_TRANSITION,
         .Transition = {
-            .pResource = rt[img_idx],
+            .pResource = rt[img_idx].Get(),
             .Subresource = 0,
             .StateBefore = D3D12_RESOURCE_STATE_RENDER_TARGET,
             .StateAfter = D3D12_RESOURCE_STATE_PRESENT,
@@ -569,14 +597,14 @@ void dx12_renderer::render_background(const POINT pt)
     DX_CHECK("close cmd list", rt_cmd_lists[img_idx]->Close());
 
     ID3D12CommandList *cmd_lists[] = {
-        rt_cmd_lists[img_idx],
+        rt_cmd_lists[img_idx].Get(),
     };
 
     cmd_queue->ExecuteCommandLists(1, cmd_lists);
     DX_CHECK("swapchain present", swapchain4->Present(0, 0));
 
     ++rt_fnc_vals[img_idx];
-    cmd_queue->Signal(rt_fncs[img_idx], rt_fnc_vals[img_idx]);
+    cmd_queue->Signal(rt_fncs[img_idx].Get(), rt_fnc_vals[img_idx]);
 
     if (rt_fncs[img_idx]->GetCompletedValue() < rt_fnc_vals[img_idx])
     {
@@ -589,40 +617,111 @@ void dx12_renderer::render_background(const POINT pt)
     }
 }
 
+void dx12_renderer::import_scene_data(const cgltf_data *data)
+{
+}
+
+void dx12_renderer::clear_scene_data()
+{
+}
+
+// void dx12_renderer::render_background(const POINT pt)
+// {
+//     img_idx = swapchain4->GetCurrentBackBufferIndex();
+
+//     D3D12_CPU_DESCRIPTOR_HANDLE curr_rtv_hnd = rtv_desc_heap->GetCPUDescriptorHandleForHeapStart();
+//     curr_rtv_hnd.ptr += (img_idx * device10->GetDescriptorHandleIncrementSize(D3D12_DESCRIPTOR_HEAP_TYPE_RTV));
+
+//     float clear_color[4] = {(float)pt.x / (wnd_rect.right - wnd_rect.left), (float)pt.y / (wnd_rect.bottom - wnd_rect.top), 1, 0};
+
+//     DX_CHECK("reset command allocator", rt_cmd_allocs[img_idx]->Reset());
+//     DX_CHECK("reset command list", rt_cmd_lists[img_idx]->Reset(rt_cmd_allocs[img_idx].Get(), nullptr));
+
+//     const D3D12_RESOURCE_BARRIER prsnt_to_rt_barr = {
+//         .Type = D3D12_RESOURCE_BARRIER_TYPE_TRANSITION,
+//         .Transition = {
+//             .pResource = rt[img_idx].Get(),
+//             .Subresource = 0,
+//             .StateBefore = D3D12_RESOURCE_STATE_PRESENT,
+//             .StateAfter = D3D12_RESOURCE_STATE_RENDER_TARGET,
+//         },
+//     };
+
+//     rt_cmd_lists[img_idx]->ResourceBarrier(1, &prsnt_to_rt_barr);
+//     rt_cmd_lists[img_idx]->OMSetRenderTargets(1, &curr_rtv_hnd, FALSE, nullptr);
+//     rt_cmd_lists[img_idx]->ClearRenderTargetView(curr_rtv_hnd, clear_color, 1, &wnd_rect);
+
+//     const D3D12_VIEWPORT viewports[] = {
+//         {
+//             .TopLeftX = 0,
+//             .TopLeftY = 0,
+//             .Width = (float)wnd_rect.right,
+//             .Height = (float)wnd_rect.bottom,
+//             .MinDepth = 0.0,
+//             .MaxDepth = 1.0,
+//         },
+//     };
+
+//     const D3D12_RECT scissors[] = {
+//         wnd_rect,
+//     };
+
+//     rt_cmd_lists[img_idx]->RSSetViewports(_countof(viewports), viewports);
+//     rt_cmd_lists[img_idx]->RSSetScissorRects(_countof(scissors), scissors);
+
+//     // rt_cmd_lists[img_idx]->SetGraphicsRootSignature(root_sig.Get());
+//     // rt_cmd_lists[img_idx]->SetPipelineState(pipelines[0]);
+//     // rt_cmd_lists[img_idx]->DispatchMesh(1, 1, 1);
+
+//     const D3D12_RESOURCE_BARRIER rt_to_prsnt_barr = {
+//         .Type = D3D12_RESOURCE_BARRIER_TYPE_TRANSITION,
+//         .Transition = {
+//             .pResource = rt[img_idx].Get(),
+//             .Subresource = 0,
+//             .StateBefore = D3D12_RESOURCE_STATE_RENDER_TARGET,
+//             .StateAfter = D3D12_RESOURCE_STATE_PRESENT,
+//         },
+//     };
+//     rt_cmd_lists[img_idx]->ResourceBarrier(1, &rt_to_prsnt_barr);
+//     DX_CHECK("close cmd list", rt_cmd_lists[img_idx]->Close());
+
+//     ID3D12CommandList *cmd_lists[] = {
+//         rt_cmd_lists[img_idx].Get(),
+//     };
+
+//     cmd_queue->ExecuteCommandLists(1, cmd_lists);
+//     DX_CHECK("swapchain present", swapchain4->Present(0, 0));
+
+//     ++rt_fnc_vals[img_idx];
+//     cmd_queue->Signal(rt_fncs[img_idx].Get(), rt_fnc_vals[img_idx]);
+
+//     if (rt_fncs[img_idx]->GetCompletedValue() < rt_fnc_vals[img_idx])
+//     {
+//         HANDLE wait_idle_event = CreateEventA(nullptr, FALSE, FALSE, nullptr);
+
+//         DX_CHECK("set wait idle event", rt_fncs[img_idx]->SetEventOnCompletion(rt_fnc_vals[img_idx], wait_idle_event));
+
+//         WaitForSingleObject(wait_idle_event, UINT64_MAX);
+//         CloseHandle(wait_idle_event);
+//     }
+// }
+
+// void dx12_renderer::clear_scene()
+// {
+//     std::cout << __FUNCTION__ << '\n';
+// }
+
 dx12_renderer::~dx12_renderer()
 {
     std::cout << __FUNCTION__ << '\n';
 
-    if (rt_fncs[img_idx]->GetCompletedValue() < rt_fnc_vals[img_idx])
-    {
-        HANDLE wait_idle_event = CreateEventA(nullptr, FALSE, FALSE, nullptr);
+    // if (rt_fncs[img_idx]->GetCompletedValue() < rt_fnc_vals[img_idx])
+    // {
+    //     HANDLE wait_idle_event = CreateEventA(nullptr, FALSE, FALSE, nullptr);
 
-        DX_CHECK("set wait idle event", rt_fncs[img_idx]->SetEventOnCompletion(rt_fnc_vals[img_idx], wait_idle_event));
+    //     DX_CHECK("set wait idle event", rt_fncs[img_idx]->SetEventOnCompletion(rt_fnc_vals[img_idx], wait_idle_event));
 
-        WaitForSingleObject(wait_idle_event, UINT64_MAX);
-        CloseHandle(wait_idle_event);
-    }
-
-    for (UINT rtc = 0; rtc < RENDER_TARGET_COUNT; ++rtc)
-    {
-        rt[rtc]->Release();
-        rt_cmd_allocs[rtc]->Release();
-        rt_cmd_lists[rtc]->Release();
-        rt_fncs[rtc]->Release();
-    }
-
-    for (auto pipeline : pipelines)
-    {
-        pipeline->Release();
-    }
-
-    rtv_desc_heap->Release();
-    swapchain4->Release();
-    cmd_queue->Release();
-    device10->Release();
-    adapter4->Release();
-#ifdef DEBUG
-    debug_controller->Release();
-#endif
-    factory7->Release();
+    //     WaitForSingleObject(wait_idle_event, UINT64_MAX);
+    //     CloseHandle(wait_idle_event);
+    // }
 }

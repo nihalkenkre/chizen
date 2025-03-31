@@ -1,6 +1,9 @@
 #include <Windows.h>
 #include <Windowsx.h>
 #include <ShObjIdl.h>
+#include <wrl.h>
+
+using Microsoft::WRL::ComPtr;
 
 #include <iostream>
 #include <memory>
@@ -11,8 +14,6 @@
 #include "world_scene.hpp"
 
 #define FILE_MENU_OPEN 10
-
-bool pause_h_wnd_msg_queue = false;
 
 HWND h_scene_wnd = nullptr;
 HWND h_ctrl_pnl = nullptr;
@@ -46,14 +47,25 @@ HWND create_control_panel(const HINSTANCE h_instance)
 
 HWND create_wnd(const HINSTANCE h_instance)
 {
+    RECT wnd_rect = {
+        .left = 0,
+        .top = 0,
+        .right = 1280,
+        .bottom = 720,
+    };
+
+    UINT dw_style = WS_OVERLAPPED | WS_SIZEBOX;
+
+    AdjustWindowRect(&wnd_rect, dw_style, FALSE);
+
     return CreateWindowA(
         "Chizen",
         "Chizen",
-        WS_OVERLAPPED | WS_SIZEBOX,
+        dw_style,
         CW_USEDEFAULT,
         CW_USEDEFAULT,
-        1280,
-        720,
+        wnd_rect.right - wnd_rect.left,
+        wnd_rect.bottom - wnd_rect.top,
         nullptr,
         nullptr,
         h_instance,
@@ -62,12 +74,12 @@ HWND create_wnd(const HINSTANCE h_instance)
 
 void open_file(const HWND h_wnd)
 {
-    IFileDialog* file_open;
+    ComPtr<IFileDialog> file_open;
     if SUCCEEDED (CoCreateInstance(CLSID_FileOpenDialog, nullptr, CLSCTX_ALL, IID_PPV_ARGS(&file_open)))
     {
         if SUCCEEDED (file_open->Show(h_wnd))
         {
-            IShellItem* open_file;
+            ComPtr<IShellItem> open_file;
             if SUCCEEDED (file_open->GetResult(&open_file))
             {
                 PWSTR wfile_path;
@@ -76,8 +88,8 @@ void open_file(const HWND h_wnd)
                     char file_path[MAX_PATH];
                     wcstombs(file_path, wfile_path, MAX_PATH);
 
-                    r.reset(nullptr);
-                    r = std::make_unique<dx12_renderer>(h_scene_wnd, file_path);
+                    // r->clear_scene();
+                    // r->import_scene(file_path);
 
                     s.reset(nullptr);
                     s = std::make_unique<world_scene>(file_path);
@@ -120,9 +132,7 @@ LRESULT CALLBACK WindowProc(HWND h_wnd, UINT msg, WPARAM w_param, LPARAM l_param
         {
         case FILE_MENU_OPEN:
 
-            pause_h_wnd_msg_queue = true;
             open_file(h_wnd);
-            pause_h_wnd_msg_queue = false;
 
             break;
         default:
@@ -146,7 +156,9 @@ LRESULT CALLBACK WindowProc(HWND h_wnd, UINT msg, WPARAM w_param, LPARAM l_param
     case WM_SIZE:
         if (r.get() != nullptr && r->is_inited)
         {
-            r->resize(LOWORD(l_param), HIWORD(l_param));
+            RECT wnd_rect;
+            GetWindowRect(h_scene_wnd, &wnd_rect);
+            r->resize(wnd_rect);
         }
         break;
 
@@ -188,27 +200,20 @@ int main(int argc, char **argv)
     ShowWindow(h_scene_wnd, 1);
     ShowWindow(h_ctrl_pnl, 1);
 
-    r = std::make_unique<dx12_renderer>(h_scene_wnd, "");
+    r = std::make_unique<dx12_renderer>(h_scene_wnd);
     s = std::make_unique<default_scene>();
 
     MSG msg = {0};
 
-    // while (TRUE)
-    // {
     while (GetMessageA(&msg, nullptr, 0, 0))
     {
         if (msg.message == WM_QUIT || msg.message == WM_CLOSE || msg.message == WM_DESTROY)
         {
             break;
         }
-
-        if (!pause_h_wnd_msg_queue)
-        {
-            TranslateMessage(&msg);
-            DispatchMessageA(&msg);
-        }
+        TranslateMessage(&msg);
+        DispatchMessageA(&msg);
     }
-    // }
 
     CoUninitialize();
 

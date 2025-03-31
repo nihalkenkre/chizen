@@ -4,41 +4,47 @@
 #include <iostream>
 #include <directx/d3dx12.h>
 #include <dxgi1_6.h>
+#include <wrl.h>
 
 #include "renderer.hpp"
+
+using Microsoft::WRL::ComPtr;
 
 #define RENDER_TARGET_COUNT 2
 
 class dx12_renderer : public renderer
 {
 public:
-    dx12_renderer(const HWND h_wnd, const std::string &path);
-    void resize(const WORD width, const WORD height) override;
-    void render_background(const POINT pt) override;
+    dx12_renderer(const HWND h_wnd);
+    void import_scene_data(const cgltf_data *data) override;
+    void resize(const RECT &rect) override;
+    void begin_frame() override;
+    void clear_frame(const float color[]) override;
+    void end_frame() override;
+    void clear_scene_data() override;
     ~dx12_renderer();
 
-private:
-    void import_scene(const cgltf_data *data);
-    void create_pipelines();
-    IDXGIFactory7 *factory7;
+    ComPtr<IDXGIFactory7> factory7;
 #ifdef DEBUG
-    ID3D12Debug *debug_controller;
+    ComPtr<ID3D12Debug> debug_controller;
 #endif
-    IDXGIAdapter4 *adapter4;
-    ID3D12Device10 *device10;
-    ID3D12CommandQueue *cmd_queue;
-    IDXGISwapChain4 *swapchain4;
-    ID3D12DescriptorHeap *rtv_desc_heap;
-    ID3D12Resource2 *rt[RENDER_TARGET_COUNT];
-    ID3D12CommandAllocator *rt_cmd_allocs[RENDER_TARGET_COUNT];
-    ID3D12GraphicsCommandList7 *rt_cmd_lists[RENDER_TARGET_COUNT];
-    ID3D12Fence1 *rt_fncs[RENDER_TARGET_COUNT];
+    ComPtr<IDXGIAdapter4> adapter4;
+    ComPtr<ID3D12Device10> device10;
+    ComPtr<ID3D12CommandQueue> cmd_queue;
+    ComPtr<IDXGISwapChain4> swapchain4;
+    ComPtr<ID3D12DescriptorHeap> rtv_desc_heap;
+    ComPtr<ID3D12Resource2> rt[RENDER_TARGET_COUNT];
+    ComPtr<ID3D12CommandAllocator> rt_cmd_allocs[RENDER_TARGET_COUNT];
+    ComPtr<ID3D12GraphicsCommandList7> rt_cmd_lists[RENDER_TARGET_COUNT];
+    ComPtr<ID3D12Fence1> rt_fncs[RENDER_TARGET_COUNT];
     UINT64 rt_fnc_vals[RENDER_TARGET_COUNT];
+
+private:
+    void create_pipelines();
 
     std::vector<ID3D12PipelineState *> pipelines;
 
-    ID3D12RootSignature *root_sig;
+    ComPtr<ID3D12RootSignature> root_sig;
 
     UINT img_idx;
-    D3D12_RECT wnd_rect;
 };
