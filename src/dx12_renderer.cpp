@@ -62,18 +62,18 @@ void dx12_renderer::create_pipelines()
     std::string tmp(curr_dir);
     tmp.append("\\shaders\\world");
 
-    ComPtr<IDxcUtils> utils;
-    ComPtr<IDxcCompiler3> compiler;
+    IDxcUtils *utils;
+    IDxcCompiler3 *compiler;
     DX_CHECK("create dxc utils instance", DxcCreateInstance(CLSID_DxcUtils, IID_PPV_ARGS(&utils)));
     DX_CHECK("create dxc compile instance", DxcCreateInstance(CLSID_DxcCompiler, IID_PPV_ARGS(&compiler)));
 
-    ComPtr<IDxcIncludeHandler> include_handler;
+    IDxcIncludeHandler *include_handler;
     DX_CHECK("create include handler", utils->CreateDefaultIncludeHandler(&include_handler));
 
-    ComPtr<IDxcBlob> as;
-    ComPtr<IDxcBlob> ms;
-    ComPtr<IDxcBlob> ps;
-    ComPtr<IDxcBlob> root_sig_blob;
+    IDxcBlob *as;
+    IDxcBlob *ms;
+    IDxcBlob *ps;
+    IDxcBlob *root_sig_blob;
 
     for (auto const &file : std::filesystem::directory_iterator(std::filesystem::path(tmp)))
     {
@@ -82,7 +82,7 @@ void dx12_renderer::create_pipelines()
 
         if (file_name_tokens[file_name_tokens.size() - 1] == "hlsl")
         {
-            ComPtr<IDxcBlobEncoding> source_file;
+            IDxcBlobEncoding *source_file;
             DX_CHECK("load shader file", utils->LoadFile(file.path().c_str(), nullptr, &source_file));
             const DxcBuffer source = {
                 .Ptr = source_file->GetBufferPointer(),
@@ -92,24 +92,24 @@ void dx12_renderer::create_pipelines()
 
             if (file_name_tokens[0].find("root_sig") != std::string::npos)
             {
-                std::vector<LPCWSTR> args;
-                args.push_back(file.path().c_str());
-
-                args.push_back(L"-E");
-                args.push_back(L"ROOTSIG");
-                args.push_back(L"-T");
-                args.push_back(L"rootsig_1_1");
-
                 auto cs_name = file_name_tokens[0] + ".root";
                 auto output_cso = std::wstring(std::begin(cs_name), std::end(cs_name));
 
-                args.push_back(L"-Fo");
-                args.push_back(output_cso.c_str());
+                LPCWSTR args[] = {
+                    file.path().c_str(),
+                    L"-E",
+                    L"ROOTSIG",
+                    L"-T",
+                    L"rootsig_1_1",
+                    L"-Fo",
+                    output_cso.c_str(),
 
-                ComPtr<IDxcResult> results;
-                DX_CHECK("compile rootsig", compiler->Compile(&source, args.data(), args.size(), include_handler.Get(), IID_PPV_ARGS(&results)));
+                };
 
-                ComPtr<IDxcBlobEncoding> errors;
+                IDxcResult *results;
+                DX_CHECK("compile rootsig", compiler->Compile(&source, args, _countof(args), include_handler, IID_PPV_ARGS(&results)));
+
+                IDxcBlobEncoding *errors;
                 DX_CHECK("get error buffer", results->GetErrorBuffer(&errors));
 
                 if (errors != nullptr && errors->GetBufferSize() > 0)
@@ -118,7 +118,7 @@ void dx12_renderer::create_pipelines()
                     std::exit(0xdeadbeef);
                 }
 
-                ComPtr<IDxcBlobUtf16> name;
+                IDxcBlobUtf16 *name;
                 DX_CHECK("get rootsig", results->GetOutput(DXC_OUT_OBJECT, IID_PPV_ARGS(&root_sig_blob), &name));
                 // std::wcout << "rootsig name " << name->GetStringPointer() << '\n';
             }
@@ -128,9 +128,6 @@ void dx12_renderer::create_pipelines()
 
                 for (size_t i = 0; i < shader_types.size(); ++i)
                 {
-                    std::vector<LPCWSTR> args;
-                    args.push_back(file.path().c_str());
-
                     auto base_name = shader_types[i];
                     auto obj_name = base_name + ".cso";
                     auto output_cso = std::wstring(std::begin(obj_name), std::end(obj_name));
@@ -140,6 +137,9 @@ void dx12_renderer::create_pipelines()
 
                     auto ref_name = base_name + ".ref";
                     auto output_ref = std::wstring(std::begin(ref_name), std::end(ref_name));
+
+                    std::vector<LPCWSTR> args;
+                    args.push_back(file.path().c_str());
 
                     args.push_back(L"-Fo");
                     args.push_back(output_cso.c_str());
@@ -173,10 +173,10 @@ void dx12_renderer::create_pipelines()
                     args.push_back(L"-Zi");
                     args.push_back(L"-Qstrip_reflect");
 
-                    ComPtr<IDxcResult> results;
-                    DX_CHECK("compile shader source", compiler->Compile(&source, args.data(), args.size(), include_handler.Get(), IID_PPV_ARGS(&results)));
+                    IDxcResult *results;
+                    DX_CHECK("compile shader source", compiler->Compile(&source, args.data(), args.size(), include_handler, IID_PPV_ARGS(&results)));
 
-                    ComPtr<IDxcBlobEncoding> errors;
+                    IDxcBlobEncoding *errors;
                     DX_CHECK("get error buffer", results->GetErrorBuffer(&errors));
 
                     if (errors != nullptr && errors->GetBufferSize() > 0)
@@ -185,7 +185,7 @@ void dx12_renderer::create_pipelines()
                         std::exit(0xdeadbeef);
                     }
 
-                    ComPtr<IDxcBlobUtf16> name;
+                    IDxcBlobUtf16 *name;
                     if (shader_types[i] == "as")
                     {
                         DX_CHECK("get shader binary", results->GetOutput(DXC_OUT_OBJECT, IID_PPV_ARGS(&as), &name));
@@ -202,7 +202,7 @@ void dx12_renderer::create_pipelines()
                         // std::wcout << "bin name " << name->GetStringPointer() << '\n';
                     }
 
-                    ComPtr<IDxcBlob> pdb;
+                    IDxcBlob *pdb;
                     DX_CHECK("get pdb", results->GetOutput(DXC_OUT_PDB, IID_PPV_ARGS(&pdb), &name));
                     // std::wcout << "pdb name " << name->GetStringPointer() << '\n';
 
@@ -210,7 +210,7 @@ void dx12_renderer::create_pipelines()
                     pdb_file.write(reinterpret_cast<const char *>(pdb->GetBufferPointer()), pdb->GetBufferSize());
                     pdb_file.close();
 
-                    ComPtr<IDxcBlob> reflection;
+                    IDxcBlob *reflection;
                     DX_CHECK("get reflection", results->GetOutput(DXC_OUT_REFLECTION, IID_PPV_ARGS(&reflection), &name));
                     // std::wcout << "ref name " << name->GetStringPointer() << '\n';
                 }
@@ -221,7 +221,7 @@ void dx12_renderer::create_pipelines()
     DX_CHECK("create root signature", device10->CreateRootSignature(0, root_sig_blob->GetBufferPointer(), root_sig_blob->GetBufferSize(), IID_PPV_ARGS(&root_sig)));
 
     D3DX12_MESH_SHADER_PIPELINE_STATE_DESC pipeline_desc = {
-        .pRootSignature = root_sig.Get(),
+        .pRootSignature = root_sig,
         .MS = {
             .pShaderBytecode = ms->GetBufferPointer(),
             .BytecodeLength = ms->GetBufferSize(),
@@ -267,7 +267,7 @@ void dx12_renderer::create_pipelines()
         .pPipelineStateSubobjectStream = &pipeline_stream,
     };
 
-    ComPtr<ID3D12PipelineState> pipeline;
+    ID3D12PipelineState *pipeline;
     DX_CHECK("create pipeline", device10->CreatePipelineState(&pipeline_stream_desc, IID_PPV_ARGS(&pipeline)));
 
     pipelines.push_back(pipeline);
@@ -295,13 +295,13 @@ dx12_renderer::dx12_renderer(const HWND h_wnd, const std::string &path)
             continue;
         }
 
-        if (SUCCEEDED(D3D12CreateDevice(reinterpret_cast<IUnknown *>(adapter4.Get()), D3D_FEATURE_LEVEL_12_2, IID_ID3D12Device10, nullptr)))
+        if (SUCCEEDED(D3D12CreateDevice(reinterpret_cast<IUnknown *>(adapter4), D3D_FEATURE_LEVEL_12_2, IID_ID3D12Device10, nullptr)))
         {
             break;
         }
     }
 
-    DX_CHECK("create device", D3D12CreateDevice(reinterpret_cast<IUnknown *>(adapter4.Get()), D3D_FEATURE_LEVEL_12_2, IID_PPV_ARGS(&device10)));
+    DX_CHECK("create device", D3D12CreateDevice(reinterpret_cast<IUnknown *>(adapter4), D3D_FEATURE_LEVEL_12_2, IID_PPV_ARGS(&device10)));
 
     const D3D_FEATURE_LEVEL feature_levels[] = {
         D3D_FEATURE_LEVEL_11_0,
@@ -357,9 +357,10 @@ dx12_renderer::dx12_renderer(const HWND h_wnd, const std::string &path)
         .SwapEffect = DXGI_SWAP_EFFECT_FLIP_DISCARD,
     };
 
-    ComPtr<IDXGISwapChain1> swapchain1;
-    DX_CHECK("create swapchain", factory7->CreateSwapChainForHwnd(cmd_queue.Get(), h_wnd, &sc_desc1, nullptr, nullptr, &swapchain1));
-    swapchain1.As(&swapchain4);
+    IDXGISwapChain1 *swapchain1;
+    DX_CHECK("create swapchain", factory7->CreateSwapChainForHwnd(cmd_queue, h_wnd, &sc_desc1, nullptr, nullptr, &swapchain1));
+    // swapchain1.As(&swapchain4);
+    swapchain4 = reinterpret_cast<IDXGISwapChain4 *>(swapchain1);
 
     const D3D12_DESCRIPTOR_HEAP_DESC rtv_heap_desc = {
         .Type = D3D12_DESCRIPTOR_HEAP_TYPE_RTV,
@@ -380,7 +381,7 @@ dx12_renderer::dx12_renderer(const HWND h_wnd, const std::string &path)
         };
 
         rtv_desc_heap_hnd.ptr += f * device10->GetDescriptorHandleIncrementSize(D3D12_DESCRIPTOR_HEAP_TYPE_RTV);
-        device10->CreateRenderTargetView(rt[f].Get(), &rtv_desc, rtv_desc_heap_hnd);
+        device10->CreateRenderTargetView(rt[f], &rtv_desc, rtv_desc_heap_hnd);
 
         DX_CHECK("create cmd allocator", device10->CreateCommandAllocator(D3D12_COMMAND_LIST_TYPE_DIRECT, IID_PPV_ARGS(&rt_cmd_allocs[f])));
         DX_CHECK("create cmd list", device10->CreateCommandList1(0, D3D12_COMMAND_LIST_TYPE_DIRECT, D3D12_COMMAND_LIST_FLAG_NONE, IID_PPV_ARGS(&rt_cmd_lists[f])));
@@ -487,7 +488,7 @@ void dx12_renderer::resize(const WORD width, const WORD height)
             WaitForSingleObject(wait_idle_event, UINT64_MAX);
             CloseHandle(wait_idle_event);
         }
-        rt[f].Reset();
+        rt[f]->Release();
     }
 
     DX_CHECK("swapchain resize buffers", swapchain4->ResizeBuffers(0, 0, 0, DXGI_FORMAT_UNKNOWN, 0));
@@ -503,7 +504,7 @@ void dx12_renderer::resize(const WORD width, const WORD height)
         DX_CHECK("swapchain get buffer", swapchain4->GetBuffer(f, IID_PPV_ARGS(&rt[f])));
 
         rtv_desc_heap_hnd.ptr += f * device10->GetDescriptorHandleIncrementSize(D3D12_DESCRIPTOR_HEAP_TYPE_RTV);
-        device10->CreateRenderTargetView(rt[f].Get(), &rtv_desc, rtv_desc_heap_hnd);
+        device10->CreateRenderTargetView(rt[f], &rtv_desc, rtv_desc_heap_hnd);
     }
 }
 
@@ -517,12 +518,12 @@ void dx12_renderer::render_background(const POINT pt)
     float clear_color[4] = {(float)pt.x / (wnd_rect.right - wnd_rect.left), (float)pt.y / (wnd_rect.bottom - wnd_rect.top), 1, 0};
 
     DX_CHECK("reset command allocator", rt_cmd_allocs[img_idx]->Reset());
-    DX_CHECK("reset command list", rt_cmd_lists[img_idx]->Reset(rt_cmd_allocs[img_idx].Get(), nullptr));
+    DX_CHECK("reset command list", rt_cmd_lists[img_idx]->Reset(rt_cmd_allocs[img_idx], nullptr));
 
     const D3D12_RESOURCE_BARRIER prsnt_to_rt_barr = {
         .Type = D3D12_RESOURCE_BARRIER_TYPE_TRANSITION,
         .Transition = {
-            .pResource = rt[img_idx].Get(),
+            .pResource = rt[img_idx],
             .Subresource = 0,
             .StateBefore = D3D12_RESOURCE_STATE_PRESENT,
             .StateAfter = D3D12_RESOURCE_STATE_RENDER_TARGET,
@@ -551,14 +552,14 @@ void dx12_renderer::render_background(const POINT pt)
     rt_cmd_lists[img_idx]->RSSetViewports(_countof(viewports), viewports);
     rt_cmd_lists[img_idx]->RSSetScissorRects(_countof(scissors), scissors);
 
-    rt_cmd_lists[img_idx]->SetGraphicsRootSignature(root_sig.Get());
-    rt_cmd_lists[img_idx]->SetPipelineState(pipelines[0].Get());
+    rt_cmd_lists[img_idx]->SetGraphicsRootSignature(root_sig);
+    rt_cmd_lists[img_idx]->SetPipelineState(pipelines[0]);
     rt_cmd_lists[img_idx]->DispatchMesh(1, 1, 1);
 
     const D3D12_RESOURCE_BARRIER rt_to_prsnt_barr = {
         .Type = D3D12_RESOURCE_BARRIER_TYPE_TRANSITION,
         .Transition = {
-            .pResource = rt[img_idx].Get(),
+            .pResource = rt[img_idx],
             .Subresource = 0,
             .StateBefore = D3D12_RESOURCE_STATE_RENDER_TARGET,
             .StateAfter = D3D12_RESOURCE_STATE_PRESENT,
@@ -568,14 +569,14 @@ void dx12_renderer::render_background(const POINT pt)
     DX_CHECK("close cmd list", rt_cmd_lists[img_idx]->Close());
 
     ID3D12CommandList *cmd_lists[] = {
-        rt_cmd_lists[img_idx].Get(),
+        rt_cmd_lists[img_idx],
     };
 
     cmd_queue->ExecuteCommandLists(1, cmd_lists);
     DX_CHECK("swapchain present", swapchain4->Present(0, 0));
 
     ++rt_fnc_vals[img_idx];
-    cmd_queue->Signal(rt_fncs[img_idx].Get(), rt_fnc_vals[img_idx]);
+    cmd_queue->Signal(rt_fncs[img_idx], rt_fnc_vals[img_idx]);
 
     if (rt_fncs[img_idx]->GetCompletedValue() < rt_fnc_vals[img_idx])
     {
@@ -601,4 +602,27 @@ dx12_renderer::~dx12_renderer()
         WaitForSingleObject(wait_idle_event, UINT64_MAX);
         CloseHandle(wait_idle_event);
     }
+
+    for (UINT rtc = 0; rtc < RENDER_TARGET_COUNT; ++rtc)
+    {
+        rt[rtc]->Release();
+        rt_cmd_allocs[rtc]->Release();
+        rt_cmd_lists[rtc]->Release();
+        rt_fncs[rtc]->Release();
+    }
+
+    for (auto pipeline : pipelines)
+    {
+        pipeline->Release();
+    }
+
+    rtv_desc_heap->Release();
+    swapchain4->Release();
+    cmd_queue->Release();
+    device10->Release();
+    adapter4->Release();
+#ifdef DEBUG
+    debug_controller->Release();
+#endif
+    factory7->Release();
 }

@@ -1,9 +1,6 @@
 #include <Windows.h>
 #include <Windowsx.h>
 #include <ShObjIdl.h>
-#include <wrl.h>
-
-using Microsoft::WRL::ComPtr;
 
 #include <iostream>
 #include <memory>
@@ -65,12 +62,12 @@ HWND create_wnd(const HINSTANCE h_instance)
 
 void open_file(const HWND h_wnd)
 {
-    ComPtr<IFileDialog> file_open;
+    IFileDialog* file_open;
     if SUCCEEDED (CoCreateInstance(CLSID_FileOpenDialog, nullptr, CLSCTX_ALL, IID_PPV_ARGS(&file_open)))
     {
         if SUCCEEDED (file_open->Show(h_wnd))
         {
-            ComPtr<IShellItem> open_file;
+            IShellItem* open_file;
             if SUCCEEDED (file_open->GetResult(&open_file))
             {
                 PWSTR wfile_path;
