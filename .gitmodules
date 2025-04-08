@@ -7,3 +7,6 @@
 [submodule "meshoptimizer"]
 	path = meshoptimizer
 	url = git@github.com:zeux/meshoptimizer.git
+[submodule "cglm"]
+	path = cglm
+	url = git@github.com:recp/cglm.git

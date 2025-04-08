@@ -27,5 +27,4 @@ void default_scene::render(renderer *r)
 
 default_scene::~default_scene()
 {
-    std::cout << __FUNCTION__ << '\n';
 }

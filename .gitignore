@@ -1,5 +1,5 @@
 # Build
-
+x64/*
 *.obj
 *.pdb
 *.exp
@@ -7,9 +7,13 @@
 *.lib
 *.dll
 *.exe
+*.log
 
 # VS Code
 *.vscode
+
+# Visual Studio
+*.vs
 
 # SPIR-V
 *.spv
@@ -19,3 +23,6 @@
 
 # Config Files
 *.conf*
+
+# Projects
+*projects

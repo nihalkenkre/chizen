@@ -13,6 +13,12 @@ using Microsoft::WRL::ComPtr;
 #include "default_scene.hpp"
 #include "world_scene.hpp"
 
+extern "C"
+{
+    __declspec(dllexport) extern const UINT D3D12SDKVersion = 615;
+    __declspec(dllexport) extern const char *D3D12SDKPath = ".\\D3D12\\";
+}
+
 #define FILE_MENU_OPEN 10
 
 HWND h_scene_wnd = nullptr;
@@ -88,11 +94,8 @@ void open_file(const HWND h_wnd)
                     char file_path[MAX_PATH];
                     wcstombs(file_path, wfile_path, MAX_PATH);
 
-                    // r->clear_scene();
-                    // r->import_scene(file_path);
-
                     s.reset(nullptr);
-                    s = std::make_unique<world_scene>(file_path);
+                    s = std::make_unique<world_scene>(file_path, r.get());
                 }
                 else
                 {
@@ -158,6 +161,15 @@ LRESULT CALLBACK WindowProc(HWND h_wnd, UINT msg, WPARAM w_param, LPARAM l_param
         {
             RECT wnd_rect;
             GetWindowRect(h_scene_wnd, &wnd_rect);
+
+            UINT dw_style = WS_OVERLAPPED | WS_SIZEBOX;
+            AdjustWindowRect(&wnd_rect, dw_style, FALSE);
+
+            wnd_rect.right -= wnd_rect.left;
+            wnd_rect.left = 0;
+            wnd_rect.bottom -= wnd_rect.top;
+            wnd_rect.top = 0;
+
             r->resize(wnd_rect);
         }
         break;
