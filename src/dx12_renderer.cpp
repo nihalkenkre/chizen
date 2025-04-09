@@ -7,7 +7,6 @@
 #include <filesystem>
 #include <fstream>
 
-#include <cglm/include/cglm/cglm.h>
 #include <cgltf/cgltf.h>
 #include <meshoptimizer/src/meshoptimizer.h>
 
@@ -31,10 +30,9 @@ inline void static DX_CHECK(const std::string action, const HRESULT result)
 
 static D3D12_VIEWPORT RECT_TO_VIEWPORT(const RECT& rect)
 {
-	const D3D12_VIEWPORT V =
-	{
-		.TopLeftX = (FLOAT)rect.left,
-		.TopLeftY = (FLOAT)rect.top,
+	const D3D12_VIEWPORT V = {
+		.TopLeftX = 0,
+		.TopLeftY = 0,
 		.Width = (FLOAT)(rect.right - rect.left),
 		.Height = (FLOAT)(rect.bottom - rect.top),
 		.MinDepth = 0,
@@ -83,6 +81,11 @@ static inline std::vector<std::string> tokenize(std::string str, char delim)
 	return tokens;
 }
 
+std::pair<std::vector<ComPtr<ID3D12Resource2>>, ComPtr<ID3D12Heap1>> dx12_renderer::CreateDefaultBuffersAndHeap(const std::vector<CD3DX12_RESOURCE_DESC1> resource_descs)
+{
+	return std::pair<std::vector<ComPtr<ID3D12Resource2>>, ComPtr<ID3D12Heap1>>();
+}
+
 std::pair<std::vector<ComPtr<ID3D12Resource2>>, ComPtr<ID3D12Heap1>> dx12_renderer::CreateDefaultBuffersAndHeapFromData(const std::vector<CD3DX12_RESOURCE_DESC1> resource_descs, std::vector<std::vector<uint8_t>> data)
 {
 	size_t resource_count = resource_descs.size();
@@ -101,6 +104,7 @@ std::pair<std::vector<ComPtr<ID3D12Resource2>>, ComPtr<ID3D12Heap1>> dx12_render
 	ComPtr<ID3D12Heap1> upload_heap = nullptr;
 
 	DX_CHECK("create upload heap", device10->CreateHeap1(&upload_heap_desc, nullptr, IID_PPV_ARGS(&upload_heap)));
+	upload_heap->SetName(L"upload heap");
 
 	std::vector<ComPtr<ID3D12Resource2>>up_res(resource_count);
 
@@ -108,6 +112,7 @@ std::pair<std::vector<ComPtr<ID3D12Resource2>>, ComPtr<ID3D12Heap1>> dx12_render
 	for (auto const& alloc : res_allocs1)
 	{
 		DX_CHECK("create upload placed resource", device10->CreatePlacedResource2(upload_heap.Get(), alloc.Offset, &resource_descs[idx], D3D12_BARRIER_LAYOUT_UNDEFINED, nullptr, 0, nullptr, IID_PPV_ARGS(&up_res[idx])));
+		up_res[idx]->SetName(L"upload resource");
 
 		void* map;
 		up_res[idx]->Map(0, nullptr, &map);
@@ -127,6 +132,7 @@ std::pair<std::vector<ComPtr<ID3D12Resource2>>, ComPtr<ID3D12Heap1>> dx12_render
 	ComPtr<ID3D12Heap1> default_heap = nullptr;
 
 	DX_CHECK("create default heap", device10->CreateHeap1(&default_heap_desc, nullptr, IID_PPV_ARGS(&default_heap)));
+	default_heap->SetName(L"default heap");
 
 	std::vector<ComPtr<ID3D12Resource2>>def_res(resource_count);
 
@@ -134,7 +140,7 @@ std::pair<std::vector<ComPtr<ID3D12Resource2>>, ComPtr<ID3D12Heap1>> dx12_render
 	for (auto const& alloc : res_allocs1)
 	{
 		DX_CHECK("create default placed resource", device10->CreatePlacedResource2(default_heap.Get(), alloc.Offset, &resource_descs[idx], D3D12_BARRIER_LAYOUT_UNDEFINED, nullptr, 0, nullptr, IID_PPV_ARGS(&def_res[idx])));
-
+		def_res[idx]->SetName(L"default placed resource");
 		++idx;
 	}
 
@@ -179,20 +185,77 @@ std::pair<std::vector<ComPtr<ID3D12Resource2>>, ComPtr<ID3D12Heap1>> dx12_render
 	gnrl_cmd_queue->ExecuteCommandLists(_countof(cmd_lists), cmd_lists);
 	DX_CHECK("signal gnrl fnc", gnrl_cmd_queue->Signal(gnrl_fnc.Get(), ++gnrl_fnc_val));
 
-	if (gnrl_fnc->GetCompletedValue() <= gnrl_fnc_val)
-	{
-		HANDLE wait_event = CreateEvent(nullptr, FALSE, FALSE, nullptr);
-
-		if (wait_event != nullptr)
-		{
-			DX_CHECK("set event on complete gnrl fnc", gnrl_fnc->SetEventOnCompletion(gnrl_fnc_val, wait_event));
-
-			WaitForSingleObject(wait_event, DWORD_MAX);
-			CloseHandle(wait_event);
-		}
-	}
+	wait_for_gpu(gnrl_fnc.Get(), gnrl_fnc_val);
 
 	return std::make_pair(def_res, default_heap);
+}
+
+std::pair<std::vector<ComPtr<ID3D12Resource2>>, ComPtr<ID3D12Heap1>> dx12_renderer::CreateDefaultTexturesAndHeap(const std::vector<D3D12_RESOURCE_DESC1> resource_descs)
+{
+	size_t resource_count = resource_descs.size();
+
+	std::vector<D3D12_RESOURCE_ALLOCATION_INFO1> res_allocs1(resource_descs.size());
+	D3D12_RESOURCE_ALLOCATION_INFO res_alloc = device10->GetResourceAllocationInfo2(0, static_cast<UINT>(resource_count), resource_descs.data(), res_allocs1.data());
+
+	const D3D12_HEAP_DESC default_heap_desc = {
+		.SizeInBytes = res_alloc.SizeInBytes,
+		.Properties = {
+			.Type = D3D12_HEAP_TYPE_DEFAULT,
+		},
+		.Alignment = res_alloc.Alignment,
+	};
+
+	ComPtr<ID3D12Heap1> default_heap = nullptr;
+	DX_CHECK("create default heap", device10->CreateHeap1(&default_heap_desc, nullptr, IID_PPV_ARGS(&default_heap)));
+	default_heap->SetName(L"default texture heap");
+
+	std::vector<ComPtr<ID3D12Resource2>> def_res(resource_count);
+
+	size_t idx = 0;
+
+	const D3D12_CLEAR_VALUE clear_value = {
+		.Format = DXGI_FORMAT_D24_UNORM_S8_UINT,
+		.DepthStencil = 1,
+	};
+
+	for (auto const& alloc : res_allocs1)
+	{
+		DX_CHECK("create placed resource", device10->CreatePlacedResource2(default_heap.Get(), alloc.Offset, &resource_descs[idx], D3D12_BARRIER_LAYOUT_COMMON, &clear_value, 0, nullptr, IID_PPV_ARGS(&def_res[idx])));
+		def_res[idx]->SetName(L"placed texture");
+		++idx;
+	}
+
+	std::vector<D3D12_RESOURCE_BARRIER> def_res_barr(resource_count);
+
+	for (size_t r = 0; r < resource_count; ++r)
+	{
+		def_res_barr[r].Type = D3D12_RESOURCE_BARRIER_TYPE_TRANSITION;
+		def_res_barr[r].Transition.pResource = def_res[r].Get();
+		def_res_barr[r].Transition.StateBefore = D3D12_RESOURCE_STATE_COMMON;
+		def_res_barr[r].Transition.StateAfter = D3D12_RESOURCE_STATE_DEPTH_WRITE;
+	}
+
+	DX_CHECK("reset gnrl cmd alloc", gnrl_cmd_alloc->Reset());
+	DX_CHECK("reset gnrl cmd list", gnrl_cmd_list->Reset(gnrl_cmd_alloc.Get(), nullptr));
+
+	gnrl_cmd_list->ResourceBarrier(static_cast<UINT>(def_res_barr.size()), def_res_barr.data());
+	DX_CHECK("close gnrl cmd list", gnrl_cmd_list->Close());
+
+	ID3D12CommandList* cmd_lists[] = {
+		gnrl_cmd_list.Get(),
+	};
+
+	gnrl_cmd_queue->ExecuteCommandLists(_countof(cmd_lists), cmd_lists);
+	DX_CHECK("signal gnrl fnc", gnrl_cmd_queue->Signal(gnrl_fnc.Get(), ++gnrl_fnc_val));
+
+	wait_for_gpu(gnrl_fnc.Get(), gnrl_fnc_val);
+
+	return std::make_pair(def_res, default_heap);
+}
+
+std::pair<std::vector<ComPtr<ID3D12Resource2>>, ComPtr<ID3D12Heap1>> dx12_renderer::CreateDefaultTexturesAndHeapFromData(const std::vector<CD3DX12_RESOURCE_DESC1> resources_descs, std::vector<std::vector<uint8_t>> data)
+{
+	return std::pair<std::vector<ComPtr<ID3D12Resource2>>, ComPtr<ID3D12Heap1>>();
 }
 
 void dx12_renderer::create_pipelines()
@@ -467,13 +530,15 @@ void dx12_renderer::create_pipelines()
 			.CullMode = D3D12_CULL_MODE_NONE,
 			.FrontCounterClockwise = TRUE,
 		},
-		//.DepthStencilState = {
-		//	.DepthEnable = TRUE,
-		//	.DepthFunc = D3D12_COMPARISON_FUNC_LESS_EQUAL,
-		//},
+		.DepthStencilState = {
+			.DepthEnable = TRUE,
+			.DepthWriteMask = D3D12_DEPTH_WRITE_MASK_ALL,
+			.DepthFunc = D3D12_COMPARISON_FUNC_LESS_EQUAL,
+		},
 		.PrimitiveTopologyType = D3D12_PRIMITIVE_TOPOLOGY_TYPE_TRIANGLE,
 		.NumRenderTargets = 1,
 		.RTVFormats = DXGI_FORMAT_R8G8B8A8_UNORM,
+		.DSVFormat = DXGI_FORMAT_D24_UNORM_S8_UINT,
 		.SampleDesc = {
 			.Count = 1,
 		},
@@ -491,9 +556,26 @@ void dx12_renderer::create_pipelines()
 	pipelines.push_back(pipeline);
 }
 
+void dx12_renderer::wait_for_gpu(ID3D12Fence* fence, UINT64 fence_value)
+{
+	if (fence->GetCompletedValue() < fence_value)
+	{
+		HANDLE wait_idle_event = CreateEventA(nullptr, FALSE, FALSE, nullptr);
+
+		if (wait_idle_event != nullptr)
+		{
+			DX_CHECK("set wait idle event", fence->SetEventOnCompletion(fence_value, wait_idle_event));
+
+			WaitForSingleObject(wait_idle_event, DWORD_MAX);
+			CloseHandle(wait_idle_event);
+		}
+	}
+}
+
 dx12_renderer::dx12_renderer(const HWND h_wnd)
 {
 	UINT dxgi_factory_flags = 0;
+
 #ifdef DEBUG
 	DX_CHECK("get debug interface", D3D12GetDebugInterface(IID_PPV_ARGS(&debug_controller)));
 	debug_controller->EnableDebugLayer();
@@ -519,6 +601,7 @@ dx12_renderer::dx12_renderer(const HWND h_wnd)
 	}
 
 	DX_CHECK("create device", D3D12CreateDevice(reinterpret_cast<IUnknown*>(adapter4.Get()), D3D_FEATURE_LEVEL_12_2, IID_PPV_ARGS(&device10)));
+	device10->SetName(L"graphics card");
 
 	const D3D_FEATURE_LEVEL feature_levels[] = {
 		D3D_FEATURE_LEVEL_11_0,
@@ -531,7 +614,6 @@ dx12_renderer::dx12_renderer(const HWND h_wnd)
 	D3D12_FEATURE_DATA_FEATURE_LEVELS feat_levels = {
 		.NumFeatureLevels = _countof(feature_levels),
 		.pFeatureLevelsRequested = feature_levels,
-		.MaxSupportedFeatureLevel = D3D_FEATURE_LEVEL_11_0,
 	};
 
 	DX_CHECK("check feature level support", device10->CheckFeatureSupport(D3D12_FEATURE_FEATURE_LEVELS, &feat_levels, sizeof(feat_levels)));
@@ -557,7 +639,16 @@ dx12_renderer::dx12_renderer(const HWND h_wnd)
 	};
 
 	DX_CHECK("create sc cmd q", device10->CreateCommandQueue(&queue_desc, IID_PPV_ARGS(&sc_cmd_queue)));
+	sc_cmd_queue->SetName(L"sc cmd queue");
 	DX_CHECK("create gnrl cmd q", device10->CreateCommandQueue(&queue_desc, IID_PPV_ARGS(&gnrl_cmd_queue)));
+	gnrl_cmd_queue->SetName(L"gnrl cmd q");
+
+	DX_CHECK("create gnrl cmd alloc", device10->CreateCommandAllocator(D3D12_COMMAND_LIST_TYPE_DIRECT, IID_PPV_ARGS(&gnrl_cmd_alloc)));
+	gnrl_cmd_alloc->SetName(L"gnrl cmd alloc");
+	DX_CHECK("create gnrl cmd list", device10->CreateCommandList1(0, D3D12_COMMAND_LIST_TYPE_DIRECT, D3D12_COMMAND_LIST_FLAG_NONE, IID_PPV_ARGS(&gnrl_cmd_list)));
+	gnrl_cmd_list->SetName(L"gnrl cmd list");
+	DX_CHECK("create grnl fnc", device10->CreateFence(0, D3D12_FENCE_FLAG_NONE, IID_PPV_ARGS(&gnrl_fnc)));
+	gnrl_fnc->SetName(L"gnrl fnc");
 
 	GetWindowRect(h_wnd, &wnd_rect);
 	wnd_rect = SANITIZE_RECT_FOR_RENDER(wnd_rect);
@@ -582,11 +673,48 @@ dx12_renderer::dx12_renderer(const HWND h_wnd)
 		.NumDescriptors = sc_desc1.BufferCount,
 	};
 	DX_CHECK("create rtv desc heap", device10->CreateDescriptorHeap(&rtv_heap_desc, IID_PPV_ARGS(&rtv_desc_heap)));
+	rtv_desc_heap->SetName(L"rtv desc heap");
 
 	const D3D12_DESCRIPTOR_HEAP_DESC dsv_heap_desc = {
 		.Type = D3D12_DESCRIPTOR_HEAP_TYPE_DSV,
-		.NumDescriptors = sc_desc1.BufferCount,
+		.NumDescriptors = 1,
 	};
+
+	DX_CHECK("create dsv desc heap", device10->CreateDescriptorHeap(&dsv_heap_desc, IID_PPV_ARGS(&dsv_desc_heap)));
+	dsv_desc_heap->SetName(L"dsv desc heap");
+
+	const D3D12_RESOURCE_DESC1 depth_res_desc = {
+		.Dimension = D3D12_RESOURCE_DIMENSION_TEXTURE2D,
+		.Width = static_cast<UINT64>(viewport.Width),
+		.Height = static_cast<UINT>(viewport.Height),
+		.DepthOrArraySize = 1,
+		.Format = DXGI_FORMAT_D24_UNORM_S8_UINT,
+		.SampleDesc = {
+			.Count = 1,
+		},
+		.Flags = D3D12_RESOURCE_FLAG_ALLOW_DEPTH_STENCIL,
+	};
+
+	const D3D12_HEAP_PROPERTIES dsr_heap_props = {
+		.Type = D3D12_HEAP_TYPE_DEFAULT,
+	};
+
+	const D3D12_CLEAR_VALUE clear_value = {
+		.Format = DXGI_FORMAT_D24_UNORM_S8_UINT,
+		.DepthStencil = {
+			.Depth = 1,
+			.Stencil = 0
+		},
+	};
+
+	DX_CHECK("create commited depth resource", device10->CreateCommittedResource3(&dsr_heap_props, D3D12_HEAP_FLAG_NONE, &depth_res_desc, D3D12_BARRIER_LAYOUT_DEPTH_STENCIL_WRITE, &clear_value, nullptr, 0, nullptr, IID_PPV_ARGS(&sc_ds)));
+	D3D12_CPU_DESCRIPTOR_HANDLE dsv_desc_heap_hnd = dsv_desc_heap->GetCPUDescriptorHandleForHeapStart();
+
+	const D3D12_DEPTH_STENCIL_VIEW_DESC dsv_desc = {
+		.Format = DXGI_FORMAT_D24_UNORM_S8_UINT,
+		.ViewDimension = D3D12_DSV_DIMENSION_TEXTURE2D,
+	};
+	device10->CreateDepthStencilView(sc_ds.Get(), &dsv_desc, dsv_desc_heap_hnd);
 
 	D3D12_CPU_DESCRIPTOR_HANDLE rtv_desc_heap_hnd = rtv_desc_heap->GetCPUDescriptorHandleForHeapStart();
 
@@ -599,24 +727,15 @@ dx12_renderer::dx12_renderer(const HWND h_wnd)
 			.ViewDimension = D3D12_RTV_DIMENSION_TEXTURE2D,
 		};
 
-		rtv_desc_heap_hnd.ptr += SIZE_T(f * device10->GetDescriptorHandleIncrementSize(D3D12_DESCRIPTOR_HEAP_TYPE_RTV));
+		rtv_desc_heap_hnd.ptr += static_cast<SIZE_T>(f * device10->GetDescriptorHandleIncrementSize(D3D12_DESCRIPTOR_HEAP_TYPE_RTV));
 		device10->CreateRenderTargetView(sc_rt[f].Get(), &rtv_desc, rtv_desc_heap_hnd);
 
-		const D3D12_DEPTH_STENCIL_VIEW_DESC dsv_desc = {
-			.Format = DXGI_FORMAT_D32_FLOAT,
-			.ViewDimension = D3D12_DSV_DIMENSION_TEXTURE2D,
-		};
+		DX_CHECK("create sc cmd allocator", device10->CreateCommandAllocator(D3D12_COMMAND_LIST_TYPE_DIRECT, IID_PPV_ARGS(&sc_cmd_allocs[f])));
+		DX_CHECK("create sc cmd lists", device10->CreateCommandList1(0, D3D12_COMMAND_LIST_TYPE_DIRECT, D3D12_COMMAND_LIST_FLAG_NONE, IID_PPV_ARGS(&sc_cmd_lists[f])));
+		DX_CHECK("create sc fence", device10->CreateFence(0, D3D12_FENCE_FLAG_NONE, IID_PPV_ARGS(&sc_fncs[f])));
 
-		DX_CHECK("create sc cmd allocator", device10->CreateCommandAllocator(D3D12_COMMAND_LIST_TYPE_DIRECT, IID_PPV_ARGS(&sc_rt_cmd_allocs[f])));
-		DX_CHECK("create sc cmd list", device10->CreateCommandList1(0, D3D12_COMMAND_LIST_TYPE_DIRECT, D3D12_COMMAND_LIST_FLAG_NONE, IID_PPV_ARGS(&sc_rt_cmd_lists[f])));
-		DX_CHECK("create sc fence", device10->CreateFence(0, D3D12_FENCE_FLAG_NONE, IID_PPV_ARGS(&sc_rt_fncs[f])));
-
-		sc_rt_fnc_vals[f] = 0;
+		sc_fnc_vals[f] = 0;
 	}
-
-	DX_CHECK("create gnrl cmd alloc", device10->CreateCommandAllocator(D3D12_COMMAND_LIST_TYPE_DIRECT, IID_PPV_ARGS(&gnrl_cmd_alloc)));
-	DX_CHECK("create gnrl cmd list", device10->CreateCommandList1(0, D3D12_COMMAND_LIST_TYPE_DIRECT, D3D12_COMMAND_LIST_FLAG_NONE, IID_PPV_ARGS(&gnrl_cmd_list)));
-	DX_CHECK("create grnl fnc", device10->CreateFence(0, D3D12_FENCE_FLAG_NONE, IID_PPV_ARGS(&gnrl_fnc)));
 
 	img_idx = 0;
 	gnrl_fnc_val = 0;
@@ -631,18 +750,7 @@ void dx12_renderer::resize(const RECT& rect)
 
 	for (UINT f = 0; f < RENDER_TARGET_COUNT; ++f)
 	{
-		if (sc_rt_fncs[f]->GetCompletedValue() < sc_rt_fnc_vals[f])
-		{
-			HANDLE wait_idle_event = CreateEventA(nullptr, FALSE, FALSE, nullptr);
-
-			if (wait_idle_event != nullptr)
-			{
-				DX_CHECK("set wait idle event", sc_rt_fncs[f]->SetEventOnCompletion(sc_rt_fnc_vals[f], wait_idle_event));
-
-				WaitForSingleObject(wait_idle_event, DWORD_MAX);
-				CloseHandle(wait_idle_event);
-			}
-		}
+		wait_for_gpu(sc_fncs[f].Get(), sc_fnc_vals[f]);
 		sc_rt[f].Reset();
 	}
 
@@ -667,21 +775,10 @@ void dx12_renderer::begin_frame()
 {
 	img_idx = swapchain4->GetCurrentBackBufferIndex();
 
-	if (sc_rt_fncs[img_idx]->GetCompletedValue() < sc_rt_fnc_vals[img_idx])
-	{
-		HANDLE wait_idle_event = CreateEventA(nullptr, FALSE, FALSE, nullptr);
+	wait_for_gpu(sc_fncs[img_idx].Get(), sc_fnc_vals[img_idx]);
 
-		if (wait_idle_event != nullptr)
-		{
-			DX_CHECK("set wait idle event", sc_rt_fncs[img_idx]->SetEventOnCompletion(sc_rt_fnc_vals[img_idx], wait_idle_event));
-
-			WaitForSingleObject(wait_idle_event, DWORD_MAX);
-			CloseHandle(wait_idle_event);
-		}
-	}
-
-	DX_CHECK("reset command allocator", sc_rt_cmd_allocs[img_idx]->Reset());
-	DX_CHECK("reset command list", sc_rt_cmd_lists[img_idx]->Reset(sc_rt_cmd_allocs[img_idx].Get(), nullptr));
+	DX_CHECK("reset command allocator", sc_cmd_allocs[img_idx]->Reset());
+	DX_CHECK("reset command list", sc_cmd_lists[img_idx]->Reset(sc_cmd_allocs[img_idx].Get(), nullptr));
 
 	const D3D12_RESOURCE_BARRIER prsnt_to_rt_barr = {
 		.Type = D3D12_RESOURCE_BARRIER_TYPE_TRANSITION,
@@ -693,23 +790,26 @@ void dx12_renderer::begin_frame()
 		},
 	};
 
-	sc_rt_cmd_lists[img_idx]->ResourceBarrier(1, &prsnt_to_rt_barr);
+	sc_cmd_lists[img_idx]->ResourceBarrier(1, &prsnt_to_rt_barr);
 }
 
 void dx12_renderer::clear_frame(const float color[])
 {
 	D3D12_CPU_DESCRIPTOR_HANDLE curr_rtv_hnd = rtv_desc_heap->GetCPUDescriptorHandleForHeapStart();
 	curr_rtv_hnd.ptr += (img_idx * device10->GetDescriptorHandleIncrementSize(D3D12_DESCRIPTOR_HEAP_TYPE_RTV));
-	sc_rt_cmd_lists[img_idx]->OMSetRenderTargets(1, &curr_rtv_hnd, FALSE, nullptr);
-	sc_rt_cmd_lists[img_idx]->ClearRenderTargetView(curr_rtv_hnd, color, 1, &wnd_rect);
+	D3D12_CPU_DESCRIPTOR_HANDLE curr_dsv_hnd = dsv_desc_heap->GetCPUDescriptorHandleForHeapStart();
+
+	sc_cmd_lists[img_idx]->OMSetRenderTargets(1, &curr_rtv_hnd, FALSE, &curr_dsv_hnd);
+	sc_cmd_lists[img_idx]->ClearRenderTargetView(curr_rtv_hnd, color, 1, &wnd_rect);
+	sc_cmd_lists[img_idx]->ClearDepthStencilView(curr_dsv_hnd, D3D12_CLEAR_FLAG_DEPTH | D3D12_CLEAR_FLAG_STENCIL, 1, 0, 1, &wnd_rect);
 }
 
 void dx12_renderer::render_world()
 {
-	sc_rt_cmd_lists[img_idx]->RSSetScissorRects(1, &wnd_rect);
-	sc_rt_cmd_lists[img_idx]->RSSetViewports(1, &viewport);
-	sc_rt_cmd_lists[img_idx]->SetGraphicsRootSignature(pipelines[0].root_signature.Get());
-	sc_rt_cmd_lists[img_idx]->SetPipelineState(pipelines[0].state.Get());
+	sc_cmd_lists[img_idx]->RSSetScissorRects(1, &wnd_rect);
+	sc_cmd_lists[img_idx]->RSSetViewports(1, &viewport);
+	sc_cmd_lists[img_idx]->SetGraphicsRootSignature(pipelines[0].root_signature.Get());
+	sc_cmd_lists[img_idx]->SetPipelineState(pipelines[0].state.Get());
 
 	auto P = DirectX::XMMatrixPerspectiveFovRH(DirectX::XMConvertToRadians(60), viewport.Width / viewport.Height, 0.1, 100.0);
 	auto V = DirectX::XMMatrixLookAtRH(DirectX::FXMVECTOR{ 0, 0, 10 }, DirectX::FXMVECTOR{ 0, 0, 0 }, DirectX::FXMVECTOR{ 0, 1, 0 });
@@ -721,12 +821,12 @@ void dx12_renderer::render_world()
 		{
 			auto MVP = pd.xform * VP;
 
-			sc_rt_cmd_lists[img_idx]->SetGraphicsRoot32BitConstants(0, 16, MVP.r, 0);
-			sc_rt_cmd_lists[img_idx]->SetGraphicsRootShaderResourceView(1, pd.geometry_buffers[0]->GetGPUVirtualAddress());
-			sc_rt_cmd_lists[img_idx]->SetGraphicsRootShaderResourceView(2, pd.geometry_buffers[1]->GetGPUVirtualAddress());
-			sc_rt_cmd_lists[img_idx]->SetGraphicsRootShaderResourceView(3, pd.geometry_buffers[2]->GetGPUVirtualAddress());
-			sc_rt_cmd_lists[img_idx]->SetGraphicsRootShaderResourceView(4, pd.geometry_buffers[3]->GetGPUVirtualAddress());
-			sc_rt_cmd_lists[img_idx]->DispatchMesh((UINT)pd.meshlets_count, 1, 1);
+			sc_cmd_lists[img_idx]->SetGraphicsRoot32BitConstants(0, 16, MVP.r, 0);
+			sc_cmd_lists[img_idx]->SetGraphicsRootShaderResourceView(1, pd.geometry_buffers[0]->GetGPUVirtualAddress());
+			sc_cmd_lists[img_idx]->SetGraphicsRootShaderResourceView(2, pd.geometry_buffers[1]->GetGPUVirtualAddress());
+			sc_cmd_lists[img_idx]->SetGraphicsRootShaderResourceView(3, pd.geometry_buffers[2]->GetGPUVirtualAddress());
+			sc_cmd_lists[img_idx]->SetGraphicsRootShaderResourceView(4, pd.geometry_buffers[3]->GetGPUVirtualAddress());
+			sc_cmd_lists[img_idx]->DispatchMesh((UINT)pd.meshlets_count, 1, 1);
 		}
 	}
 }
@@ -742,18 +842,18 @@ void dx12_renderer::end_frame()
 			.StateAfter = D3D12_RESOURCE_STATE_PRESENT,
 		},
 	};
-	sc_rt_cmd_lists[img_idx]->ResourceBarrier(1, &rt_to_prsnt_barr);
-	DX_CHECK("close cmd list", sc_rt_cmd_lists[img_idx]->Close());
+	sc_cmd_lists[img_idx]->ResourceBarrier(1, &rt_to_prsnt_barr);
+	DX_CHECK("close cmd list", sc_cmd_lists[img_idx]->Close());
 
 	ID3D12CommandList* cmd_lists[] = {
-		sc_rt_cmd_lists[img_idx].Get(),
+		sc_cmd_lists[img_idx].Get(),
 	};
 
-	sc_cmd_queue->ExecuteCommandLists(1, cmd_lists);
+	sc_cmd_queue->ExecuteCommandLists(_countof(cmd_lists), cmd_lists);
 	DX_CHECK("swapchain present", swapchain4->Present(0, 0));
 
-	++sc_rt_fnc_vals[img_idx];
-	sc_cmd_queue->Signal(sc_rt_fncs[img_idx].Get(), sc_rt_fnc_vals[img_idx]);
+	++sc_fnc_vals[img_idx];
+	sc_cmd_queue->Signal(sc_fncs[img_idx].Get(), sc_fnc_vals[img_idx]);
 }
 
 void dx12_renderer::import_scene_data(const cgltf_data* data)
@@ -936,34 +1036,12 @@ void dx12_renderer::import_scene_data(const cgltf_data* data)
 
 void dx12_renderer::clear_scene_data()
 {
-	if (sc_rt_fncs[img_idx]->GetCompletedValue() < sc_rt_fnc_vals[img_idx])
-	{
-		HANDLE wait_idle_event = CreateEventA(nullptr, FALSE, FALSE, nullptr);
-
-		if (wait_idle_event != nullptr)
-		{
-			DX_CHECK("set wait idle event", sc_rt_fncs[img_idx]->SetEventOnCompletion(sc_rt_fnc_vals[img_idx], wait_idle_event));
-
-			WaitForSingleObject(wait_idle_event, DWORD_MAX);
-			CloseHandle(wait_idle_event);
-		}
-	}
+	wait_for_gpu(sc_fncs[img_idx].Get(), sc_fnc_vals[img_idx]);
 
 	sd.reset();
 }
 
 dx12_renderer::~dx12_renderer()
 {
-	if (sc_rt_fncs[img_idx]->GetCompletedValue() < sc_rt_fnc_vals[img_idx])
-	{
-		HANDLE wait_idle_event = CreateEventA(nullptr, FALSE, FALSE, nullptr);
-
-		if (wait_idle_event != nullptr)
-		{
-			DX_CHECK("set wait idle event", sc_rt_fncs[img_idx]->SetEventOnCompletion(sc_rt_fnc_vals[img_idx], wait_idle_event));
-
-			WaitForSingleObject(wait_idle_event, DWORD_MAX);
-			CloseHandle(wait_idle_event);
-		}
-	}
+	wait_for_gpu(sc_fncs[img_idx].Get(), sc_fnc_vals[img_idx]);
 }

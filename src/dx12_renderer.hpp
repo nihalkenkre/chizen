@@ -36,11 +36,13 @@ private:
 	ComPtr<ID3D12CommandQueue> sc_cmd_queue;
 	ComPtr<IDXGISwapChain4> swapchain4;
 	ComPtr<ID3D12DescriptorHeap> rtv_desc_heap;
+	ComPtr<ID3D12DescriptorHeap> dsv_desc_heap;
 	ComPtr<ID3D12Resource2> sc_rt[RENDER_TARGET_COUNT];
-	ComPtr<ID3D12CommandAllocator> sc_rt_cmd_allocs[RENDER_TARGET_COUNT];
-	ComPtr<ID3D12GraphicsCommandList7> sc_rt_cmd_lists[RENDER_TARGET_COUNT];
-	ComPtr<ID3D12Fence1> sc_rt_fncs[RENDER_TARGET_COUNT];
-	UINT64 sc_rt_fnc_vals[RENDER_TARGET_COUNT];
+	ComPtr<ID3D12Resource2> sc_ds;
+	ComPtr<ID3D12CommandAllocator> sc_cmd_allocs[RENDER_TARGET_COUNT];
+	ComPtr<ID3D12GraphicsCommandList7> sc_cmd_lists[RENDER_TARGET_COUNT];
+	ComPtr<ID3D12Fence1> sc_fncs[RENDER_TARGET_COUNT];
+	UINT64 sc_fnc_vals[RENDER_TARGET_COUNT];
 
 	UINT img_idx;
 
@@ -90,7 +92,10 @@ private:
 	};
 	std::unique_ptr<scene_data> sd;
 
+	std::pair<std::vector<ComPtr<ID3D12Resource2>>, ComPtr<ID3D12Heap1>> CreateDefaultBuffersAndHeap(const std::vector<CD3DX12_RESOURCE_DESC1> resource_descs);
 	std::pair<std::vector<ComPtr<ID3D12Resource2>>, ComPtr<ID3D12Heap1>> CreateDefaultBuffersAndHeapFromData(const std::vector<CD3DX12_RESOURCE_DESC1> resource_descs, std::vector<std::vector<uint8_t>> data);
+	std::pair<std::vector<ComPtr<ID3D12Resource2>>, ComPtr<ID3D12Heap1>> CreateDefaultTexturesAndHeap(const std::vector<D3D12_RESOURCE_DESC1> resources_descs);
+	std::pair<std::vector<ComPtr<ID3D12Resource2>>, ComPtr<ID3D12Heap1>> CreateDefaultTexturesAndHeapFromData(const std::vector<CD3DX12_RESOURCE_DESC1> resources_descs, std::vector<std::vector<uint8_t>> data);
 
 	struct pipeline
 	{
@@ -98,9 +103,9 @@ private:
 		ComPtr<ID3D12RootSignature> root_signature;
 	};
 	void create_pipelines();
+	void wait_for_gpu(ID3D12Fence* fence, UINT64 fence_value);
 
 	std::vector<pipeline> pipelines;
 
-	//ComPtr<ID3D12RootSignature> root_sig;
 	D3D12_VIEWPORT viewport;
 };
