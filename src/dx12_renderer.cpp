@@ -309,7 +309,7 @@ void dx12_renderer::create_pipelines()
 					L"rootsig_1_1",
 					L"-Fo",
 					output_cso.c_str(),
-					//L"-Qstrip_reflect",
+					L"-Qstrip_reflect",
 				};
 
 				ComPtr<IDxcResult> results = nullptr;
@@ -340,13 +340,13 @@ void dx12_renderer::create_pipelines()
 				{
 					auto base_name = shader_types[i];
 					auto obj_name = "\\" + base_name + ".cso";
-					auto output_cso = std::wstring(tmp.begin(), tmp.end());// +std::wstring(std::begin(obj_name), std::end(obj_name));
+					auto output_cso = std::wstring(tmp.begin(), tmp.end());
 
 					auto pdb_name = "\\" + base_name + ".pdb";
-					auto output_pdb = std::wstring(tmp.begin(), tmp.end());//+ std::wstring(std::begin(pdb_name), std::end(pdb_name));
+					auto output_pdb = std::wstring(tmp.begin(), tmp.end());
 
 					auto ref_name = "\\" + base_name + ".ref";
-					auto output_ref = std::wstring(tmp.begin(), tmp.end());//+ std::wstring(std::begin(ref_name), std::end(ref_name));
+					auto output_ref = std::wstring(tmp.begin(), tmp.end());
 
 					if (shader_types[i] == "as")
 					{
@@ -383,7 +383,6 @@ void dx12_renderer::create_pipelines()
 
 						ComPtr<IDxcBlob> pdb = nullptr;
 						DX_CHECK("get pdb", results->GetOutput(DXC_OUT_PDB, IID_PPV_ARGS(&pdb), &name));
-						std::wcout << "pdb name " << name->GetStringPointer() << '\n';
 
 						std::ofstream pdb_file(std::wstring(tmp.begin(), tmp.end()) + std::wstring(name->GetStringPointer()), std::ios_base::binary);
 						pdb_file.write(reinterpret_cast<const char*>(pdb->GetBufferPointer()), pdb->GetBufferSize());
@@ -391,7 +390,6 @@ void dx12_renderer::create_pipelines()
 
 						ComPtr<IDxcBlob> reflection = nullptr;
 						DX_CHECK("get reflection", results->GetOutput(DXC_OUT_REFLECTION, IID_PPV_ARGS(&reflection), &name));
-						std::wcout << "ref name " << name->GetStringPointer() << '\n';
 					}
 					else if (shader_types[i] == "ms")
 					{
@@ -432,7 +430,6 @@ void dx12_renderer::create_pipelines()
 
 						ComPtr<IDxcBlob> pdb = nullptr;
 						DX_CHECK("get pdb", results->GetOutput(DXC_OUT_PDB, IID_PPV_ARGS(&pdb), &name));
-						std::wcout << "pdb name " << name->GetStringPointer() << '\n';
 
 						std::ofstream pdb_file(std::wstring(tmp.begin(), tmp.end()) + std::wstring(name->GetStringPointer()), std::ios_base::binary);
 						pdb_file.write(reinterpret_cast<const char*>(pdb->GetBufferPointer()), pdb->GetBufferSize());
@@ -440,7 +437,6 @@ void dx12_renderer::create_pipelines()
 
 						ComPtr<IDxcBlob> reflection = nullptr;
 						DX_CHECK("get reflection", results->GetOutput(DXC_OUT_REFLECTION, IID_PPV_ARGS(&reflection), &name));
-						std::wcout << "ref name " << name->GetStringPointer() << '\n';
 					}
 					else if (shader_types[i] == "ps")
 					{
@@ -474,7 +470,6 @@ void dx12_renderer::create_pipelines()
 							std::cout << __LINE__ << " " << reinterpret_cast<char*>(errors->GetBufferPointer()) << '\n';
 						}
 						DX_CHECK("get shader binary", results->GetOutput(DXC_OUT_OBJECT, IID_PPV_ARGS(&ps), &name));
-						std::wcout << "bin name " << name->GetStringPointer() << '\n';
 
 						std::ofstream bin_file(std::wstring(tmp.begin(), tmp.end()) + name->GetStringPointer());
 						bin_file.write(reinterpret_cast<const char*>(ps->GetBufferPointer()), ps->GetBufferSize());
@@ -482,7 +477,6 @@ void dx12_renderer::create_pipelines()
 
 						ComPtr<IDxcBlob> pdb = nullptr;
 						DX_CHECK("get pdb", results->GetOutput(DXC_OUT_PDB, IID_PPV_ARGS(&pdb), &name));
-						std::wcout << "pdb name " << name->GetStringPointer() << '\n';
 
 						std::ofstream pdb_file(std::wstring(tmp.begin(), tmp.end()) + name->GetStringPointer(), std::ios_base::binary);
 						pdb_file.write(reinterpret_cast<const char*>(pdb->GetBufferPointer()), pdb->GetBufferSize());
@@ -490,7 +484,6 @@ void dx12_renderer::create_pipelines()
 
 						ComPtr<IDxcBlob> reflection = nullptr;
 						DX_CHECK("get reflection", results->GetOutput(DXC_OUT_REFLECTION, IID_PPV_ARGS(&reflection), &name));
-						std::wcout << "ref name " << name->GetStringPointer() << '\n';
 					}
 				}
 			}
@@ -502,6 +495,10 @@ void dx12_renderer::create_pipelines()
 
 	D3DX12_MESH_SHADER_PIPELINE_STATE_DESC pipeline_desc = {
 		.pRootSignature = pipeline.root_signature.Get(),
+		.AS = {
+			.pShaderBytecode = as->GetBufferPointer(),
+			.BytecodeLength = as->GetBufferSize(),
+		},
 		.MS = {
 			.pShaderBytecode = ms->GetBufferPointer(),
 			.BytecodeLength = ms->GetBufferSize(),
@@ -754,7 +751,42 @@ void dx12_renderer::resize(const RECT& rect)
 		sc_rt[f].Reset();
 	}
 
-	DX_CHECK("swapchain resize buffers", swapchain4->ResizeBuffers(0, 0, 0, DXGI_FORMAT_UNKNOWN, 0));
+	sc_ds.Reset();
+
+	const D3D12_RESOURCE_DESC1 depth_res_desc = {
+		.Dimension = D3D12_RESOURCE_DIMENSION_TEXTURE2D,
+		.Width = static_cast<UINT64>(viewport.Width),
+		.Height = static_cast<UINT>(viewport.Height),
+		.DepthOrArraySize = 1,
+		.Format = DXGI_FORMAT_D24_UNORM_S8_UINT,
+		.SampleDesc = {
+			.Count = 1,
+		},
+		.Flags = D3D12_RESOURCE_FLAG_ALLOW_DEPTH_STENCIL,
+	};
+
+	const D3D12_HEAP_PROPERTIES dsr_heap_props = {
+		.Type = D3D12_HEAP_TYPE_DEFAULT,
+	};
+
+	const D3D12_CLEAR_VALUE clear_value = {
+		.Format = DXGI_FORMAT_D24_UNORM_S8_UINT,
+		.DepthStencil = {
+			.Depth = 1,
+			.Stencil = 0
+		},
+	};
+
+	DX_CHECK("create commited depth resource", device10->CreateCommittedResource3(&dsr_heap_props, D3D12_HEAP_FLAG_NONE, &depth_res_desc, D3D12_BARRIER_LAYOUT_DEPTH_STENCIL_WRITE, &clear_value, nullptr, 0, nullptr, IID_PPV_ARGS(&sc_ds)));
+	D3D12_CPU_DESCRIPTOR_HANDLE dsv_desc_heap_hnd = dsv_desc_heap->GetCPUDescriptorHandleForHeapStart();
+
+	const D3D12_DEPTH_STENCIL_VIEW_DESC dsv_desc = {
+		.Format = DXGI_FORMAT_D24_UNORM_S8_UINT,
+		.ViewDimension = D3D12_DSV_DIMENSION_TEXTURE2D,
+	};
+	device10->CreateDepthStencilView(sc_ds.Get(), &dsv_desc, dsv_desc_heap_hnd);
+
+	DX_CHECK("swapchain resize buffers", swapchain4->ResizeBuffers(0, viewport.Width, viewport.Height, DXGI_FORMAT_UNKNOWN, 0));
 
 	D3D12_CPU_DESCRIPTOR_HANDLE rtv_desc_heap_hnd = rtv_desc_heap->GetCPUDescriptorHandleForHeapStart();
 	const D3D12_RENDER_TARGET_VIEW_DESC rtv_desc = {
@@ -826,7 +858,7 @@ void dx12_renderer::render_world()
 			sc_cmd_lists[img_idx]->SetGraphicsRootShaderResourceView(2, pd.geometry_buffers[1]->GetGPUVirtualAddress());
 			sc_cmd_lists[img_idx]->SetGraphicsRootShaderResourceView(3, pd.geometry_buffers[2]->GetGPUVirtualAddress());
 			sc_cmd_lists[img_idx]->SetGraphicsRootShaderResourceView(4, pd.geometry_buffers[3]->GetGPUVirtualAddress());
-			sc_cmd_lists[img_idx]->DispatchMesh((UINT)pd.meshlets_count, 1, 1);
+			sc_cmd_lists[img_idx]->DispatchMesh((static_cast<UINT>(pd.meshlets_count) / 32) + 1, 1, 1);
 		}
 	}
 }

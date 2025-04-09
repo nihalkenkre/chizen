@@ -1,3 +1,20 @@
+#define AS_GROUP_SIZE 32
+
+struct Payload
+{
+    uint MeshletIndices[AS_GROUP_SIZE];
+};
+
+groupshared Payload sPayload;
+
+[numthreads(AS_GROUP_SIZE, 1, 1)]
+void asmain(uint gtid : SV_GroupThreadID, uint dtid : SV_DispatchThreadID, uint gid : SV_GroupID)
+{
+    sPayload.MeshletIndices[gtid] = dtid;
+    
+    DispatchMesh(AS_GROUP_SIZE, 1, 1, sPayload);
+}
+
 #include "root_sig.hlsl"
 
 struct camera_properties
@@ -36,10 +53,12 @@ struct MeshOutputVertex
 [numthreads(128, 1, 1)]void
 msmain(uint gtid : SV_GroupThreadID,
         uint gid : SV_GroupID,
+        in payload Payload payload,
         out indices uint3 mesh_output_triangles[128],
         out vertices MeshOutputVertex mesh_output_vertices[64])
 {
-    meshlet m = meshlets[gid];
+    uint meshlet_index = payload.MeshletIndices[gid];
+    meshlet m = meshlets[meshlet_index];
     SetMeshOutputCounts(m.vertex_count, m.triangle_count);
     
     if (gtid < m.triangle_count)
@@ -64,7 +83,6 @@ msmain(uint gtid : SV_GroupThreadID,
     }
 }
 
-[RootSignature(ROOTSIG)]
 float4 psmain(MeshOutputVertex input) : SV_TARGET
 {
     return float4(input.col, 1);
