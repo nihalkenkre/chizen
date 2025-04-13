@@ -24,8 +24,6 @@ world_scene::world_scene(const std::string& path, renderer* r)
 		r->import_scene_data(data);
 		cgltf_free(data);
 	}
-
-	InitCommonControls();
 }
 
 void world_scene::import_scene_data(const cgltf_data* data)
@@ -86,9 +84,6 @@ void world_scene::import_scene_data(const cgltf_data* data)
 			}
 		}
 	}
-
-	HWND hnd_mat_list = CreateWindowA(WC_TREEVIEWA, "Object List", WS_VISIBLE | WS_BORDER, 0, 0, 100, 200, nullptr, nullptr, GetModuleHandleA(nullptr), nullptr);
-	ShowWindow(hnd_mat_list, 1);
 }
 
 void world_scene::handle_mouse_move(const POINT mouse_pos)

@@ -13,7 +13,7 @@
 #define MAX_VERTICES 64
 #define MAX_TRIANGLES 124
 
-inline void static DX_CHECK(const std::string action, const HRESULT result)
+inline void static DX_CHECK(const std::string& action, const HRESULT result)
 {
 	if FAILED(result)
 	{
@@ -44,26 +44,27 @@ static D3D12_VIEWPORT RECT_TO_VIEWPORT(const RECT& rect)
 
 static D3D12_RECT VIEWPORT_TO_RECT(const D3D12_VIEWPORT& viewport)
 {
-	const D3D12_RECT R = {
+	const D3D12_RECT r = {
 		.left = (LONG)viewport.TopLeftX,
 		.top = (LONG)viewport.TopLeftY,
 		.right = (LONG)viewport.Width,
 		.bottom = (LONG)viewport.Height,
 	};
 
-	return R;
+	return r;
 }
 
 static D3D12_RECT SANITIZE_RECT_FOR_RENDER(const D3D12_RECT& rect)
 {
-	const D3D12_RECT SR = {
+	const D3D12_RECT r = {
+
 		.left = 0,
 		.top = 0,
 		.right = rect.right - rect.left,
 		.bottom = rect.bottom - rect.top,
 	};
 
-	return SR;
+	return r;
 }
 
 static inline std::vector<std::string> tokenize(std::string str, char delim)
@@ -361,7 +362,7 @@ void dx12_renderer::create_pipelines()
 							L"-E",
 							L"asmain",
 							L"-T",
-							L"as_6_8",
+							L"as_6_6",
 							L"-Zi",
 #ifdef DEBUG
 							L"-Od",
@@ -404,7 +405,7 @@ void dx12_renderer::create_pipelines()
 							L"-E",
 							L"msmain",
 							L"-T",
-							L"ms_6_8",
+							L"ms_6_6",
 							L"-Zi",
 	#ifdef DEBUG
 							L"-Od",
@@ -451,7 +452,7 @@ void dx12_renderer::create_pipelines()
 							L"-E",
 							L"psmain",
 							L"-T",
-							L"ps_6_8",
+							L"ps_6_6",
 							L"-Zi",
 	#ifdef DEBUG
 							L"-Od",
@@ -615,12 +616,12 @@ dx12_renderer::dx12_renderer(const HWND h_wnd)
 
 	DX_CHECK("check feature level support", device10->CheckFeatureSupport(D3D12_FEATURE_FEATURE_LEVELS, &feat_levels, sizeof(feat_levels)));
 
-	D3D12_FEATURE_DATA_SHADER_MODEL shader_model = { D3D_SHADER_MODEL_6_8 };
+	D3D12_FEATURE_DATA_SHADER_MODEL shader_model = { D3D_SHADER_MODEL_6_6 };
 	DX_CHECK("check shader model support", device10->CheckFeatureSupport(D3D12_FEATURE_SHADER_MODEL, &shader_model, sizeof(shader_model)));
 
-	if (shader_model.HighestShaderModel < D3D_SHADER_MODEL_6_8)
+	if (shader_model.HighestShaderModel < D3D_SHADER_MODEL_6_6)
 	{
-		std::cout << "Shader Model 6.8 not supported\n";
+		std::cout << "Shader Model 6.6 not supported\n";
 	}
 
 	D3D12_FEATURE_DATA_D3D12_OPTIONS7 options7 = {};
@@ -652,6 +653,8 @@ dx12_renderer::dx12_renderer(const HWND h_wnd)
 	viewport = RECT_TO_VIEWPORT(wnd_rect);
 
 	const DXGI_SWAP_CHAIN_DESC1 sc_desc1 = {
+		.Width = static_cast<UINT>(viewport.Width),
+		.Height = static_cast<UINT>(viewport.Height),
 		.Format = DXGI_FORMAT_R8G8B8A8_UNORM,
 		.SampleDesc = {
 			.Count = 1,
@@ -740,10 +743,13 @@ dx12_renderer::dx12_renderer(const HWND h_wnd)
 	is_inited = true;
 }
 
-void dx12_renderer::resize(const RECT& rect)
+void dx12_renderer::resize(const UINT width, const UINT height)
 {
-	wnd_rect = SANITIZE_RECT_FOR_RENDER(rect);
-	viewport = RECT_TO_VIEWPORT(wnd_rect);
+	wnd_rect.right = width;
+	wnd_rect.bottom = height;
+
+	viewport.Width = static_cast<FLOAT>(width);
+	viewport.Height = static_cast<FLOAT>(height);
 
 	for (UINT f = 0; f < RENDER_TARGET_COUNT; ++f)
 	{
@@ -786,7 +792,7 @@ void dx12_renderer::resize(const RECT& rect)
 	};
 	device10->CreateDepthStencilView(sc_ds.Get(), &dsv_desc, dsv_desc_heap_hnd);
 
-	DX_CHECK("swapchain resize buffers", swapchain4->ResizeBuffers(0, viewport.Width, viewport.Height, DXGI_FORMAT_UNKNOWN, 0));
+	DX_CHECK("swapchain resize buffers", swapchain4->ResizeBuffers(0, static_cast<UINT>(viewport.Width), static_cast<UINT>(viewport.Height), DXGI_FORMAT_UNKNOWN, 0));
 
 	D3D12_CPU_DESCRIPTOR_HANDLE rtv_desc_heap_hnd = rtv_desc_heap->GetCPUDescriptorHandleForHeapStart();
 	const D3D12_RENDER_TARGET_VIEW_DESC rtv_desc = {
@@ -844,7 +850,7 @@ void dx12_renderer::render_world()
 	sc_cmd_lists[img_idx]->SetPipelineState(pipelines[0].state.Get());
 
 	auto P = DirectX::XMMatrixPerspectiveFovRH(DirectX::XMConvertToRadians(60), viewport.Width / viewport.Height, 0.1, 100.0);
-	auto V = DirectX::XMMatrixLookAtRH(DirectX::FXMVECTOR{ 0, 0, 10 }, DirectX::FXMVECTOR{ 0, 0, 0 }, DirectX::FXMVECTOR{ 0, 1, 0 });
+	auto V = DirectX::XMMatrixLookAtRH(DirectX::FXMVECTOR{ 0, 0, 2 }, DirectX::FXMVECTOR{ 0, 0, 0 }, DirectX::FXMVECTOR{ 0, 1, 0 });
 	auto VP = V * P;
 
 	for (auto const& mi : sd->material_infos)
