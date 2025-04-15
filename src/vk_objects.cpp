@@ -11,6 +11,8 @@ vk_instance::vk_instance()
 	std::vector<const char*> req_ext_names = {
 		VK_KHR_SURFACE_EXTENSION_NAME,
 		VK_KHR_WIN32_SURFACE_EXTENSION_NAME,
+		VK_EXT_SURFACE_MAINTENANCE_1_EXTENSION_NAME,
+		VK_KHR_GET_SURFACE_CAPABILITIES_2_EXTENSION_NAME
 	};
 
 	uint32_t property_count = 0;
@@ -73,8 +75,10 @@ vk_surface::vk_surface(const VkInstance instance, const HINSTANCE h_instance, co
 
 	VK_CHECK("create surface", vkCreateWin32SurfaceKHR(instance, &create_info, nullptr, &surface));
 
-	this->present_mode = VK_PRESENT_MODE_FIFO_KHR,
-		this->instance = instance;
+	this->present_mode = VK_PRESENT_MODE_FIFO_KHR;
+	this->instance = instance;
+	this->h_wnd = h_wnd;
+	this->h_instance = h_instance;
 }
 
 vk_surface::~vk_surface()
@@ -234,6 +238,18 @@ vk_device::~vk_device()
 	}
 }
 
+VkResult vk_device::wait_semaphores(const std::vector<VkSemaphore>& semaphores, const std::vector<uint64_t>& values) const
+{
+	const VkSemaphoreWaitInfo wait_info = {
+		.sType = VK_STRUCTURE_TYPE_SEMAPHORE_WAIT_INFO,
+		.semaphoreCount = static_cast<uint32_t>(semaphores.size()),
+		.pSemaphores = semaphores.data(),
+		.pValues = values.data(),
+	};
+
+	return vkWaitSemaphores(device, &wait_info, UINT64_MAX);
+}
+
 vk_swapchain::vk_swapchain(const VkDevice device, const vk_surface* surface, const vk_phydev* phy_dev)
 {
 	const VkSwapchainCreateInfoKHR create_info = {
@@ -259,9 +275,9 @@ vk_swapchain::vk_swapchain(const VkDevice device, const vk_surface* surface, con
 	VK_CHECK("get swapchain images", vkGetSwapchainImagesKHR(device, swapchain, &images_count, images.data()));
 
 	image_views.resize(images_count);
-	cmd_pools.resize(images_count);
 	cmd_buffs.resize(images_count);
 	rndr_semaphores.resize(images_count);
+	present_fences.resize(images_count);
 
 	VkImageViewCreateInfo image_view_create_info = {
 		.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO,
@@ -277,9 +293,10 @@ vk_swapchain::vk_swapchain(const VkDevice device, const vk_surface* surface, con
 
 	const VkCommandPoolCreateInfo cmd_pool_ci = {
 		.sType = VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO,
-		.flags = VK_COMMAND_POOL_CREATE_TRANSIENT_BIT,
+		.flags = VK_COMMAND_POOL_CREATE_TRANSIENT_BIT | VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT,
 		.queueFamilyIndex = phy_dev->q_fly_idx,
 	};
+	VK_CHECK("create command pool", vkCreateCommandPool(device, &cmd_pool_ci, nullptr, &cmd_pool));
 
 	VkCommandBufferAllocateInfo cmd_buff_ai = {
 		.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO,
@@ -291,15 +308,19 @@ vk_swapchain::vk_swapchain(const VkDevice device, const vk_surface* surface, con
 		.sType = VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO,
 	};
 
+	const VkFenceCreateInfo fence_ci = {
+		.sType = VK_STRUCTURE_TYPE_FENCE_CREATE_INFO,
+	};
+
 	for (uint32_t i = 0; i < images_count; ++i)
 	{
 		image_view_create_info.image = images[i];
 		VK_CHECK("create swapchain image view", vkCreateImageView(device, &image_view_create_info, nullptr, &image_views[i]));
-		VK_CHECK("create command pool", vkCreateCommandPool(device, &cmd_pool_ci, nullptr, &cmd_pools[i]));
 
-		cmd_buff_ai.commandPool = cmd_pools[i];
+		cmd_buff_ai.commandPool = cmd_pool;
 		VK_CHECK("allocate command buffer", vkAllocateCommandBuffers(device, &cmd_buff_ai, &cmd_buffs[i]));
 		VK_CHECK("create semaphore", vkCreateSemaphore(device, &sem_ci, nullptr, &rndr_semaphores[i]));
+		VK_CHECK("create fence", vkCreateFence(device, &fence_ci, nullptr, &present_fences[i]));
 	}
 
 	this->device = device;
@@ -307,9 +328,11 @@ vk_swapchain::vk_swapchain(const VkDevice device, const vk_surface* surface, con
 
 vk_swapchain::~vk_swapchain()
 {
+	vkDestroyCommandPool(device, cmd_pool, nullptr);
+
 	for (uint32_t i = 0; i < images_count; ++i)
 	{
-		vkDestroyCommandPool(device, cmd_pools[i], nullptr);
+		vkDestroyFence(device, present_fences[i], nullptr);
 		vkDestroyImageView(device, image_views[i], nullptr);
 		vkDestroySemaphore(device, rndr_semaphores[i], nullptr);
 	}
@@ -331,7 +354,7 @@ vk_semaphore::vk_semaphore(const VkDevice device, bool is_timeline)
 	{
 		t_ci.semaphoreType = VK_SEMAPHORE_TYPE_TIMELINE;
 	}
-	else 
+	else
 	{
 		t_ci.semaphoreType = VK_SEMAPHORE_TYPE_BINARY;
 	}
@@ -352,6 +375,16 @@ vk_semaphore::~vk_semaphore()
 	{
 		vkDestroySemaphore(device, semaphore, nullptr);
 	}
+}
+
+VkResult vk_semaphore::signal(const uint64_t value) const
+{
+	const VkSemaphoreSignalInfo signal_info = {
+		.sType = VK_STRUCTURE_TYPE_SEMAPHORE_SIGNAL_INFO,
+		.semaphore = semaphore,
+	};
+
+	return vkSignalSemaphore(this->device, &signal_info);
 }
 
 vk_fence::vk_fence(const VkDevice device, const VkBool32 signalled_state)
@@ -400,4 +433,38 @@ vk_command_pool::~vk_command_pool()
 	{
 		vkDestroyCommandPool(device, cmd_pool, nullptr);
 	}
+}
+
+vk_command_buffer::vk_command_buffer(const VkDevice device, const VkCommandPool cmd_pool)
+{
+	const VkCommandBufferAllocateInfo allocate_info = {
+		.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO,
+		.commandPool = cmd_pool,
+		.level = VK_COMMAND_BUFFER_LEVEL_PRIMARY,
+		.commandBufferCount = 1,
+	};
+
+	VK_CHECK("allocate command buffer", vkAllocateCommandBuffers(device, &allocate_info, &cmd_buff));
+
+	this->cmd_pool = cmd_pool;
+	this->device = device;
+}
+
+vk_command_buffer::~vk_command_buffer()
+{
+}
+
+VkResult vk_command_buffer::begin() const
+{
+	const VkCommandBufferBeginInfo begin_info = {
+		.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO,
+		.flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT,
+	};
+
+	return vkBeginCommandBuffer(cmd_buff, &begin_info);
+}
+
+VkResult vk_command_buffer::end() const
+{
+	return vkEndCommandBuffer(cmd_buff);
 }

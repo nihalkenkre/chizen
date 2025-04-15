@@ -15,6 +15,12 @@ using Microsoft::WRL::ComPtr;
 
 #include "vk_renderer.hpp"
 
+#define CGLTF_IMPLEMENTATION
+#include <cgltf/cgltf.h>
+
+#define CGLM_IMPLEMENTATION
+#include <cglm/include/cglm/cglm.h>
+
 extern "C"
 {
 	__declspec(dllexport) extern const UINT D3D12SDKVersion = 615;
@@ -166,9 +172,6 @@ void open_file(const HWND h_wnd)
 
 					s.reset(nullptr);
 					s = std::make_unique<world_scene>(file_path, r.get());
-
-					HWND dlg = CreateDialogA(GetModuleHandleA(nullptr), "Object List", h_scene_wnd, nullptr);
-					ShowWindow(dlg, SW_SHOW);
 				}
 				else
 				{
@@ -230,7 +233,7 @@ LRESULT CALLBACK WindowProc(HWND h_wnd, UINT msg, WPARAM w_param, LPARAM l_param
 		break;
 
 	case WM_SIZE:
-		if (r.get() != nullptr && r->is_inited)
+		if (r.get() != nullptr)
 		{
 			UINT width = static_cast<UINT>(GET_X_LPARAM(l_param));
 			UINT height = static_cast<UINT>(GET_Y_LPARAM(l_param));

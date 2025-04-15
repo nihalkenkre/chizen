@@ -3,7 +3,6 @@
 
 #include <commctrl.h>
 
-#define CGLTF_IMPLEMENTATION
 #include <cgltf/cgltf.h>
 
 world_scene::world_scene(const std::string& path, renderer* r)

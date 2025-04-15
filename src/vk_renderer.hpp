@@ -5,6 +5,8 @@
 
 #include <memory>
 
+#include <cglm/include/cglm/cglm.h>
+
 class vk_renderer : public renderer
 {
 public:
@@ -29,7 +31,36 @@ private:
 	std::unique_ptr<vk_semaphore> acq_sig_sem;
 	std::unique_ptr<vk_semaphore> acq_wait_sem;
 
+	struct float3
+	{
+		float x;
+		float y;
+		float z;
+	};
+
+	struct primitive_data {
+		mat4 xform;
+		std::vector<VkDeviceSize> geom_offsets;
+		size_t meshlets_count;
+	};
+
+	struct material_info {
+		uint64_t id;
+		std::vector<primitive_data> pds;
+	};
+
+	struct scene_data
+	{
+		std::vector<material_info> mis;
+		VkBuffer geometry_buffer;
+		VkDeviceMemory geometry_memory;
+	};
+
+	std::unique_ptr<scene_data> sd;
+
 	uint32_t img_idx;
 	uint64_t acq_wait_sem_val;
 	VkViewport viewport;
+
+	std::pair<VkBuffer, VkDeviceMemory> CreateBufferAndHeapFromMeshletData();
 };

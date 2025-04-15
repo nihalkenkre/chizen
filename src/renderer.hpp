@@ -23,6 +23,5 @@ public:
 	virtual void clear_scene_data() = 0;
 	virtual ~renderer() {}
 
-	bool is_inited = false;
 	RECT wnd_rect = { 0,0,0,0 };
 };

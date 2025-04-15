@@ -739,8 +739,6 @@ dx12_renderer::dx12_renderer(const HWND h_wnd)
 
 	img_idx = 0;
 	gnrl_fnc_val = 0;
-
-	is_inited = true;
 }
 
 void dx12_renderer::resize(const UINT width, const UINT height)
@@ -918,9 +916,9 @@ void dx12_renderer::import_scene_data(const cgltf_data* data)
 				pd.xform = DirectX::XMMatrixTranspose(DirectX::XMMATRIX(curr_node->matrix));
 			}
 			else {
-				if (curr_node->has_translation)
+				if (curr_node->has_scale)
 				{
-					pd.xform *= DirectX::XMMatrixTranslation(curr_node->translation[0], curr_node->translation[1], curr_node->translation[2]);
+					pd.xform *= DirectX::XMMatrixScaling(curr_node->scale[0], curr_node->scale[1], curr_node->scale[2]);
 				}
 
 				if (curr_node->has_rotation)
@@ -934,9 +932,9 @@ void dx12_renderer::import_scene_data(const cgltf_data* data)
 					pd.xform *= DirectX::XMMatrixRotationQuaternion(quat);
 				}
 
-				if (curr_node->has_scale)
+				if (curr_node->has_translation)
 				{
-					pd.xform *= DirectX::XMMatrixScaling(curr_node->scale[0], curr_node->scale[1], curr_node->scale[2]);
+					pd.xform *= DirectX::XMMatrixTranslation(curr_node->translation[0], curr_node->translation[1], curr_node->translation[2]);
 				}
 			}
 
@@ -983,7 +981,8 @@ void dx12_renderer::import_scene_data(const cgltf_data* data)
 			std::vector<uint32_t> meshlets_vertices(max_meshlets * MAX_VERTICES);
 			std::vector<uint8_t> meshlet_triangles(max_meshlets * MAX_TRIANGLES);
 
-			pd.meshlets_count = meshopt_buildMeshlets(meshlets.data(),
+			pd.meshlets_count = meshopt_buildMeshlets(
+				meshlets.data(),
 				meshlets_vertices.data(),
 				meshlet_triangles.data(),
 				indices.data(),
@@ -1076,7 +1075,7 @@ void dx12_renderer::clear_scene_data()
 {
 	wait_for_gpu(sc_fncs[img_idx].Get(), sc_fnc_vals[img_idx]);
 
-	sd.reset();
+	sd = std::make_unique<scene_data>();
 }
 
 dx12_renderer::~dx12_renderer()

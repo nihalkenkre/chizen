@@ -43,6 +43,8 @@ public:
 	VkSurfaceCapabilitiesKHR surf_caps = {};
 	VkSurfaceFormatKHR format = {};
 	VkPresentModeKHR present_mode = {};
+	HINSTANCE h_instance = nullptr;
+	HWND h_wnd = nullptr;
 
 private:
 	VkInstance instance = VK_NULL_HANDLE;
@@ -66,6 +68,8 @@ public:
 	vk_device(const VkPhysicalDevice phy_dev, const uint32_t q_fly_idx, const uint32_t q_count);
 	~vk_device();
 
+	VkResult wait_semaphores(const std::vector<VkSemaphore>& semaphores, const std::vector<uint64_t>& values)const;
+
 	VkDevice device = VK_NULL_HANDLE;
 };
 
@@ -80,9 +84,10 @@ public:
 	uint32_t images_count = 0;
 	std::vector<VkImage> images;
 	std::vector<VkImageView> image_views;
-	std::vector<VkCommandPool> cmd_pools;
+	VkCommandPool cmd_pool;
 	std::vector<VkCommandBuffer> cmd_buffs;
 	std::vector<VkSemaphore> rndr_semaphores;
+	std::vector<VkFence> present_fences;
 
 private:
 	VkDevice device = VK_NULL_HANDLE;
@@ -98,6 +103,22 @@ public:
 
 private:
 	VkDevice device = VK_NULL_HANDLE;
+};
+
+class vk_command_buffer
+{
+public:
+	vk_command_buffer(const VkDevice device, const VkCommandPool cmd_pool);
+	~vk_command_buffer();
+
+	VkResult begin() const;
+	VkResult end() const;
+
+	VkCommandBuffer cmd_buff;
+
+private:
+	VkCommandPool cmd_pool;
+	VkDevice device;
 };
 
 class vk_command_buffers
@@ -121,9 +142,8 @@ public:
 		return vkEndCommandBuffer(cmd_buffs[idx]);
 	}
 
-	std::vector<VkCommandBuffer> cmd_buffs;
-
 private:
+	std::vector<VkCommandBuffer> cmd_buffs;
 	VkDevice device = VK_NULL_HANDLE;
 };
 
@@ -134,6 +154,10 @@ public:
 	~vk_semaphore();
 
 	VkSemaphore semaphore;
+
+	VkResult signal(const uint64_t value) const;
+
+	bool is_timeline = false;
 
 private:
 	VkDevice device = VK_NULL_HANDLE;
