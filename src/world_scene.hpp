@@ -8,7 +8,7 @@
 class world_scene : public scene
 {
 public:
-	world_scene(const std::string& path, renderer* r);
+	world_scene(const std::string& file_path, renderer* r);
 
 	void handle_mouse_move(const POINT mouse_pos) override;
 	void update() override;

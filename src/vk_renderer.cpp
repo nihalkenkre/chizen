@@ -4,316 +4,416 @@
 #include <meshoptimizer/src/meshoptimizer.h>
 #include <cglm/include/cglm/cglm.h>
 
-#define MAX_VERTICES 64
-#define MAX_TRIANGLES 124
+#include <Shlwapi.h>
+
+#include <SPIRV-Reflect/spirv_reflect.h>
+
+constexpr uint8_t MAX_VERTICES = 64;
+constexpr uint8_t MAX_TRIANGLES = 124;
+
+inline static VkDeviceSize ALIGNED_SIZE(VkDeviceSize value, VkDeviceSize alignment)
+{
+    return (value + alignment - 1) & ~(alignment - 1);
+}
 
 inline static VkViewport RECT_TO_VIEWPORT(const RECT& rect)
 {
-	const VkViewport v = {
-		.x = 0,
-		.y = 0,
-		.width = static_cast<float>(rect.right - rect.left),
-		.height = static_cast<float>(rect.bottom - rect.top),
-		.minDepth = 0,
-		.maxDepth = 1,
-	};
+    const VkViewport v = {
+        .x = 0,
+        .y = 0,
+        .width = static_cast<float>(rect.right - rect.left),
+        .height = static_cast<float>(rect.bottom - rect.top),
+        .minDepth = 0,
+        .maxDepth = 1,
+    };
 
-	return v;
+    return v;
 }
 
 inline static RECT VIEWPORT_TO_RECT(const VkViewport& viewport)
 {
-	const RECT r = {
-		.left = static_cast<LONG>(viewport.x),
-		.top = static_cast<LONG>(viewport.y),
-		.right = static_cast<LONG>(viewport.width),
-		.bottom = static_cast<LONG>(viewport.height),
-	};
+    const RECT r = {
+        .left = static_cast<LONG>(viewport.x),
+        .top = static_cast<LONG>(viewport.y),
+        .right = static_cast<LONG>(viewport.width),
+        .bottom = static_cast<LONG>(viewport.height),
+    };
 
-	return r;
+    return r;
 }
 
 inline static RECT SANITIZE_RECT_FOR_RENDER(const RECT& rect)
 {
-	const RECT r = {
-		.left = 0,
-		.top = 0,
-		.right = rect.right - rect.left,
-		.bottom = rect.bottom - rect.top,
-	};
+    const RECT r = {
+        .left = 0,
+        .top = 0,
+        .right = rect.right - rect.left,
+        .bottom = rect.bottom - rect.top,
+    };
 
-	return r;
+    return r;
 }
 
 vk_renderer::vk_renderer(const HWND h_wnd) : img_idx(0), acq_wait_sem_val(0)
 {
-	VkResult result = volkInitialize();
-	instance = std::make_unique<vk_instance>();
-	volkLoadInstance(instance->instance);
-	surface = std::make_unique<vk_surface>(instance->instance, GetModuleHandleA(nullptr), h_wnd);
-	phy_dev = std::make_unique<vk_phydev>(instance->instance, surface.get());
-	device = std::make_unique<vk_device>(phy_dev->phy_dev, phy_dev->q_fly_idx, phy_dev->q_count);
-	swapchain = std::make_unique<vk_swapchain>(device->device, surface.get(), phy_dev.get());
-	acq_sig_sem = std::make_unique<vk_semaphore>(device->device, false);
-	acq_wait_sem = std::make_unique<vk_semaphore>(device->device, true);
+    VkResult result = volkInitialize();
+    instance = std::make_unique<vk_instance>();
+    volkLoadInstance(instance->instance);
+    surface = std::make_unique<vk_surface>(instance->instance, GetModuleHandleA(nullptr), h_wnd);
+    phy_dev = std::make_unique<vk_phydev>(instance->instance, surface.get());
+    device = std::make_unique<vk_device>(phy_dev->phy_dev, phy_dev->q_fly_idx, phy_dev->q_count);
+    swapchain = std::make_unique<vk_swapchain>(device->device, surface.get(), phy_dev.get());
+    acq_sig_sem = std::make_unique<vk_semaphore>(device->device, false);
+    acq_wait_sem = std::make_unique<vk_semaphore>(device->device, true);
 
-	const VkSemaphoreSignalInfo sem_sig_info = {
-		.sType = VK_STRUCTURE_TYPE_SEMAPHORE_SIGNAL_INFO,
-		.semaphore = acq_wait_sem->semaphore,
-		.value = ++acq_wait_sem_val,
-	};
-	vkSignalSemaphore(device->device, &sem_sig_info);
+    const VkSemaphoreSignalInfo sem_sig_info = {
+        .sType = VK_STRUCTURE_TYPE_SEMAPHORE_SIGNAL_INFO,
+        .semaphore = acq_wait_sem->semaphore,
+        .value = ++acq_wait_sem_val,
+    };
+    vkSignalSemaphore(device->device, &sem_sig_info);
 
-	GetWindowRect(h_wnd, &wnd_rect);
-	wnd_rect = SANITIZE_RECT_FOR_RENDER(wnd_rect);
-	viewport = RECT_TO_VIEWPORT(wnd_rect);
+    GetWindowRect(h_wnd, &wnd_rect);
+    wnd_rect = SANITIZE_RECT_FOR_RENDER(wnd_rect);
+    viewport = RECT_TO_VIEWPORT(wnd_rect);
 
-	sd = std::make_unique<scene_data>();
+    VkDeviceQueueInfo2 queue_info = {
+        .sType = VK_STRUCTURE_TYPE_DEVICE_QUEUE_INFO_2,
+        .queueFamilyIndex = phy_dev->q_fly_idx,
+        .queueIndex = 0,
+    };
+    vkGetDeviceQueue2(device->device, &queue_info, &gfx_q);
+
+    queue_info.queueIndex = 1;
+    vkGetDeviceQueue2(device->device, &queue_info, &xfer_q);
+
+    xfer_cmd_pool = std::make_unique<vk_command_pool>(device->device, phy_dev->q_fly_idx, 1);
 }
 
-void vk_renderer::import_scene_data(const cgltf_data* data)
+void vk_renderer::import_scene_data(const std::string& file_path)
 {
-	for (cgltf_size n = 0; n < data->nodes_count; ++n)
-	{
-		cgltf_node* curr_node = data->nodes + n;
+    sd = std::make_unique<scene_data>();
 
-		if (curr_node->mesh == nullptr)
-			continue;
+    cgltf_options options = {};
+    cgltf_data* data = nullptr;
 
-		cgltf_mesh* curr_mesh = curr_node->mesh;
+    std::vector<uint8_t> geom_data;
+    std::vector<uint8_t> xform_data;
 
-		for (cgltf_size p = 0; p < curr_mesh->primitives_count; ++p)
-		{
-			primitive_data pd;
-			glm_mat4_identity(pd.xform);
+    if (cgltf_parse_file(&options, file_path.c_str(), &data) != cgltf_result_success ||
+        cgltf_validate(data) != cgltf_result_success ||
+        cgltf_load_buffers(&options, data, file_path.c_str()) != cgltf_result_success)
+    {
+        std::cerr << "ERR Could not parse gltf file\n";
+    }
 
-			if (curr_node->has_matrix)
-			{
-				std::memcpy(pd.xform, curr_node->matrix, sizeof(pd.xform));
-			}
-			else {
-				if (curr_node->has_scale)
-				{
-					glm_scale(pd.xform, curr_node->scale);
-				}
+    for (cgltf_size n = 0; n < data->nodes_count; ++n)
+    {
+        cgltf_node* curr_node = data->nodes + n;
 
-				if (curr_node->has_rotation)
-				{
-					glm_quat_rotate(pd.xform, curr_node->rotation, pd.xform);
-				}
+        if (curr_node->mesh == nullptr)
+            continue;
 
-				if (curr_node->has_translation)
-				{
-					glm_translate(pd.xform, curr_node->translation);
-				}
-			}
+        cgltf_mesh* curr_mesh = curr_node->mesh;
 
-			std::vector<uint32_t>indices;
-			std::vector<float3> positions;
+        for (cgltf_size p = 0; p < curr_mesh->primitives_count; ++p)
+        {
+            mat4 xform;
+            glm_mat4_identity(xform);
 
-			cgltf_primitive* curr_prim = curr_mesh->primitives + p;
-			if (curr_prim->material == nullptr)
-				continue;
+            if (curr_node->has_matrix)
+            {
+                std::memcpy(xform, curr_node->matrix, sizeof(xform));
+            }
+            else {
+                if (curr_node->has_scale)
+                {
+                    glm_scale(xform, curr_node->scale);
+                }
 
-			if (curr_prim->indices->component_type == cgltf_component_type_r_32u)
-			{
-				size_t curr_ind_size = indices.size();
-				indices.resize(indices.size() + curr_prim->indices->count);
-				std::memcpy(indices.data() + curr_ind_size, (void*)((ULONG_PTR)curr_prim->indices->buffer_view->buffer->data + curr_prim->indices->offset + curr_prim->indices->buffer_view->offset), curr_prim->indices->buffer_view->size);
-			}
-			else if (curr_prim->indices->component_type == cgltf_component_type_r_16u)
-			{
-				indices.reserve(indices.size() + curr_prim->indices->count);
-				uint16_t* idx_ptr = (uint16_t*)((ULONG_PTR)curr_prim->indices->buffer_view->buffer->data + curr_prim->indices->offset + curr_prim->indices->buffer_view->offset);
+                if (curr_node->has_rotation)
+                {
+                    glm_quat_rotate(xform, curr_node->rotation, xform);
+                }
 
-				for (cgltf_size i = 0; i < curr_prim->indices->count; ++i)
-				{
-					indices.push_back(idx_ptr[i]);
-				}
-			}
+                if (curr_node->has_translation)
+                {
+                    glm_translate(xform, curr_node->translation);
+                }
+            }
 
-			for (cgltf_size a = 0; a < curr_prim->attributes_count; ++a)
-			{
-				cgltf_attribute* curr_attr = curr_prim->attributes + a;
+            primitive_data pd;
 
-				if (std::strcmp(curr_attr->name, "POSITION") == 0)
-				{
-					size_t curr_geom_size = positions.size();
-					positions.resize(positions.size() + curr_attr->data->count);
+            VkDeviceSize curr_xform_data_size = xform_data.size();
 
-					std::memcpy(&positions[curr_geom_size], (void*)((ULONG_PTR)curr_attr->data->buffer_view->buffer->data + curr_attr->data->buffer_view->offset + curr_attr->data->offset), curr_attr->data->count * sizeof(float3));
-				}
-			}
+            size_t aligned_xform_size = ALIGNED_SIZE(sizeof(xform), phy_dev->props.properties.limits.minUniformBufferOffsetAlignment);
+            xform_data.resize(xform_data.size() + aligned_xform_size);
+            std::memcpy(xform_data.data() + curr_xform_data_size, xform, sizeof(xform));
 
-			size_t max_meshlets = meshopt_buildMeshletsBound(indices.size(), MAX_VERTICES, MAX_TRIANGLES);
+            std::vector<uint32_t>indices;
+            std::vector<float3> positions;
 
-			std::vector<meshopt_Meshlet> meshlets(max_meshlets);
-			std::vector<uint32_t>meshlets_vertices(max_meshlets * MAX_VERTICES);
-			std::vector<uint8_t>meshlets_triangles(max_meshlets * MAX_TRIANGLES);
+            cgltf_primitive* curr_prim = curr_mesh->primitives + p;
+            if (curr_prim->material == nullptr)
+                continue;
 
-			pd.meshlets_count = meshopt_buildMeshlets(
-				meshlets.data(),
-				meshlets_vertices.data(),
-				meshlets_triangles.data(),
-				indices.data(),
-				indices.size(),
-				reinterpret_cast<float*>(positions.data()),
-				positions.size(),
-				sizeof(float3),
-				MAX_VERTICES,
-				MAX_TRIANGLES,
-				0.0
-			);
+            if (curr_prim->indices->component_type == cgltf_component_type_r_32u)
+            {
+                size_t curr_ind_size = indices.size();
+                indices.resize(indices.size() + curr_prim->indices->count);
+                std::memcpy(indices.data() + curr_ind_size, (void*)((ULONG_PTR)curr_prim->indices->buffer_view->buffer->data + curr_prim->indices->offset + curr_prim->indices->buffer_view->offset), curr_prim->indices->buffer_view->size);
+            }
+            else if (curr_prim->indices->component_type == cgltf_component_type_r_16u)
+            {
+                indices.reserve(indices.size() + curr_prim->indices->count);
+                uint16_t* idx_ptr = (uint16_t*)((ULONG_PTR)curr_prim->indices->buffer_view->buffer->data + curr_prim->indices->offset + curr_prim->indices->buffer_view->offset);
 
-			meshopt_Meshlet last_meshlet = meshlets[pd.meshlets_count - 1];
-			meshlets_vertices.resize(last_meshlet.vertex_offset + last_meshlet.vertex_count);
-			meshlets_triangles.resize(last_meshlet.triangle_offset + ((last_meshlet.triangle_count * 3 + 3) & ~3));
-			meshlets.resize(pd.meshlets_count);
+                for (cgltf_size i = 0; i < curr_prim->indices->count; ++i)
+                {
+                    indices.push_back(idx_ptr[i]);
+                }
+            }
 
-			std::vector<uint32_t> meshlet_triangles_32;
-			size_t t_32_idx = 0;
+            for (cgltf_size a = 0; a < curr_prim->attributes_count; ++a)
+            {
+                cgltf_attribute* curr_attr = curr_prim->attributes + a;
 
-			for (auto& meshlet : meshlets)
-			{
-				uint32_t triangle_offset = static_cast<uint32_t>(meshlet_triangles_32.size());
+                if (std::strcmp(curr_attr->name, "POSITION") == 0)
+                {
+                    size_t curr_geom_size = positions.size();
+                    positions.resize(positions.size() + curr_attr->data->count);
 
-				for (size_t t = 0; t < meshlet.triangle_count; ++t)
-				{
-					uint32_t curr_tri = (static_cast<uint32_t>(meshlets_triangles[meshlet.triangle_offset + (t * 3)]) << 0) |
-						(static_cast<uint32_t>(meshlets_triangles[meshlet.triangle_offset + (t * 3 + 1)]) << 8) |
-						(static_cast<uint32_t>(meshlets_triangles[meshlet.triangle_offset + (t * 3 + 2)]) << 16);
+                    std::memcpy(&positions[curr_geom_size], (void*)((ULONG_PTR)curr_attr->data->buffer_view->buffer->data + curr_attr->data->buffer_view->offset + curr_attr->data->offset), curr_attr->data->count * sizeof(float3));
+                }
+            }
 
-					meshlet_triangles_32.push_back(curr_tri);
-				};
+            size_t max_meshlets = meshopt_buildMeshletsBound(indices.size(), MAX_VERTICES, MAX_TRIANGLES);
 
-				meshlet.triangle_offset = triangle_offset;
-			}
+            std::vector<meshopt_Meshlet> meshlets(max_meshlets);
+            std::vector<uint32_t>meshlets_vertices(max_meshlets * MAX_VERTICES);
+            std::vector<uint8_t>meshlets_triangles(max_meshlets * MAX_TRIANGLES);
 
-			size_t meshlets_data_size = meshlets.size() * sizeof(meshlets[0]);
-			std::vector<uint8_t> meshlets_data(meshlets_data_size);
-			std::memcpy(meshlets_data.data(), meshlets.data(), meshlets_data_size);
+            pd.meshlets_count = meshopt_buildMeshlets(
+                meshlets.data(),
+                meshlets_vertices.data(),
+                meshlets_triangles.data(),
+                indices.data(),
+                indices.size(),
+                reinterpret_cast<float*>(positions.data()),
+                positions.size(),
+                sizeof(float3),
+                MAX_VERTICES,
+                MAX_TRIANGLES,
+                0.0
+            );
 
-			size_t positions_data_size = positions.size() * sizeof(positions[0]);
-			std::vector<uint8_t> positions_data(positions_data_size);
-			std::memcpy(positions_data.data(), positions.data(), positions_data_size);
+            meshopt_Meshlet last_meshlet = meshlets[pd.meshlets_count - 1];
+            meshlets_vertices.resize(last_meshlet.vertex_offset + last_meshlet.vertex_count);
+            meshlets_triangles.resize(last_meshlet.triangle_offset + ((last_meshlet.triangle_count * 3 + 3) & ~3));
+            meshlets.resize(pd.meshlets_count);
 
-			size_t meshlets_vertices_data_size = meshlets_vertices.size() * sizeof(meshlets_vertices[0]);
-			std::vector<uint8_t> meshlets_vertices_data(meshlets_vertices_data_size);
-			std::memcpy(meshlets_vertices_data.data(), meshlets_vertices.data(), meshlets_vertices_data_size);
+            std::vector<uint32_t> meshlet_triangles_32;
+            size_t t_32_idx = 0;
 
-			size_t meshlets_triangles_data_size = meshlet_triangles_32.size() * sizeof(meshlet_triangles_32[0]);
-			std::vector<uint8_t> meshlets_triangles_data(meshlets_triangles_data_size);
-			std::memcpy(meshlets_triangles_data.data(), meshlet_triangles_32.data(), meshlets_triangles_data_size);
+            for (auto& meshlet : meshlets)
+            {
+                uint32_t triangle_offset = static_cast<uint32_t>(meshlet_triangles_32.size());
 
-			uint64_t mat_id = std::hash<std::string>{}(curr_prim->material->name);
-			auto it = std::find_if(sd->mis.begin(), sd->mis.end(), [&mat_id](const material_info& mi) { return mi.id == mat_id;});
+                for (size_t t = 0; t < meshlet.triangle_count; ++t)
+                {
+                    uint32_t curr_tri = (static_cast<uint32_t>(meshlets_triangles[meshlet.triangle_offset + (t * 3)]) << 0) |
+                        (static_cast<uint32_t>(meshlets_triangles[meshlet.triangle_offset + (t * 3 + 1)]) << 8) |
+                        (static_cast<uint32_t>(meshlets_triangles[meshlet.triangle_offset + (t * 3 + 2)]) << 16);
 
-			if (it == sd->mis.end())
-			{
-				material_info mi = {
-					.id = mat_id,
-					.pds = {pd},
-				};
+                    meshlet_triangles_32.push_back(curr_tri);
+                };
 
-				sd->mis.push_back(mi);
-			}
-			else
-			{
-				it->pds.push_back(pd);
-			}
-		}
-	}
+                meshlet.triangle_offset = triangle_offset;
+            }
+
+            pd.geom_descs[0].offset = geom_data.size();
+            size_t positions_data_size = ALIGNED_SIZE(positions.size() * sizeof(positions[0]), phy_dev->props.properties.limits.minStorageBufferOffsetAlignment);
+            pd.geom_descs[0].range = positions_data_size;
+            std::vector<uint8_t> positions_data(positions_data_size);
+            std::memcpy(positions_data.data(), positions.data(), positions_data_size);
+            geom_data.insert(geom_data.end(), positions_data.begin(), positions_data.end());
+
+            pd.geom_descs[1].offset = geom_data.size();
+            size_t meshlets_data_size = ALIGNED_SIZE(meshlets.size() * sizeof(meshlets[0]), phy_dev->props.properties.limits.minStorageBufferOffsetAlignment);
+            pd.geom_descs[1].range = meshlets_data_size;
+            std::vector<uint8_t> meshlets_data(meshlets_data_size);
+            std::memcpy(meshlets_data.data(), meshlets.data(), meshlets_data_size);
+            geom_data.insert(geom_data.end(), meshlets_data.begin(), meshlets_data.end());
+
+            pd.geom_descs[2].offset = geom_data.size();
+            size_t meshlets_vertices_data_size = ALIGNED_SIZE(meshlets_vertices.size() * sizeof(meshlets_vertices[0]), phy_dev->props.properties.limits.minStorageBufferOffsetAlignment);
+            pd.geom_descs[2].range = meshlets_vertices_data_size;
+            std::vector<uint8_t> meshlets_vertices_data(meshlets_vertices_data_size);
+            std::memcpy(meshlets_vertices_data.data(), meshlets_vertices.data(), meshlets_vertices_data_size);
+            geom_data.insert(geom_data.end(), meshlets_vertices.begin(), meshlets_vertices.end());
+
+            pd.geom_descs[3].offset = geom_data.size();
+            size_t meshlets_triangles_data_size = ALIGNED_SIZE(meshlet_triangles_32.size() * sizeof(meshlet_triangles_32[0]), phy_dev->props.properties.limits.minStorageBufferOffsetAlignment);
+            pd.geom_descs[3].range = meshlets_triangles_data_size;
+            std::vector<uint8_t> meshlets_triangles_data(meshlets_triangles_data_size);
+            std::memcpy(meshlets_triangles_data.data(), meshlet_triangles_32.data(), meshlets_triangles_data_size);
+            geom_data.insert(geom_data.end(), meshlets_triangles_data.begin(), meshlets_triangles_data.end());
+
+            uint64_t mat_id = std::hash<std::string>{}(curr_prim->material->name);
+            auto it = std::find_if(sd->mis.begin(), sd->mis.end(), [mat_id](const material_info& mi) { return mi.id == mat_id; });
+
+            if (it == sd->mis.end())
+            {
+                material_info mi = {
+                    .id = mat_id,
+                    .pds = {pd},
+                };
+
+                sd->mis.push_back(mi);
+            }
+            else
+            {
+                it->pds.push_back(pd);
+            }
+        }
+    }
+
+    cgltf_free(data);
+
+    sd->geom_buff_mem = std::make_unique<device_buffer_memory>(device->device, phy_dev->mem_props, 0, VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_STORAGE_BUFFER_BIT, geom_data, xfer_q, xfer_cmd_pool->cmd_buffs[0]);
+
+    xform_data.insert(xform_data.end(), xform_data.begin(), xform_data.end());
+    sd->uni_buff_mem = std::make_unique<host_buffer_memory>(device->device, phy_dev->mem_props, 0, VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT, xform_data);
+
+    for (auto& mi : sd->mis)
+    {
+        for (auto& pd : mi.pds)
+        {
+            for (auto& gd : pd.geom_descs)
+            {
+                gd.buffer = sd->geom_buff_mem->buffer->buffer;
+            }
+        }
+    }
+
+    VkDeviceSize xform_data_offset = 0;
+    for (uint32_t i = 0; i < swapchain->images_count; ++i)
+    {
+        for (auto& mi : sd->mis)
+        {
+            for (size_t pd = 0; pd < mi.pds.size(); ++pd)
+            {
+                mi.pds[pd].xform_descs.resize(swapchain->images_count);
+
+                mi.pds[pd].xform_descs[i].buffer = sd->uni_buff_mem->buffer->buffer;
+                mi.pds[pd].xform_descs[i].offset = xform_data_offset;
+                mi.pds[pd].xform_descs[i].range = 64;
+
+                xform_data_offset += 64;
+            }
+        }
+    }
+
+    char curr_dir[MAX_PATH];
+    GetModuleFileNameA(GetModuleHandleA(NULL), curr_dir, MAX_PATH);
+
+    PathRemoveFileSpecA(curr_dir);
+
+    std::string tmp(curr_dir);
+    tmp.append("\\shaders\\pbr\\");
+
+    pbr_pipeline = std::make_unique<vk_graphics_pipeline>(device->device, tmp, CHI_PIPELINE_TYPE::PBR, surface->format.format);
 }
 
 void vk_renderer::resize(const UINT width, const UINT height)
 {
-	VK_CHECK("wait for present fence", vkWaitForFences(device->device, 1, &swapchain->present_fences[img_idx], VK_TRUE, UINT64_MAX));
-	VK_CHECK("reset present fence", vkResetFences(device->device, 1, &swapchain->present_fences[img_idx]));
+    VK_CHECK("wait for present fence", vkWaitForFences(device->device, 1, &swapchain->present_fences[img_idx], VK_TRUE, UINT64_MAX));
+    VK_CHECK("reset present fence", vkResetFences(device->device, 1, &swapchain->present_fences[img_idx]));
 
-	VK_CHECK("get surface capabilities", vkGetPhysicalDeviceSurfaceCapabilitiesKHR(phy_dev->phy_dev, surface->surface, &surface->surf_caps));
+    VK_CHECK("get surface capabilities", vkGetPhysicalDeviceSurfaceCapabilitiesKHR(phy_dev->phy_dev, surface->surface, &surface->surf_caps));
 
-	swapchain.reset();
-	swapchain = std::make_unique<vk_swapchain>(device->device, surface.get(), phy_dev.get());
+    swapchain.reset();
+    swapchain = std::make_unique<vk_swapchain>(device->device, surface.get(), phy_dev.get());
 }
 
 void vk_renderer::begin_frame()
 {
-	uint64_t wait_values = acq_wait_sem_val;
+    uint64_t wait_values = acq_wait_sem_val;
 
-	const VkSemaphoreWaitInfo wait_info = {
-		.sType = VK_STRUCTURE_TYPE_SEMAPHORE_WAIT_INFO,
-		.semaphoreCount = 1,
-		.pSemaphores = &acq_wait_sem->semaphore,
-		.pValues = &wait_values,
-	};
-	vkWaitSemaphores(device->device, &wait_info, UINT64_MAX);
+    const VkSemaphoreWaitInfo wait_info = {
+        .sType = VK_STRUCTURE_TYPE_SEMAPHORE_WAIT_INFO,
+        .semaphoreCount = 1,
+        .pSemaphores = &acq_wait_sem->semaphore,
+        .pValues = &wait_values,
+    };
+    vkWaitSemaphores(device->device, &wait_info, UINT64_MAX);
 
-	VK_CHECK("acquire image index", vkAcquireNextImageKHR(device->device, swapchain->swapchain, UINT64_MAX, acq_sig_sem->semaphore, VK_NULL_HANDLE, &img_idx));
-	VK_CHECK("reset command buffer", vkResetCommandBuffer(swapchain->cmd_buffs[img_idx], VK_COMMAND_BUFFER_RESET_RELEASE_RESOURCES_BIT));
+    VK_CHECK("acquire image index", vkAcquireNextImageKHR(device->device, swapchain->swapchain, UINT64_MAX, acq_sig_sem->semaphore, VK_NULL_HANDLE, &img_idx));
+    VK_CHECK("reset command buffer", vkResetCommandBuffer(swapchain->cmd_buffs[img_idx], VK_COMMAND_BUFFER_RESET_RELEASE_RESOURCES_BIT));
 
-	const VkImageMemoryBarrier2 img_mem_barr2 = {
-		.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER_2,
-		.srcStageMask = 0,
-		.srcAccessMask = 0,
-		.dstStageMask = VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT,
-		.dstAccessMask = VK_ACCESS_2_COLOR_ATTACHMENT_WRITE_BIT,
-		.oldLayout = VK_IMAGE_LAYOUT_UNDEFINED,
-		.newLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
-		.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
-		.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
-		.image = swapchain->images[img_idx],
-		.subresourceRange = {
-			.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT,
-			.levelCount = 1,
-			.layerCount = 1,
-		},
-	};
+    const VkImageMemoryBarrier2 img_mem_barr2 = {
+        .sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER_2,
+        .srcStageMask = 0,
+        .srcAccessMask = 0,
+        .dstStageMask = VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT,
+        .dstAccessMask = VK_ACCESS_2_COLOR_ATTACHMENT_WRITE_BIT,
+        .oldLayout = VK_IMAGE_LAYOUT_UNDEFINED,
+        .newLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
+        .srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
+        .dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
+        .image = swapchain->images[img_idx],
+        .subresourceRange = {
+            .aspectMask = VK_IMAGE_ASPECT_COLOR_BIT,
+            .levelCount = 1,
+            .layerCount = 1,
+        },
+    };
 
-	const VkDependencyInfo dep_info = {
-		.sType = VK_STRUCTURE_TYPE_DEPENDENCY_INFO,
-		.imageMemoryBarrierCount = 1,
-		.pImageMemoryBarriers = &img_mem_barr2,
-	};
+    const VkDependencyInfo dep_info = {
+        .sType = VK_STRUCTURE_TYPE_DEPENDENCY_INFO,
+        .imageMemoryBarrierCount = 1,
+        .pImageMemoryBarriers = &img_mem_barr2,
+    };
 
-	const VkCommandBufferBeginInfo begin_info = {
-		.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO,
-		.flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT,
-	};
+    const VkCommandBufferBeginInfo begin_info = {
+        .sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO,
+        .flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT,
+    };
 
-	vkBeginCommandBuffer(swapchain->cmd_buffs[img_idx], &begin_info);
-	vkCmdPipelineBarrier2(swapchain->cmd_buffs[img_idx], &dep_info);
+    vkBeginCommandBuffer(swapchain->cmd_buffs[img_idx], &begin_info);
+    vkCmdPipelineBarrier2(swapchain->cmd_buffs[img_idx], &dep_info);
 }
 
 void vk_renderer::clear_frame(const float color[])
 {
-	const VkRenderingAttachmentInfoKHR color_attachment_infos[] = {
-	{
-		.sType = VK_STRUCTURE_TYPE_RENDERING_ATTACHMENT_INFO,
-		.imageView = swapchain->image_views[img_idx],
-		.imageLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
-		.loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR,
-		.storeOp = VK_ATTACHMENT_STORE_OP_STORE,
-		.clearValue = {
-			.color = {
-				.float32 = {
-					color[0], color[1], color[2], color[3]
-				},
-			},
-		},
-	},
-	};
+    const VkRenderingAttachmentInfoKHR color_attachment_infos[] = {
+    {
+        .sType = VK_STRUCTURE_TYPE_RENDERING_ATTACHMENT_INFO,
+        .imageView = swapchain->image_views[img_idx],
+        .imageLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
+        .loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR,
+        .storeOp = VK_ATTACHMENT_STORE_OP_STORE,
+        .clearValue = {
+            .color = {
+                .float32 = {
+                    color[0], color[1], color[2], color[3]
+                },
+            },
+        },
+    },
+    };
 
-	const VkRenderingInfoKHR rendering_info = {
-		.sType = VK_STRUCTURE_TYPE_RENDERING_INFO,
-		.renderArea = {
-			.extent = surface->surf_caps.currentExtent,
-		},
-		.layerCount = 1,
-		.colorAttachmentCount = _countof(color_attachment_infos),
-		.pColorAttachments = color_attachment_infos,
-	};
+    const VkRenderingInfoKHR rendering_info = {
+        .sType = VK_STRUCTURE_TYPE_RENDERING_INFO,
+        .renderArea = {
+            .extent = surface->surf_caps.currentExtent,
+        },
+        .layerCount = 1,
+        .colorAttachmentCount = _countof(color_attachment_infos),
+        .pColorAttachments = color_attachment_infos,
+    };
 
-	vkCmdBeginRendering(swapchain->cmd_buffs[img_idx], &rendering_info);
+    vkCmdBeginRendering(swapchain->cmd_buffs[img_idx], &rendering_info);
 }
 
 void vk_renderer::render_world()
@@ -322,118 +422,104 @@ void vk_renderer::render_world()
 
 void vk_renderer::end_frame()
 {
-	vkCmdEndRendering(swapchain->cmd_buffs[img_idx]);
+    vkCmdEndRendering(swapchain->cmd_buffs[img_idx]);
 
-	const VkImageMemoryBarrier2 img_mem_barr = {
-		.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER_2,
-		.srcStageMask = VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT,
-		.srcAccessMask = VK_ACCESS_2_COLOR_ATTACHMENT_WRITE_BIT,
-		.dstStageMask = VK_PIPELINE_STAGE_2_BOTTOM_OF_PIPE_BIT,
-		.dstAccessMask = 0,
-		.oldLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
-		.newLayout = VK_IMAGE_LAYOUT_PRESENT_SRC_KHR,
-		.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
-		.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
-		.image = swapchain->images[img_idx],
-		.subresourceRange = {
-			.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT,
-			.levelCount = 1,
-			.layerCount = 1,
-		},
-	};
+    const VkImageMemoryBarrier2 img_mem_barr = {
+        .sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER_2,
+        .srcStageMask = VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT,
+        .srcAccessMask = VK_ACCESS_2_COLOR_ATTACHMENT_WRITE_BIT,
+        .dstStageMask = VK_PIPELINE_STAGE_2_BOTTOM_OF_PIPE_BIT,
+        .dstAccessMask = 0,
+        .oldLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
+        .newLayout = VK_IMAGE_LAYOUT_PRESENT_SRC_KHR,
+        .srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
+        .dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
+        .image = swapchain->images[img_idx],
+        .subresourceRange = {
+            .aspectMask = VK_IMAGE_ASPECT_COLOR_BIT,
+            .levelCount = 1,
+            .layerCount = 1,
+        },
+    };
 
-	const VkDependencyInfo dep_info = {
-		.sType = VK_STRUCTURE_TYPE_DEPENDENCY_INFO,
-		.imageMemoryBarrierCount = 1,
-		.pImageMemoryBarriers = &img_mem_barr,
-	};
+    const VkDependencyInfo dep_info = {
+        .sType = VK_STRUCTURE_TYPE_DEPENDENCY_INFO,
+        .imageMemoryBarrierCount = 1,
+        .pImageMemoryBarriers = &img_mem_barr,
+    };
 
-	vkCmdPipelineBarrier2(swapchain->cmd_buffs[img_idx], &dep_info);
+    vkCmdPipelineBarrier2(swapchain->cmd_buffs[img_idx], &dep_info);
 
-	vkEndCommandBuffer(swapchain->cmd_buffs[img_idx]);
+    vkEndCommandBuffer(swapchain->cmd_buffs[img_idx]);
 
-	const VkDeviceQueueInfo2 q_info = {
-		.sType = VK_STRUCTURE_TYPE_DEVICE_QUEUE_INFO_2,
-		.queueFamilyIndex = phy_dev->q_fly_idx,
-		.queueIndex = 0,
-	};
-	VkQueue q = VK_NULL_HANDLE;
+    const VkSemaphoreSubmitInfo wait_sem_infos[] = {
+        {
+            .sType = VK_STRUCTURE_TYPE_SEMAPHORE_SUBMIT_INFO,
+            .semaphore = acq_sig_sem->semaphore,
+            .stageMask = VK_PIPELINE_STAGE_2_TOP_OF_PIPE_BIT,
+        }
+    };
 
-	vkGetDeviceQueue2(device->device, &q_info, &q);
+    const VkSemaphoreSubmitInfo sig_sem_infos[] = {
+        {
+            .sType = VK_STRUCTURE_TYPE_SEMAPHORE_SUBMIT_INFO,
+            .semaphore = swapchain->rndr_semaphores[img_idx],
+            .stageMask = VK_PIPELINE_STAGE_2_BOTTOM_OF_PIPE_BIT,
+        },
+        {
+            .sType = VK_STRUCTURE_TYPE_SEMAPHORE_SUBMIT_INFO,
+            .semaphore = acq_wait_sem->semaphore,
+            .value = ++acq_wait_sem_val,
+            .stageMask = VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT,
+        }
+    };
 
-	const VkSemaphoreSubmitInfo wait_sem_infos[] = {
-		{
-			.sType = VK_STRUCTURE_TYPE_SEMAPHORE_SUBMIT_INFO,
-			.semaphore = acq_sig_sem->semaphore,
-			.stageMask = VK_PIPELINE_STAGE_2_TOP_OF_PIPE_BIT,
-		}
-	};
+    const VkCommandBufferSubmitInfo cmd_buff_infos[] = {
+        {
+            .sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_SUBMIT_INFO,
+            .commandBuffer = swapchain->cmd_buffs[img_idx],
+        }
+    };
 
-	const VkSemaphoreSubmitInfo sig_sem_infos[] = {
-		{
-			.sType = VK_STRUCTURE_TYPE_SEMAPHORE_SUBMIT_INFO,
-			.semaphore = swapchain->rndr_semaphores[img_idx],
-			.stageMask = VK_PIPELINE_STAGE_2_BOTTOM_OF_PIPE_BIT,
-		},
-		{
-			.sType = VK_STRUCTURE_TYPE_SEMAPHORE_SUBMIT_INFO,
-			.semaphore = acq_wait_sem->semaphore,
-			.value = ++acq_wait_sem_val,
-			.stageMask = VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT,
-		}
-	};
+    const VkSubmitInfo2 submit_info = {
+        .sType = VK_STRUCTURE_TYPE_SUBMIT_INFO_2,
+        .waitSemaphoreInfoCount = _countof(wait_sem_infos),
+        .pWaitSemaphoreInfos = wait_sem_infos,
+        .commandBufferInfoCount = _countof(cmd_buff_infos),
+        .pCommandBufferInfos = cmd_buff_infos,
+        .signalSemaphoreInfoCount = _countof(sig_sem_infos),
+        .pSignalSemaphoreInfos = sig_sem_infos,
+    };
 
-	const VkCommandBufferSubmitInfo cmd_buff_infos[] = {
-		{
-			.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_SUBMIT_INFO,
-			.commandBuffer = swapchain->cmd_buffs[img_idx],
-		}
-	};
+    vkQueueSubmit2(gfx_q, 1, &submit_info, VK_NULL_HANDLE);
 
-	const VkSubmitInfo2 submit_info = {
-		.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO_2,
-		.waitSemaphoreInfoCount = _countof(wait_sem_infos),
-		.pWaitSemaphoreInfos = wait_sem_infos,
-		.commandBufferInfoCount = _countof(cmd_buff_infos),
-		.pCommandBufferInfos = cmd_buff_infos,
-		.signalSemaphoreInfoCount = _countof(sig_sem_infos),
-		.pSignalSemaphoreInfos = sig_sem_infos,
-	};
+    const VkSwapchainPresentFenceInfoEXT present_fence_info = {
+        .sType = VK_STRUCTURE_TYPE_SWAPCHAIN_PRESENT_FENCE_INFO_EXT,
+        .swapchainCount = 1,
+        .pFences = &swapchain->present_fences[img_idx],
+    };
 
-	vkQueueSubmit2(q, 1, &submit_info, VK_NULL_HANDLE);
+    const VkPresentInfoKHR present_info = {
+        .sType = VK_STRUCTURE_TYPE_PRESENT_INFO_KHR,
+        .pNext = &present_fence_info,
+        .waitSemaphoreCount = 1,
+        .pWaitSemaphores = &swapchain->rndr_semaphores[img_idx],
+        .swapchainCount = 1,
+        .pSwapchains = &swapchain->swapchain,
+        .pImageIndices = &img_idx,
+    };
 
-	const VkSwapchainPresentFenceInfoEXT present_fence_info = {
-		.sType = VK_STRUCTURE_TYPE_SWAPCHAIN_PRESENT_FENCE_INFO_EXT,
-		.swapchainCount = 1,
-		.pFences = &swapchain->present_fences[img_idx],
-	};
-
-	const VkPresentInfoKHR present_info = {
-		.sType = VK_STRUCTURE_TYPE_PRESENT_INFO_KHR,
-		.pNext = &present_fence_info,
-		.waitSemaphoreCount = 1,
-		.pWaitSemaphores = &swapchain->rndr_semaphores[img_idx],
-		.swapchainCount = 1,
-		.pSwapchains = &swapchain->swapchain,
-		.pImageIndices = &img_idx,
-	};
-
-	VK_CHECK("reset present fence", vkResetFences(device->device, 1, &swapchain->present_fences[img_idx]));
-	vkQueuePresentKHR(q, &present_info);
+    VK_CHECK("reset present fence", vkResetFences(device->device, 1, &swapchain->present_fences[img_idx]));
+    vkQueuePresentKHR(gfx_q, &present_info);
 }
 
 void vk_renderer::clear_scene_data()
 {
-	sd = std::make_unique<scene_data>();
+    sd = std::make_unique<scene_data>();
 }
 
 vk_renderer::~vk_renderer()
 {
-	VK_CHECK("wait for present fence", vkWaitForFences(device->device, 1, &swapchain->present_fences[img_idx], VK_TRUE, UINT64_MAX));
-	VK_CHECK("reset present fence", vkResetFences(device->device, 1, &swapchain->present_fences[img_idx]));
-}
-
-std::pair<VkBuffer, VkDeviceMemory> vk_renderer::CreateBufferAndHeapFromMeshletData()
-{
-	return std::pair<VkBuffer, VkDeviceMemory>();
+    VK_CHECK("wait for present fence", vkWaitForFences(device->device, 1, &swapchain->present_fences[img_idx], VK_TRUE, UINT64_MAX));
+    VK_CHECK("reset present fence", vkResetFences(device->device, 1, &swapchain->present_fences[img_idx]));
 }

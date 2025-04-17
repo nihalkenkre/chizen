@@ -50,8 +50,8 @@ struct MeshOutputVertex
 
 [RootSignature(ROOTSIG)]
 [outputtopology("triangle")]
-[numthreads(128, 1, 1)]void
-msmain(uint gtid : SV_GroupThreadID,
+[numthreads(128, 1, 1)]
+void msmain(uint gtid : SV_GroupThreadID,
         uint gid : SV_GroupID,
         in payload Payload payload,
         out indices uint3 mesh_output_triangles[128],

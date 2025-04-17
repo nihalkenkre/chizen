@@ -267,7 +267,7 @@ void dx12_renderer::create_pipelines()
 	PathRemoveFileSpecA(curr_dir);
 
 	std::string tmp(curr_dir);
-	tmp.append("\\shaders\\world\\");
+	tmp.append("\\shaders\\pbr\\");
 
 	ComPtr<IDxcUtils> utils = nullptr;
 	ComPtr<IDxcCompiler3> compiler = nullptr;
@@ -300,7 +300,7 @@ void dx12_renderer::create_pipelines()
 			if (file_name_tokens[0].find("root_sig") != std::string::npos)
 			{
 				auto cs_name = file_name_tokens[0] + ".root";
-				auto output_cso = std::wstring(std::begin(tmp), std::end(tmp));// +std::wstring(std::begin(cs_name), std::end(cs_name));
+				auto output_cso = std::wstring(std::begin(tmp), std::end(tmp));
 
 				LPCWSTR args[] = {
 					file.path().c_str(),
@@ -892,9 +892,19 @@ void dx12_renderer::end_frame()
 	sc_cmd_queue->Signal(sc_fncs[img_idx].Get(), sc_fnc_vals[img_idx]);
 }
 
-void dx12_renderer::import_scene_data(const cgltf_data* data)
+void dx12_renderer::import_scene_data(const std::string& file_path)
 {
 	sd = std::make_unique<dx12_renderer::scene_data>();
+
+	cgltf_options options = {};
+	cgltf_data* data = nullptr;
+
+	if (cgltf_parse_file(&options, file_path.c_str(), &data) != cgltf_result_success ||
+		cgltf_validate(data) != cgltf_result_success ||
+		cgltf_load_buffers(&options, data,  file_path.c_str()) != cgltf_result_success)
+	{
+		std::cerr << "ERR Could not parse gltf file\n";
+	}
 
 	for (cgltf_size n = 0; n < data->nodes_count; ++n)
 	{
@@ -1069,6 +1079,8 @@ void dx12_renderer::import_scene_data(const cgltf_data* data)
 	}
 
 	create_pipelines();
+
+	cgltf_free(data);
 }
 
 void dx12_renderer::clear_scene_data()

@@ -5,14 +5,14 @@
 
 #include <cgltf/cgltf.h>
 
-world_scene::world_scene(const std::string& path, renderer* r)
+world_scene::world_scene(const std::string& file_path, renderer* r)
 {
 	cgltf_options options = {};
 	cgltf_data* data = nullptr;
 
-	if (cgltf_parse_file(&options, path.c_str(), &data) != cgltf_result_success ||
+	if (cgltf_parse_file(&options, file_path.c_str(), &data) != cgltf_result_success ||
 		cgltf_validate(data) != cgltf_result_success ||
-		cgltf_load_buffers(&options, data, path.c_str()) != cgltf_result_success)
+		cgltf_load_buffers(&options, data, file_path.c_str()) != cgltf_result_success)
 	{
 		std::cerr << "ERR Could not parse gltf file\n";
 	}
@@ -20,7 +20,7 @@ world_scene::world_scene(const std::string& path, renderer* r)
 	{
 		this->import_scene_data(data);
 		r->clear_scene_data();
-		r->import_scene_data(data);
+		r->import_scene_data(file_path);
 		cgltf_free(data);
 	}
 }

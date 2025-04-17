@@ -3,6 +3,7 @@
 #include <Windows.h>
 
 #include <cgltf/cgltf.h>
+#include <string>
 
 enum RENDERING_API
 {
@@ -14,7 +15,7 @@ class renderer
 {
 public:
 	renderer() {}
-	virtual void import_scene_data(const cgltf_data* data) = 0;
+	virtual void import_scene_data(const std::string& file_path) = 0;
 	virtual void resize(const UINT width, const UINT height) = 0;
 	virtual void begin_frame() = 0;
 	virtual void clear_frame(const float color[]) = 0;

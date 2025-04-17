@@ -17,7 +17,7 @@ class dx12_renderer : public renderer
 {
 public:
 	dx12_renderer(const HWND h_wnd);
-	void import_scene_data(const cgltf_data* data) override;
+	void import_scene_data(const std::string& file_path) override;
 	void resize(const UINT width, const UINT height) override;
 	void begin_frame() override;
 	void clear_frame(const float color[]) override;

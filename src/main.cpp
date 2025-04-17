@@ -120,12 +120,23 @@ LRESULT CALLBACK RendererWndProc(HWND h_wnd, UINT msg, WPARAM w_param, LPARAM l_
 			std::cout << "setting dx12\n";
 			r.reset();
 			r = std::make_unique<dx12_renderer>(h_scene_wnd);
+
+			if (!file_path.empty())
+			{
+				r->import_scene_data(file_path);
+			}
 			break;
 
 		case VULKAN_RADIO_BTN:
 			std::cout << "setting vulkan\n";
 			r.reset();
 			r = std::make_unique<vk_renderer>(h_scene_wnd);
+
+			if (!file_path.empty())
+			{
+				r->import_scene_data(file_path);
+			}
+			
 			break;
 		}
 		break;
@@ -167,8 +178,10 @@ void open_file(const HWND h_wnd)
 				PWSTR wfile_path;
 				if SUCCEEDED(open_file->GetDisplayName(SIGDN_FILESYSPATH, &wfile_path))
 				{
-					char file_path[MAX_PATH];
-					wcstombs(file_path, wfile_path, MAX_PATH);
+					char fp[MAX_PATH];
+					wcstombs(fp, wfile_path, MAX_PATH);
+
+					file_path = std::string(fp);
 
 					s.reset(nullptr);
 					s = std::make_unique<world_scene>(file_path, r.get());
