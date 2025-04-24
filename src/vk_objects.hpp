@@ -10,10 +10,12 @@
 
 #include <SPIRV-Reflect/spirv_reflect.h>
 
+//#define DESC_BUFFER
+
 enum CHI_PIPELINE_TYPE
 {
-    PBR,
-    VIEW_AXIS,
+    VERTEX,
+    MESH,
 };
 
 static inline void VK_CHECK(const std::string& action, const VkResult result)
@@ -82,6 +84,7 @@ public:
     uint32_t q_fly_idx = 0;
     VkPhysicalDeviceProperties2 props = {};
     VkPhysicalDeviceMemoryProperties mem_props = {};
+    // Setting .sType so let vkGetPhysicalDeviceFeatures know what struct this is
     VkPhysicalDeviceDescriptorBufferPropertiesEXT desc_buff_props = { .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_DESCRIPTOR_BUFFER_PROPERTIES_EXT };
 };
 
@@ -90,8 +93,6 @@ class vk_device
 public:
     vk_device(const VkPhysicalDevice phy_dev, const uint32_t q_fly_idx, const uint32_t q_count);
     ~vk_device();
-
-    VkResult wait_semaphores(const std::vector<VkSemaphore>& semaphores, const std::vector<uint64_t>& values)const;
 
     VkDevice device = VK_NULL_HANDLE;
 };
@@ -216,6 +217,7 @@ class vk_device_memory
 {
 public:
     vk_device_memory(const VkDevice device, const VkDeviceSize size, const uint32_t type_id);
+    vk_device_memory(const VkDevice device, const VkDeviceSize size, const uint32_t type_id, const VkMemoryAllocateFlagsInfo& flags_info);
     ~vk_device_memory();
 
     VkDeviceMemory memory;
@@ -224,37 +226,17 @@ private:
     VkDevice device;
 };
 
-class vk_graphics_pipeline
+struct vk_descriptor_binding
 {
-public:
-    vk_graphics_pipeline(const VkDevice device, const std::string& path, const CHI_PIPELINE_TYPE p_type, const VkFormat format);
-    ~vk_graphics_pipeline();
-
-    VkPipeline pipeline = VK_NULL_HANDLE;
-    VkPipelineLayout pipeline_layout = VK_NULL_HANDLE;
-    std::vector<VkDescriptorSetLayout> dsls;
-
-private:
-    VkDevice device;
-};
-
-class vk_pipeline_layout
-{
-public:
-    vk_pipeline_layout(const VkDevice device) {};
-    ~vk_pipeline_layout();
-
-    VkPipelineLayout pipeline_layout;
-
-private:
-    VkDevice device;
+    // offset for descriptor buffer
+    VkDeviceSize offset;
 };
 
 class vk_descriptor_set_layout
 {
 public:
     vk_descriptor_set_layout() {}
-    vk_descriptor_set_layout(const VkDevice device, const SpvReflectDescriptorSet* spv_dsl, const VkShaderStageFlags stage);
+    //vk_descriptor_set_layout(const VkDevice device, const SpvReflectDescriptorSet* spv_dsl, const VkShaderStageFlags stage, const VkDeviceSize alignment);
 
     vk_descriptor_set_layout(const vk_descriptor_set_layout& other) = delete;
     vk_descriptor_set_layout& operator=(const vk_descriptor_set_layout& other) = delete;
@@ -265,9 +247,80 @@ public:
     ~vk_descriptor_set_layout();
 
     VkDescriptorSetLayout dsl = VK_NULL_HANDLE;
+    // Size for descriptor buffer
+    VkDeviceSize size;
+
+    std::vector<vk_descriptor_binding> bindings;
 
 private:
     VkDevice device;
+};
+
+struct dsl_binding_info
+{
+    // Offset for desc buffer
+    VkDeviceSize offset;
+    // Type of the descriptor;
+    VkDescriptorType type;
+};
+
+struct dsl_info
+{
+    // Aligned size of the desc set layout
+    VkDeviceSize aligned_size;
+    std::vector<dsl_binding_info> binding_infos;
+};
+
+class vk_graphics_pipeline
+{
+public:
+    vk_graphics_pipeline(const VkDevice device, const std::string& path, const CHI_PIPELINE_TYPE& p_type, const VkFormat format, const VkPhysicalDeviceDescriptorBufferPropertiesEXT& desc_buff_props);
+    ~vk_graphics_pipeline();
+
+    VkPipeline pipeline = VK_NULL_HANDLE;
+    VkPipelineLayout pipeline_layout = VK_NULL_HANDLE;
+
+    std::vector<dsl_info> dsl_infos;
+    std::vector<VkDescriptorSetLayout> dsls;
+
+    CHI_PIPELINE_TYPE p_type = CHI_PIPELINE_TYPE::VERTEX;
+private:
+    VkDevice device;
+};
+
+class vk_pipeline_layout
+{
+public:
+    vk_pipeline_layout(const VkDevice device) {};
+    ~vk_pipeline_layout();
+
+    VkPipelineLayout pipeline_layout = VK_NULL_HANDLE;
+
+private:
+    VkDevice device = VK_NULL_HANDLE;
+};
+
+class vk_descriptor_pool
+{
+public:
+    vk_descriptor_pool(const VkDevice& device, const uint32_t& max_sets, const std::vector<VkDescriptorPoolSize>& pool_sizes);
+    ~vk_descriptor_pool();
+
+    VkDescriptorPool descriptor_pool;
+
+private:
+    VkDevice device;
+};
+
+class vk_descriptor_sets
+{
+public:
+    vk_descriptor_sets(const VkDevice& device, const VkDescriptorPool& desc_pool, const std::vector<VkDescriptorSetLayout>& desc_set_layouts, const uint32_t& max_sets);
+
+    std::vector<VkDescriptorSet> desc_sets;
+    
+private:
+    VkDevice device = VK_NULL_HANDLE;
 };
 
 struct host_buffer_memory
@@ -277,13 +330,25 @@ struct host_buffer_memory
 
     std::unique_ptr<vk_buffer> buffer;
     std::unique_ptr<vk_device_memory> memory;
+
+    // Only valid for buffers with VK**SHADER_ADDRESS_BIT
+    VkDeviceAddress addr = 0;
+    VkBufferUsageFlags usage = VK_BUFFER_USAGE_FLAG_BITS_MAX_ENUM;
+
+    void* map = nullptr;
 };
 
 struct device_buffer_memory
 {
     device_buffer_memory(const VkDevice device, const VkPhysicalDeviceMemoryProperties& mem_props, const VkDeviceSize size, const VkBufferUsageFlags usage);
-    device_buffer_memory(const VkDevice device, const VkPhysicalDeviceMemoryProperties& mem_props, const VkDeviceSize offset, const VkBufferUsageFlags usage, const std::vector<uint8_t>& data, const VkQueue xfer_q, const VkCommandBuffer cmd_buff);
+    device_buffer_memory(const VkDevice device, const VkPhysicalDeviceMemoryProperties& mem_props, const VkDeviceSize offset, VkBufferUsageFlags usage, const std::vector<uint8_t>& data, const VkQueue xfer_q, const VkCommandBuffer cmd_buff);
 
     std::unique_ptr<vk_buffer> buffer;
     std::unique_ptr<vk_device_memory> memory;
+
+    // Only valid for buffers with VK**SHADER_ADDRESS_BIT
+    VkDeviceAddress addr = 0;
+    VkBufferUsageFlags usage = VK_BUFFER_USAGE_FLAG_BITS_MAX_ENUM;
 };
+
+static void copy_buffer_to_buffer(VkBuffer src_buffer, const VkBuffer dst_buffer, const std::vector<VkBufferCopy> regions, const VkCommandBuffer cmd_buff, const VkQueue xfer_q);
