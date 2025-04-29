@@ -36,6 +36,7 @@ struct mesh_shader_info
 struct vertex_shader_info
 {
     VkDeviceSize positions_offset = 0;
+    VkDeviceSize uvs_offsets = 0;
     VkDeviceSize indices_offset = 0;
     uint32_t indices_count = 0;
 
@@ -43,10 +44,42 @@ struct vertex_shader_info
     VkDescriptorBufferInfo xform_d_set_desc = {};
 };
 
+struct metal_rough_descriptors
+{
+    VkDescriptorImageInfo base_color_desc;
+    VkDescriptorImageInfo metal_rough_desc;
+
+    float base_color_factors[4];
+    float metalness_factor;
+    float roughness_factor;
+};
+
+struct clearcoat_descriptors
+{
+    VkDescriptorImageInfo cc_desc;
+    VkDescriptorImageInfo rough_desc;
+    VkDescriptorImageInfo normal_desc;
+};
+
+struct material_descriptors
+{
+    metal_rough_descriptors met_rough_dscs;
+    clearcoat_descriptors cc_dsc;
+};
+
 struct primitive_data
 {
     mesh_shader_info msi;
     vertex_shader_info vsi;
+
+    std::vector<uint32_t> indices;
+    std::vector<uint8_t> positions;
+    std::vector<uint8_t> uvs;
+
+    material_descriptors mat_dscs;
+
+    VkDescriptorPool desc_pool = VK_NULL_HANDLE;
+    VkDescriptorSet desc_set = VK_NULL_HANDLE;
 };
 
 struct material_info
@@ -55,18 +88,29 @@ struct material_info
     std::vector<primitive_data> pds;
 };
 
-struct scene_data
+namespace scene_data
 {
-    std::vector<material_info> mis;
-    std::unique_ptr<device_buffer_memory> geom_buff_mem;
-    std::unique_ptr<host_buffer_memory> uni_buff_mem;
-    std::unique_ptr<host_buffer_memory> desc_buff_mem;
+    struct data
+    {
+        std::vector<material_info> mis;
+        device_buffer_memory::data geom_buff_mem;
+        host_buffer_memory::data uni_buff_mem;
+        host_buffer_memory::data desc_buff_mem;
 
-    std::vector<uint8_t> cam_xform_d_buff_desc;
-    VkDescriptorBufferInfo cam_xform_d_set_desc = {};
+        std::vector<uint8_t> cam_xform_d_buff_desc;
+        VkDescriptorBufferInfo cam_xform_d_set_desc = {};
 
-    std::unique_ptr<vk_descriptor_pool> desc_pool;
-    std::unique_ptr<vk_descriptor_sets> desc_sets;
+        VkDescriptorPool desc_pool = VK_NULL_HANDLE;
+        std::vector<VkDescriptorSet> desc_sets;
+
+        vk_graphics_pipeline::data mesh_d_sets_pipeline;
+        vk_graphics_pipeline::data mesh_d_buff_pipeline;
+        vk_graphics_pipeline::data vtx_pipeline_d_sets;
+        vk_graphics_pipeline::data vtx_pipeline_d_buff;
+    };
+
+    data create(const std::string& file_path, const vk_phy_dev::data& phy_dev, const vk_surface::data& surface, const VkDevice& device, const VkQueue& xfer_q, const VkCommandBuffer& cmd_buff);
+    void destroy(const data d, const VkDevice device);
 };
 
 class vk_renderer : public renderer
@@ -85,20 +129,15 @@ public:
     ~vk_renderer();
 
 private:
-    std::unique_ptr<vk_instance> instance;
-    std::unique_ptr<vk_surface> surface;
-    std::unique_ptr<vk_phydev> phy_dev;
-    std::unique_ptr<vk_device> device;
-    std::unique_ptr<vk_swapchain> swapchain;
-    std::unique_ptr<vk_semaphore> acq_sig_sem;
-    std::unique_ptr<vk_semaphore> acq_wait_sem;
+    VkInstance instance;
+    vk_surface::data surface;
+    vk_phy_dev::data phy_dev;
+    VkDevice device;
+    vk_swapchain::data swapchain;
+    vk_semaphore::data acq_sig_sem;
+    vk_semaphore::data acq_wait_sem;
 
-    std::unique_ptr<vk_graphics_pipeline> mesh_d_sets_pipeline;
-    std::unique_ptr<vk_graphics_pipeline> mesh_d_buff_pipeline;
-    std::unique_ptr<vk_graphics_pipeline> vtx_pipeline_d_sets;
-    std::unique_ptr<vk_graphics_pipeline> vtx_pipeline_d_buff;
-
-    std::unique_ptr<vk_command_pool> xfer_cmd_pool;
+    vk_command_pool::data xfer_cmd_pool;
 
     VkQueue gfx_q;
     VkQueue xfer_q;
@@ -107,5 +146,5 @@ private:
     uint64_t acq_wait_sem_val;
     VkViewport viewport;
 
-    std::unique_ptr<scene_data> sd;
+    scene_data::data sd;
 };

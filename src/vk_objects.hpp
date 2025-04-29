@@ -48,97 +48,319 @@ static inline void SPV_CHECK(const std::string& action, const SpvReflectResult r
     }
 }
 
-class vk_instance
+namespace vk_instance
 {
-public:
-    vk_instance();
-    ~vk_instance();
+    VkInstance create();
+    void destroy(const VkInstance instance);
+}
 
-    VkInstance instance;
-};
+//class vk_instance
+//{
+//public:
+//    vk_instance();
+//    ~vk_instance();
+//
+//    vk_instance(const vk_instance& other) = delete;
+//    vk_instance& operator=(const vk_instance& other) = delete;
+//
+//    vk_instance(vk_instance&& other)
+//    {
+//        this->instance = other.instance;
+//
+//        other.instance = VK_NULL_HANDLE;
+//    }
+//
+//    vk_instance& operator=(vk_instance&& other)
+//    {
+//        this->instance = other.instance;
+//
+//        other.instance = VK_NULL_HANDLE;
+//
+//        return *this;
+//    }
+//
+//    VkInstance instance = VK_NULL_HANDLE;
+//};
 
-class vk_surface
+namespace vk_surface
 {
-public:
-    vk_surface(const VkInstance instance, const HINSTANCE h_instance, const HWND h_wnd);
-    ~vk_surface();
+    struct data
+    {
+        VkSurfaceKHR surface = VK_NULL_HANDLE;
+        VkSurfaceCapabilitiesKHR surf_caps = {};
+        VkSurfaceFormatKHR format = {};
+        VkPresentModeKHR present_mode = {};
+        HINSTANCE h_instance = nullptr;
+        HWND h_wnd = nullptr;
+    };
 
-    VkSurfaceKHR surface = VK_NULL_HANDLE;
-    VkSurfaceCapabilitiesKHR surf_caps = {};
-    VkSurfaceFormatKHR format = {};
-    VkPresentModeKHR present_mode = {};
-    HINSTANCE h_instance = nullptr;
-    HWND h_wnd = nullptr;
+    data create(const VkInstance instnce, const HINSTANCE h_instance, const HWND h_wnd);
+    void destroy(const VkSurfaceKHR surface, VkInstance instance);
+}
 
-private:
-    VkInstance instance = VK_NULL_HANDLE;
-};
+//class vk_surface
+//{
+//public:
+//    vk_surface() {};
+//    vk_surface(const VkInstance instance, const HINSTANCE h_instance, const HWND h_wnd);
+//    ~vk_surface();
+//
+//    VkSurfaceKHR surface = VK_NULL_HANDLE;
+//    VkSurfaceCapabilitiesKHR surf_caps = {};
+//    VkSurfaceFormatKHR format = {};
+//    VkPresentModeKHR present_mode = {};
+//    HINSTANCE h_instance = nullptr;
+//    HWND h_wnd = nullptr;
+//
+//    vk_surface(const vk_surface& other) = delete;
+//    vk_surface& operator=(const vk_surface& other) = delete;
+//
+//    vk_surface(vk_surface&& other)
+//    {
+//        surface = other.surface;
+//        instance = other.instance;
+//        std::memcpy(&surf_caps, &other.surf_caps, sizeof(other.surf_caps));
+//        std::memcpy(&format, &other.format, sizeof(other.format));
+//        std::memcpy(&present_mode, &other.present_mode, sizeof(other.present_mode));
+//        h_instance = other.h_instance;
+//        h_wnd = other.h_wnd;
+//
+//        other.surface = VK_NULL_HANDLE;
+//        other.instance = VK_NULL_HANDLE;
+//        other.surf_caps = {};
+//        other.format = {};
+//        other.present_mode = {};
+//        h_instance = nullptr;
+//        h_wnd = nullptr;
+//    }
+//
+//    vk_surface& operator=(vk_surface&& other)
+//    {
+//        surface = other.surface;
+//        instance = other.instance;
+//        std::memcpy(&surf_caps, &other.surf_caps, sizeof(other.surf_caps));
+//        std::memcpy(&format, &other.format, sizeof(other.format));
+//        std::memcpy(&present_mode, &other.present_mode, sizeof(other.present_mode));
+//        h_instance = other.h_instance;
+//        h_wnd = other.h_wnd;
+//
+//        other.surface = VK_NULL_HANDLE;
+//        other.instance = VK_NULL_HANDLE;
+//        other.surf_caps = {};
+//        other.format = {};
+//        other.present_mode = {};
+//        h_instance = nullptr;
+//        h_wnd = nullptr;
+//
+//        return *this;
+//    }
+//
+//private:
+//    VkInstance instance = VK_NULL_HANDLE;
+//};
 
-class vk_phydev
+//class vk_phy_dev
+//{
+//public:
+//    vk_phy_dev() {}
+//    vk_phy_dev(const VkInstance instance, vk_surface::data* surface);
+//
+//    VkPhysicalDevice phy_dev = VK_NULL_HANDLE;
+//    uint32_t q_count = 0;
+//    uint32_t q_fly_idx = 0;
+//    VkPhysicalDeviceProperties2 props = {};
+//    VkPhysicalDeviceMemoryProperties mem_props = {};
+//    // Setting .sType so let vkGetPhysicalDeviceFeatures know what struct this is
+//    VkPhysicalDeviceDescriptorBufferPropertiesEXT desc_buff_props = { .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_DESCRIPTOR_BUFFER_PROPERTIES_EXT };
+//};
+
+namespace vk_phy_dev
 {
-public:
-    vk_phydev(const VkInstance instance, vk_surface* surface);
+    struct data
+    {
+        VkPhysicalDevice phy_dev = VK_NULL_HANDLE;
+        uint32_t q_count = 0;
+        uint32_t q_fly_idx = 0;
+        VkPhysicalDeviceProperties2 props = {};
+        VkPhysicalDeviceMemoryProperties mem_props = {};
+        // Setting .sType so let vkGetPhysicalDeviceFeatures know what struct this is
+        VkPhysicalDeviceDescriptorBufferPropertiesEXT desc_buff_props = { .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_DESCRIPTOR_BUFFER_PROPERTIES_EXT };
+    };
 
-    VkPhysicalDevice phy_dev = VK_NULL_HANDLE;
-    uint32_t q_count = 0;
-    uint32_t q_fly_idx = 0;
-    VkPhysicalDeviceProperties2 props = {};
-    VkPhysicalDeviceMemoryProperties mem_props = {};
-    // Setting .sType so let vkGetPhysicalDeviceFeatures know what struct this is
-    VkPhysicalDeviceDescriptorBufferPropertiesEXT desc_buff_props = { .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_DESCRIPTOR_BUFFER_PROPERTIES_EXT };
-};
+    data get_phy_dev(const VkInstance instance, vk_surface::data* surface);
+}
 
-class vk_device
+//class vk_device
+//{
+//public:
+//    vk_device() {}
+//    vk_device(const VkPhysicalDevice phy_dev, const uint32_t q_fly_idx, const uint32_t q_count);
+//    ~vk_device();
+//
+//    vk_device(const vk_device& other) = delete;
+//    vk_device& operator=(const vk_device& other) = delete;
+//
+//    vk_device(vk_device&& other)
+//    {
+//        device = other.device;
+//        other.device = VK_NULL_HANDLE;
+//    }
+//
+//    vk_device& operator=(vk_device&& other)
+//    {
+//        device = other.device;
+//        other.device = VK_NULL_HANDLE;
+//
+//        return *this;
+//    }
+//
+//    VkDevice device = VK_NULL_HANDLE;
+//};
+
+namespace vk_device
 {
-public:
-    vk_device(const VkPhysicalDevice phy_dev, const uint32_t q_fly_idx, const uint32_t q_count);
-    ~vk_device();
+    VkDevice create(const VkPhysicalDevice phy_dev, const uint32_t q_fly_idx, const uint32_t q_count);
+    void destroy(const VkDevice device);
+}
 
-    VkDevice device = VK_NULL_HANDLE;
-};
+//class vk_swapchain
+//{
+//public:
+//    vk_swapchain() {};
+//    vk_swapchain(const VkDevice device, const vk_surface::data& surface, const vk_phy_dev::data& phy_dev);
+//    ~vk_swapchain();
+//
+//    vk_swapchain(const vk_swapchain& other) = delete;
+//    vk_swapchain& operator=(const vk_swapchain& other) = delete;
+//
+//    vk_swapchain(vk_swapchain&& other)
+//    {
+//        swapchain = other.swapchain;
+//        device = other.device;
+//
+//        images_count = other.images_count;
+//        images = std::move(other.images);
+//        image_views = std::move(other.image_views);
+//        cmd_pool = other.cmd_pool;
+//        cmd_buffs = std::move(other.cmd_buffs);
+//        rndr_semaphores = std::move(other.rndr_semaphores);
+//        present_fences = std::move(other.present_fences);
+//
+//        other.swapchain = VK_NULL_HANDLE;
+//        other.device = other.device;
+//        other.images_count = 0;
+//        other.cmd_pool = VK_NULL_HANDLE;
+//    }
+//
+//    vk_swapchain& operator=(vk_swapchain&& other)
+//    {
+//        swapchain = other.swapchain;
+//        device = other.device;
+//
+//        images_count = other.images_count;
+//        images = std::move(other.images);
+//        image_views = std::move(other.image_views);
+//        cmd_pool = other.cmd_pool;
+//        cmd_buffs = std::move(other.cmd_buffs);
+//        rndr_semaphores = std::move(other.rndr_semaphores);
+//        present_fences = std::move(other.present_fences);
+//
+//        other.swapchain = VK_NULL_HANDLE;
+//        other.device = other.device;
+//        other.images_count = 0;
+//        other.cmd_pool = VK_NULL_HANDLE;
+//
+//        return *this;
+//    }
+//
+//    VkSwapchainKHR swapchain = VK_NULL_HANDLE;
+//
+//    VkCommandPool cmd_pool = VK_NULL_HANDLE;
+//    uint32_t images_count = 0;
+//    std::vector<VkImage> images;
+//    std::vector<VkImageView> image_views;
+//    std::vector<VkCommandBuffer> cmd_buffs;
+//    std::vector<VkSemaphore> rndr_semaphores;
+//    std::vector<VkFence> present_fences;
+//
+//private:
+//    VkDevice device = VK_NULL_HANDLE;
+//};
 
-class vk_swapchain
+namespace vk_swapchain
 {
-public:
-    vk_swapchain(const VkDevice device, const vk_surface* surface, const vk_phydev* phy_dev);
-    ~vk_swapchain();
+    struct data
+    {
+        VkSwapchainKHR swapchain;
+        VkCommandPool cmd_pool;
 
-    VkSwapchainKHR swapchain = VK_NULL_HANDLE;
+        uint32_t images_count;
+        std::vector<VkImage> images;
+        std::vector<VkImageView> image_views;
+        std::vector<VkCommandBuffer> cmd_buffs;
+        std::vector<VkSemaphore> rndr_semaphores;
+        std::vector<VkFence> present_fences;
+    };
 
-    uint32_t images_count = 0;
-    std::vector<VkImage> images;
-    std::vector<VkImageView> image_views;
-    VkCommandPool cmd_pool;
-    std::vector<VkCommandBuffer> cmd_buffs;
-    std::vector<VkSemaphore> rndr_semaphores;
-    std::vector<VkFence> present_fences;
+    data create(const VkDevice device, const vk_surface::data& surface, const vk_phy_dev::data& phy_dev);
+    void destroy(vk_swapchain::data data, const VkDevice device);
+}
 
-private:
-    VkDevice device = VK_NULL_HANDLE;
-};
+//class vk_command_pool
+//{
+//public:
+//    vk_command_pool() {}
+//    vk_command_pool(const VkDevice device, const uint32_t q_fly_idx, const uint32_t cmd_buffs_count);
+//    ~vk_command_pool();
+//
+//    vk_command_pool(const vk_command_pool& other) = delete;
+//    vk_command_pool& operator= (const vk_command_pool& other) = delete;
+//
+//    vk_command_pool(vk_command_pool&& other)
+//    {
+//        cmd_pool = other.cmd_pool;
+//        device = other.device;
+//        cmd_buffs = std::move(other.cmd_buffs);
+//
+//        other.cmd_pool = VK_NULL_HANDLE;
+//        other.device = VK_NULL_HANDLE;
+//    }
+//
+//    vk_command_pool& operator=(vk_command_pool&& other)
+//    {
+//        cmd_pool = other.cmd_pool;
+//        device = other.device;
+//        cmd_buffs = std::move(other.cmd_buffs);
+//
+//        other.cmd_pool = VK_NULL_HANDLE;
+//        other.device = VK_NULL_HANDLE;
+//
+//        return *this;
+//    }
+//
+//    VkCommandPool cmd_pool = VK_NULL_HANDLE;
+//    std::vector<VkCommandBuffer> cmd_buffs;
+//
+//private:
+//    VkDevice device = VK_NULL_HANDLE;
+//};
 
-class vk_command_pool
+namespace vk_command_pool
 {
-public:
-    vk_command_pool(const VkDevice device, const uint32_t q_fly_idx, const uint32_t cmd_buffs_count);
-    ~vk_command_pool();
+    struct data {
+        VkCommandPool cmd_pool;
+        std::vector<VkCommandBuffer> cmd_buffs;
+    };
 
-    VkCommandPool cmd_pool = VK_NULL_HANDLE;
-
-    std::vector<VkCommandBuffer> cmd_buffs;
-
-private:
-    VkDevice device = VK_NULL_HANDLE;
-};
+    data create(const VkDevice device, const uint32_t q_fly_idx, const uint32_t cmd_buffs_count);
+    void destroy(const VkCommandPool cmd_pool, const VkDevice device);
+}
 
 class vk_command_buffer
 {
 public:
+    vk_command_buffer() {}
     vk_command_buffer(const VkDevice device, const VkCommandPool cmd_pool);
-    ~vk_command_buffer();
-
-    VkResult begin() const;
-    VkResult end() const;
 
     VkCommandBuffer cmd_buff;
 
@@ -147,84 +369,181 @@ private:
     VkDevice device;
 };
 
-class vk_command_buffers
-{
-public:
-    vk_command_buffers(const VkDevice device);
-    ~vk_command_buffers();
+//class vk_semaphore
+//{
+//public:
+//    vk_semaphore() {}
+//    vk_semaphore(const VkDevice device, bool is_timeline);
+//    ~vk_semaphore();
+//
+//    vk_semaphore(const vk_semaphore& other) = delete;
+//    vk_semaphore& operator=(const vk_semaphore& other) = delete;
+//
+//    vk_semaphore(vk_semaphore&& other)
+//    {
+//        is_timeline = other.is_timeline;
+//        semaphore = other.semaphore;
+//        device = other.device;
+//
+//        other.is_timeline = false;
+//        other.semaphore = VK_NULL_HANDLE;
+//        other.device = VK_NULL_HANDLE;
+//    }
+//
+//    vk_semaphore& operator=(vk_semaphore&& other)
+//    {
+//        is_timeline = other.is_timeline;
+//        semaphore = other.semaphore;
+//        device = other.device;
+//
+//        other.is_timeline = false;
+//        other.semaphore = VK_NULL_HANDLE;
+//        other.device = VK_NULL_HANDLE;
+//
+//        return *this;
+//    }
+//
+//    VkSemaphore semaphore;
+//
+//    bool is_timeline = false;
+//
+//private:
+//    VkDevice device = VK_NULL_HANDLE;
+//};
 
-    VkResult begin(uint32_t idx)
+namespace vk_semaphore
+{
+    struct data
     {
-        const VkCommandBufferBeginInfo begin_info = {
-            .sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO,
-            .flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT,
-        };
+        bool is_timeline;
+        VkSemaphore semaphore;
+    };
 
-        return vkBeginCommandBuffer(cmd_buffs[idx], &begin_info);
-    }
+    data create(const VkDevice device, const bool is_timeline);
+    void destroy(const VkSemaphore semaphore, const VkDevice device);
+}
 
-    VkResult end(uint32_t idx)
-    {
-        return vkEndCommandBuffer(cmd_buffs[idx]);
-    }
+//class vk_fence
+//{
+//public:
+//    vk_fence() {}
+//    vk_fence(const VkDevice device, const VkBool32 signalled_state);
+//    ~vk_fence();
+//
+//    vk_fence(const vk_fence& other) = delete;
+//    vk_fence& operator=(const vk_fence& other) = delete;
+//
+//    vk_fence(vk_fence&& other)
+//    {
+//        fence = other.fence;
+//        device = other.device;
+//
+//        other.fence = VK_NULL_HANDLE;
+//        other.device = VK_NULL_HANDLE;
+//    }
+//
+//    vk_fence& operator=(vk_fence&& other)
+//    {
+//        fence = other.fence;
+//        device = other.device;
+//
+//        other.fence = VK_NULL_HANDLE;
+//        other.device = VK_NULL_HANDLE;
+//
+//        return *this;
+//    }
+//
+//    VkFence fence;
+//
+//private:
+//    VkDevice device = VK_NULL_HANDLE;
+//};
 
-private:
-    std::vector<VkCommandBuffer> cmd_buffs;
-    VkDevice device = VK_NULL_HANDLE;
-};
+//class vk_buffer
+//{
+//public:
+//    vk_buffer() {}
+//    vk_buffer(const VkDevice device, const VkDeviceSize size, const VkBufferUsageFlags usage);
+//    ~vk_buffer();
+//
+//    vk_buffer(const vk_buffer& other) = delete;
+//    vk_buffer& operator=(const vk_buffer& other) = delete;
+//
+//    vk_buffer(vk_buffer&& other)
+//    {
+//        buffer = other.buffer;
+//        device = other.device;
+//
+//        other.buffer = VK_NULL_HANDLE;
+//        other.device = VK_NULL_HANDLE;
+//    }
+//
+//    vk_buffer& operator=(vk_buffer&& other)
+//    {
+//        buffer = other.buffer;
+//        device = other.device;
+//
+//        other.buffer = VK_NULL_HANDLE;
+//        other.device = VK_NULL_HANDLE;
+//
+//        return *this;
+//    }
+//
+//    VkBuffer buffer = VK_NULL_HANDLE;
+//
+//private:
+//    VkDevice device = VK_NULL_HANDLE;
+//};
 
-class vk_semaphore
+namespace vk_buffer
 {
-public:
-    vk_semaphore(const VkDevice device, bool is_timeline);
-    ~vk_semaphore();
+    VkBuffer create(const VkDevice device, const VkDeviceSize size, const VkBufferUsageFlags usage);
+    void destroy(const VkBuffer buffer, const VkDevice device);
+}
 
-    VkSemaphore semaphore;
+//class vk_device_memory
+//{
+//public:
+//    vk_device_memory() {}
+//    vk_device_memory(const VkDevice device, const VkDeviceSize size, const uint32_t type_id);
+//    vk_device_memory(const VkDevice device, const VkDeviceSize size, const uint32_t type_id, const VkMemoryAllocateFlagsInfo& flags_info);
+//    ~vk_device_memory();
+//
+//    vk_device_memory(const vk_device_memory& other) = delete;
+//    vk_device_memory& operator=(const vk_device_memory& other) = delete;
+//
+//    vk_device_memory(vk_device_memory&& other)
+//    {
+//        memory = other.memory;
+//        device = other.device;
+//
+//        other.memory = VK_NULL_HANDLE;
+//        other.device = VK_NULL_HANDLE;
+//    }
+//
+//    vk_device_memory& operator=(vk_device_memory&& other)
+//    {
+//        memory = other.memory;
+//        device = other.device;
+//
+//        other.memory = VK_NULL_HANDLE;
+//        other.device = VK_NULL_HANDLE;
+//
+//        return *this;
+//    }
+//
+//    VkDeviceMemory memory = VK_NULL_HANDLE;
+//
+//private:
+//    VkDevice device = VK_NULL_HANDLE;
+//};
 
-    VkResult signal(const uint64_t value) const;
-
-    bool is_timeline = false;
-
-private:
-    VkDevice device = VK_NULL_HANDLE;
-};
-
-class vk_fence
+namespace vk_device_memory
 {
-public:
-    vk_fence(const VkDevice device, const VkBool32 signalled_state);
-    ~vk_fence();
-
-    VkFence fence;
-
-private:
-    VkDevice device = VK_NULL_HANDLE;
-};
-
-class vk_buffer
-{
-public:
-    vk_buffer(const VkDevice device, const VkDeviceSize size, const VkBufferUsageFlags usage);
-    ~vk_buffer();
-
-    VkBuffer buffer;
-
-private:
-    VkDevice device;
-};
-
-class vk_device_memory
-{
-public:
-    vk_device_memory(const VkDevice device, const VkDeviceSize size, const uint32_t type_id);
-    vk_device_memory(const VkDevice device, const VkDeviceSize size, const uint32_t type_id, const VkMemoryAllocateFlagsInfo& flags_info);
-    ~vk_device_memory();
-
-    VkDeviceMemory memory;
-
-private:
-    VkDevice device;
-};
+    VkDeviceMemory allocate(const VkDevice device, const VkDeviceSize size, const uint32_t type_id);
+    VkDeviceMemory allocate(const VkDevice device, const VkDeviceSize size, const uint32_t type_id, const VkMemoryAllocateFlagsInfo& flags_info);
+    void free(const VkDeviceMemory memory, const VkDevice device);
+}
 
 struct vk_descriptor_binding
 {
@@ -232,29 +551,29 @@ struct vk_descriptor_binding
     VkDeviceSize offset;
 };
 
-class vk_descriptor_set_layout
-{
-public:
-    vk_descriptor_set_layout() {}
-    //vk_descriptor_set_layout(const VkDevice device, const SpvReflectDescriptorSet* spv_dsl, const VkShaderStageFlags stage, const VkDeviceSize alignment);
-
-    vk_descriptor_set_layout(const vk_descriptor_set_layout& other) = delete;
-    vk_descriptor_set_layout& operator=(const vk_descriptor_set_layout& other) = delete;
-
-    vk_descriptor_set_layout(vk_descriptor_set_layout&& other);
-    vk_descriptor_set_layout& operator=(vk_descriptor_set_layout&& other);
-
-    ~vk_descriptor_set_layout();
-
-    VkDescriptorSetLayout dsl = VK_NULL_HANDLE;
-    // Size for descriptor buffer
-    VkDeviceSize size;
-
-    std::vector<vk_descriptor_binding> bindings;
-
-private:
-    VkDevice device;
-};
+//class vk_descriptor_set_layout
+//{
+//public:
+//    vk_descriptor_set_layout() {}
+//    //vk_descriptor_set_layout(const VkDevice device, const SpvReflectDescriptorSet* spv_dsl, const VkShaderStageFlags stage, const VkDeviceSize alignment);
+//
+//    vk_descriptor_set_layout(const vk_descriptor_set_layout& other) = delete;
+//    vk_descriptor_set_layout& operator=(const vk_descriptor_set_layout& other) = delete;
+//
+//    vk_descriptor_set_layout(vk_descriptor_set_layout&& other);
+//    vk_descriptor_set_layout& operator=(vk_descriptor_set_layout&& other);
+//
+//    ~vk_descriptor_set_layout();
+//
+//    VkDescriptorSetLayout dsl = VK_NULL_HANDLE;
+//    // Size for descriptor buffer
+//    VkDeviceSize size;
+//
+//    std::vector<vk_descriptor_binding> bindings;
+//
+//private:
+//    VkDevice device;
+//};
 
 struct dsl_binding_info
 {
@@ -271,84 +590,275 @@ struct dsl_info
     std::vector<dsl_binding_info> binding_infos;
 };
 
-class vk_graphics_pipeline
+//class vk_graphics_pipeline
+//{
+//public:
+//    vk_graphics_pipeline() {}
+//    vk_graphics_pipeline(const VkDevice device, const std::string& path, const CHI_PIPELINE_TYPE& p_type, const VkFormat format, const VkPhysicalDeviceDescriptorBufferPropertiesEXT& desc_buff_props);
+//    ~vk_graphics_pipeline();
+//
+//    vk_graphics_pipeline(const vk_graphics_pipeline& other) = delete;
+//    vk_graphics_pipeline& operator=(const vk_graphics_pipeline& other) = delete;
+//
+//    vk_graphics_pipeline(vk_graphics_pipeline&& other)
+//    {
+//        pipeline = other.pipeline;
+//        pipeline_layout = other.pipeline_layout;
+//        device = other.device;
+//        dsl_infos = std::move(other.dsl_infos);
+//        dsls = std::move(other.dsls);
+//        p_type = other.p_type;
+//
+//        other.pipeline = VK_NULL_HANDLE;
+//        other.pipeline_layout = VK_NULL_HANDLE;
+//        other.device = VK_NULL_HANDLE;
+//    }
+//
+//    vk_graphics_pipeline& operator=(vk_graphics_pipeline&& other)
+//    {
+//        pipeline = other.pipeline;
+//        pipeline_layout = other.pipeline_layout;
+//        device = other.device;
+//        dsl_infos = std::move(other.dsl_infos);
+//        dsls = std::move(other.dsls);
+//        p_type = other.p_type;
+//
+//        other.pipeline = VK_NULL_HANDLE;
+//        other.pipeline_layout = VK_NULL_HANDLE;
+//        other.device = VK_NULL_HANDLE;
+//
+//        return *this;
+//    }
+//
+//    VkPipeline pipeline = VK_NULL_HANDLE;
+//    VkPipelineLayout pipeline_layout = VK_NULL_HANDLE;
+//
+//    std::vector<dsl_info> dsl_infos;
+//    std::vector<VkDescriptorSetLayout> dsls;
+//
+//    CHI_PIPELINE_TYPE p_type = CHI_PIPELINE_TYPE::VERTEX;
+//private:
+//    VkDevice device;
+//};
+
+namespace vk_graphics_pipeline
 {
-public:
-    vk_graphics_pipeline(const VkDevice device, const std::string& path, const CHI_PIPELINE_TYPE& p_type, const VkFormat format, const VkPhysicalDeviceDescriptorBufferPropertiesEXT& desc_buff_props);
-    ~vk_graphics_pipeline();
+    struct data
+    {
+        VkPipeline pipeline = VK_NULL_HANDLE;
+        VkPipelineLayout pipeline_layout = VK_NULL_HANDLE;
 
-    VkPipeline pipeline = VK_NULL_HANDLE;
-    VkPipelineLayout pipeline_layout = VK_NULL_HANDLE;
+        std::vector<dsl_info> dsl_infos;
+        std::vector<VkDescriptorSetLayout> dsls;
 
-    std::vector<dsl_info> dsl_infos;
-    std::vector<VkDescriptorSetLayout> dsls;
+        CHI_PIPELINE_TYPE p_type = CHI_PIPELINE_TYPE::VERTEX;
+    };
 
-    CHI_PIPELINE_TYPE p_type = CHI_PIPELINE_TYPE::VERTEX;
-private:
-    VkDevice device;
+    data create(const VkDevice device, const std::string& path, const CHI_PIPELINE_TYPE& p_type, const VkFormat format, const VkPhysicalDeviceDescriptorBufferPropertiesEXT& desc_buff_props);
+    void destroy(const data d, const VkDevice device);
+}
+
+//class vk_descriptor_pool
+//{
+//public:
+//    vk_descriptor_pool() {}
+//    vk_descriptor_pool(const VkDevice& device, const uint32_t& max_sets, const std::vector<VkDescriptorPoolSize>& pool_sizes);
+//    ~vk_descriptor_pool();
+//
+//    vk_descriptor_pool(const vk_descriptor_pool& other) = delete;
+//    vk_descriptor_pool& operator=(const vk_descriptor_pool& other) = delete;
+//
+//    vk_descriptor_pool(vk_descriptor_pool&& other)
+//    {
+//        descriptor_pool = other.descriptor_pool;
+//        device = other.device;
+//
+//        other.descriptor_pool = VK_NULL_HANDLE;
+//        other.device = VK_NULL_HANDLE;
+//    }
+//
+//    vk_descriptor_pool& operator=(vk_descriptor_pool&& other)
+//    {
+//        descriptor_pool = other.descriptor_pool;
+//        device = other.device;
+//
+//        other.descriptor_pool = VK_NULL_HANDLE;
+//        other.device = VK_NULL_HANDLE;
+//
+//        return *this;
+//    }
+//
+//    VkDescriptorPool descriptor_pool = VK_NULL_HANDLE;
+//
+//private:
+//    VkDevice device = VK_NULL_HANDLE;
+//};
+
+namespace vk_descriptor_pool
+{
+    VkDescriptorPool create(const VkDevice& device, const uint32_t& max_sets, const std::vector<VkDescriptorPoolSize>& pool_sizes);
+    void destroy(const VkDescriptorPool desc_pool, const VkDevice device);
+}
+
+//class vk_descriptor_sets
+//{
+//public:
+//    vk_descriptor_sets() {}
+//    vk_descriptor_sets(const VkDevice& device, const VkDescriptorPool& desc_pool, const std::vector<VkDescriptorSetLayout>& desc_set_layouts);
+//
+//    std::vector<VkDescriptorSet> desc_sets;
+//
+//private:
+//    VkDevice device = VK_NULL_HANDLE;
+//};
+
+namespace vk_descriptor_sets
+{
+    std::vector<VkDescriptorSet> allocate(const VkDevice& device, const VkDescriptorPool& desc_pool, const std::vector<VkDescriptorSetLayout>& desc_set_layouts);
+}
+
+//class vk_image
+//{
+//public:
+//    vk_image(const VkDevice& device, const VkExtent3D& extent, const VkFormat& format, const VkImageUsageFlags& usage);
+//    ~vk_image();
+//
+//    VkImage image = VK_NULL_HANDLE;
+//
+//private:
+//    VkDevice device = VK_NULL_HANDLE;
+//};
+
+namespace vk_image
+{
+    VkImage create(const VkDevice& device, const VkExtent3D& extent, const VkFormat& format, const VkImageUsageFlags& usage);
+    void destroy(const VkImage image, const VkDevice device);
+}
+
+namespace vk_image_view
+{
 };
 
-class vk_pipeline_layout
+//struct host_buffer_memory
+//{
+//    host_buffer_memory() {}
+//    host_buffer_memory(const VkDevice device, const VkPhysicalDeviceMemoryProperties& mem_props, const VkDeviceSize size, const VkBufferUsageFlags usage);
+//    host_buffer_memory(const VkDevice device, const VkPhysicalDeviceMemoryProperties& mem_props, const VkDeviceSize offset, const VkBufferUsageFlags usage, const std::vector<uint8_t>& data);
+//
+//    host_buffer_memory(const host_buffer_memory& other) = delete;
+//    host_buffer_memory& operator=(const host_buffer_memory& other) = delete;
+//
+//    host_buffer_memory(host_buffer_memory&& other)
+//    {
+//        buffer = std::move(other.buffer);
+//        memory = std::move(other.memory);
+//        addr = other.addr;
+//        usage = other.usage;
+//
+//        other.addr = 0;
+//        other.usage = VK_BUFFER_USAGE_FLAG_BITS_MAX_ENUM;
+//    }
+//
+//    host_buffer_memory& operator=(host_buffer_memory&& other)
+//    {
+//        buffer = std::move(other.buffer);
+//        memory = std::move(other.memory);
+//        addr = other.addr;
+//        usage = other.usage;
+//
+//        other.addr = 0;
+//        other.usage = VK_BUFFER_USAGE_FLAG_BITS_MAX_ENUM;
+//
+//        return *this;
+//    }
+//
+//    vk_buffer buffer;
+//    vk_device_memory memory;
+//
+//    // Only valid for buffers with VK**SHADER_ADDRESS_BIT
+//    VkDeviceAddress addr = 0;
+//    VkBufferUsageFlags usage = VK_BUFFER_USAGE_FLAG_BITS_MAX_ENUM;
+//
+//    void* map = nullptr;
+//};
+
+namespace host_buffer_memory
 {
-public:
-    vk_pipeline_layout(const VkDevice device) {};
-    ~vk_pipeline_layout();
+    struct data
+    {
+        VkBuffer buffer = VK_NULL_HANDLE;
+        VkDeviceMemory memory = VK_NULL_HANDLE;
 
-    VkPipelineLayout pipeline_layout = VK_NULL_HANDLE;
+        // Only valid for buffers with VK**SHADER_ADDRESS_BIT
+        VkDeviceAddress addr = 0;
+        VkBufferUsageFlags usage = VK_BUFFER_USAGE_FLAG_BITS_MAX_ENUM;
 
-private:
-    VkDevice device = VK_NULL_HANDLE;
-};
+        void* map = nullptr;
+    };
 
-class vk_descriptor_pool
+    data create(const VkDevice device, const VkPhysicalDeviceMemoryProperties& mem_props, const VkDeviceSize size, const VkBufferUsageFlags usage);
+    data create(const VkDevice device, const VkPhysicalDeviceMemoryProperties& mem_props, const VkDeviceSize offset, const VkBufferUsageFlags usage, const std::vector<uint8_t>& data);
+
+    void destroy(const data bm, const VkDevice device);
+}
+
+//struct device_buffer_memory
+//{
+//    device_buffer_memory() {}
+//    device_buffer_memory(const VkDevice device, const VkPhysicalDeviceMemoryProperties& mem_props, const VkDeviceSize size, const VkBufferUsageFlags usage);
+//    device_buffer_memory(const VkDevice device, const VkPhysicalDeviceMemoryProperties& mem_props, const VkDeviceSize offset, VkBufferUsageFlags usage, const std::vector<uint8_t>& data, const VkQueue xfer_q, const VkCommandBuffer cmd_buff);
+//
+//    device_buffer_memory(const vk_device_memory& other) = delete;
+//    device_buffer_memory& operator=(const vk_device_memory& other) = delete;
+//
+//    device_buffer_memory(device_buffer_memory&& other)
+//    {
+//        buffer = std::move(other.buffer);
+//        memory = std::move(other.memory);
+//        addr = other.addr;
+//        usage = other.usage;
+//
+//        other.addr = 0;
+//        other.usage = VK_BUFFER_USAGE_FLAG_BITS_MAX_ENUM;
+//    }
+//
+//    device_buffer_memory& operator=(device_buffer_memory&& other)
+//    {
+//        buffer = std::move(other.buffer);
+//        memory = std::move(other.memory);
+//        addr = other.addr;
+//        usage = other.usage;
+//
+//        other.addr = 0;
+//        other.usage = VK_BUFFER_USAGE_FLAG_BITS_MAX_ENUM;
+//
+//        return *this;
+//    }
+//
+//    vk_buffer buffer;
+//    vk_device_memory memory;
+//
+//    // Only valid for buffers with VK**SHADER_ADDRESS_BIT
+//    VkDeviceAddress addr = 0;
+//    VkBufferUsageFlags usage = VK_BUFFER_USAGE_FLAG_BITS_MAX_ENUM;
+//};
+
+namespace device_buffer_memory
 {
-public:
-    vk_descriptor_pool(const VkDevice& device, const uint32_t& max_sets, const std::vector<VkDescriptorPoolSize>& pool_sizes);
-    ~vk_descriptor_pool();
+    struct data
+    {
+        VkBuffer buffer = VK_NULL_HANDLE;
+        VkDeviceMemory memory = VK_NULL_HANDLE;
 
-    VkDescriptorPool descriptor_pool;
+        // Only valid for buffers with VK**SHADER_ADDRESS_BIT
+        VkDeviceAddress addr = 0;
+        VkBufferUsageFlags usage = VK_BUFFER_USAGE_FLAG_BITS_MAX_ENUM;
+    };
 
-private:
-    VkDevice device;
-};
+    data create(const VkDevice device, const VkPhysicalDeviceMemoryProperties& mem_props, const VkDeviceSize size, const VkBufferUsageFlags usage);
+    data create(const VkDevice device, const VkPhysicalDeviceMemoryProperties& mem_props, const VkDeviceSize offset, VkBufferUsageFlags usage, const std::vector<uint8_t>& data, const VkQueue xfer_q, const VkCommandBuffer cmd_buff);
 
-class vk_descriptor_sets
-{
-public:
-    vk_descriptor_sets(const VkDevice& device, const VkDescriptorPool& desc_pool, const std::vector<VkDescriptorSetLayout>& desc_set_layouts, const uint32_t& max_sets);
-
-    std::vector<VkDescriptorSet> desc_sets;
-    
-private:
-    VkDevice device = VK_NULL_HANDLE;
-};
-
-struct host_buffer_memory
-{
-    host_buffer_memory(const VkDevice device, const VkPhysicalDeviceMemoryProperties& mem_props, const VkDeviceSize size, const VkBufferUsageFlags usage);
-    host_buffer_memory(const VkDevice device, const VkPhysicalDeviceMemoryProperties& mem_props, const VkDeviceSize offset, const VkBufferUsageFlags usage, const std::vector<uint8_t>& data);
-
-    std::unique_ptr<vk_buffer> buffer;
-    std::unique_ptr<vk_device_memory> memory;
-
-    // Only valid for buffers with VK**SHADER_ADDRESS_BIT
-    VkDeviceAddress addr = 0;
-    VkBufferUsageFlags usage = VK_BUFFER_USAGE_FLAG_BITS_MAX_ENUM;
-
-    void* map = nullptr;
-};
-
-struct device_buffer_memory
-{
-    device_buffer_memory(const VkDevice device, const VkPhysicalDeviceMemoryProperties& mem_props, const VkDeviceSize size, const VkBufferUsageFlags usage);
-    device_buffer_memory(const VkDevice device, const VkPhysicalDeviceMemoryProperties& mem_props, const VkDeviceSize offset, VkBufferUsageFlags usage, const std::vector<uint8_t>& data, const VkQueue xfer_q, const VkCommandBuffer cmd_buff);
-
-    std::unique_ptr<vk_buffer> buffer;
-    std::unique_ptr<vk_device_memory> memory;
-
-    // Only valid for buffers with VK**SHADER_ADDRESS_BIT
-    VkDeviceAddress addr = 0;
-    VkBufferUsageFlags usage = VK_BUFFER_USAGE_FLAG_BITS_MAX_ENUM;
-};
+    void destroy(const data bm, const VkDevice device);
+}
 
 static void copy_buffer_to_buffer(VkBuffer src_buffer, const VkBuffer dst_buffer, const std::vector<VkBufferCopy> regions, const VkCommandBuffer cmd_buff, const VkQueue xfer_q);

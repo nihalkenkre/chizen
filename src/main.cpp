@@ -315,6 +315,7 @@ int main(int argc, char** argv)
 
     //ShowWindow(h_rndrr_wnd, SW_SHOW);
 
+    VK_CHECK("volk initialize", volkInitialize());
     r = std::make_unique<vk_renderer>(h_scene_wnd);
     s = std::make_unique<default_scene>();
 
