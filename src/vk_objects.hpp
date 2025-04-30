@@ -302,7 +302,7 @@ namespace vk_swapchain
         std::vector<VkFence> present_fences;
     };
 
-    data create(const VkDevice device, const vk_surface::data& surface, const vk_phy_dev::data& phy_dev);
+    vk_swapchain::data create(const VkDevice device, const vk_surface::data& surface, const vk_phy_dev::data& phy_dev, const std::string& name);
     void destroy(vk_swapchain::data data, const VkDevice device);
 }
 
@@ -352,22 +352,27 @@ namespace vk_command_pool
         std::vector<VkCommandBuffer> cmd_buffs;
     };
 
-    data create(const VkDevice device, const uint32_t q_fly_idx, const uint32_t cmd_buffs_count);
+    data create(const VkDevice device, const uint32_t q_fly_idx, const uint32_t cmd_buffs_count, const std::string& name);
     void destroy(const VkCommandPool cmd_pool, const VkDevice device);
 }
 
-class vk_command_buffer
+//class vk_command_buffer
+//{
+//public:
+//    vk_command_buffer() {}
+//    vk_command_buffer(const VkDevice device, const VkCommandPool cmd_pool, const std::string& name);
+//
+//    VkCommandBuffer cmd_buff;
+//
+//private:
+//    VkCommandPool cmd_pool;
+//    VkDevice device;
+//};
+
+namespace vk_command_buffer
 {
-public:
-    vk_command_buffer() {}
-    vk_command_buffer(const VkDevice device, const VkCommandPool cmd_pool);
-
-    VkCommandBuffer cmd_buff;
-
-private:
-    VkCommandPool cmd_pool;
-    VkDevice device;
-};
+    VkCommandBuffer allocate(const VkDevice device, const VkCommandPool cmd_pool, const std::string& name);
+}
 
 //class vk_semaphore
 //{
@@ -419,7 +424,7 @@ namespace vk_semaphore
         VkSemaphore semaphore;
     };
 
-    data create(const VkDevice device, const bool is_timeline);
+    data create(const VkDevice device, const bool is_timeline, const std::string& name);
     void destroy(const VkSemaphore semaphore, const VkDevice device);
 }
 
@@ -497,7 +502,7 @@ namespace vk_semaphore
 
 namespace vk_buffer
 {
-    VkBuffer create(const VkDevice device, const VkDeviceSize size, const VkBufferUsageFlags usage);
+    VkBuffer create(const VkDevice device, const VkDeviceSize size, const VkBufferUsageFlags usage, const std::string& name);
     void destroy(const VkBuffer buffer, const VkDevice device);
 }
 
@@ -540,8 +545,8 @@ namespace vk_buffer
 
 namespace vk_device_memory
 {
-    VkDeviceMemory allocate(const VkDevice device, const VkDeviceSize size, const uint32_t type_id);
-    VkDeviceMemory allocate(const VkDevice device, const VkDeviceSize size, const uint32_t type_id, const VkMemoryAllocateFlagsInfo& flags_info);
+    VkDeviceMemory allocate(const VkDevice device, const VkDeviceSize size, const uint32_t type_id, const std::string& name);
+    VkDeviceMemory allocate(const VkDevice device, const VkDeviceSize size, const uint32_t type_id, const VkMemoryAllocateFlagsInfo& flags_info, const std::string& name);
     void free(const VkDeviceMemory memory, const VkDevice device);
 }
 
@@ -654,7 +659,7 @@ namespace vk_graphics_pipeline
         CHI_PIPELINE_TYPE p_type = CHI_PIPELINE_TYPE::VERTEX;
     };
 
-    data create(const VkDevice device, const std::string& path, const CHI_PIPELINE_TYPE& p_type, const VkFormat format, const VkPhysicalDeviceDescriptorBufferPropertiesEXT& desc_buff_props);
+    vk_graphics_pipeline::data create(const VkDevice device, const std::string& path, const CHI_PIPELINE_TYPE& p_type, const VkFormat format, const VkPhysicalDeviceDescriptorBufferPropertiesEXT& desc_buff_props, const std::string& name);
     void destroy(const data d, const VkDevice device);
 }
 
@@ -731,12 +736,14 @@ namespace vk_descriptor_sets
 
 namespace vk_image
 {
-    VkImage create(const VkDevice& device, const VkExtent3D& extent, const VkFormat& format, const VkImageUsageFlags& usage);
+    VkImage create(const VkDevice device, const VkExtent3D& extent, const VkFormat format, const VkImageUsageFlags usage);
     void destroy(const VkImage image, const VkDevice device);
 }
 
 namespace vk_image_view
 {
+    VkImageView create(const VkDevice device, const VkImage image, const VkImageViewType view_type, const VkFormat format);
+    void destroy(const VkImageView image_view, const VkDevice device);
 };
 
 //struct host_buffer_memory
@@ -796,8 +803,8 @@ namespace host_buffer_memory
         void* map = nullptr;
     };
 
-    data create(const VkDevice device, const VkPhysicalDeviceMemoryProperties& mem_props, const VkDeviceSize size, const VkBufferUsageFlags usage);
-    data create(const VkDevice device, const VkPhysicalDeviceMemoryProperties& mem_props, const VkDeviceSize offset, const VkBufferUsageFlags usage, const std::vector<uint8_t>& data);
+    data create(const VkDevice device, const VkPhysicalDeviceMemoryProperties& mem_props, const VkDeviceSize size, const VkBufferUsageFlags usage, const std::string& name);
+    data create(const VkDevice device, const VkPhysicalDeviceMemoryProperties& mem_props, const VkDeviceSize offset, const VkBufferUsageFlags usage, const std::vector<uint8_t>& data, const std::string& name);
 
     void destroy(const data bm, const VkDevice device);
 }
@@ -855,8 +862,8 @@ namespace device_buffer_memory
         VkBufferUsageFlags usage = VK_BUFFER_USAGE_FLAG_BITS_MAX_ENUM;
     };
 
-    data create(const VkDevice device, const VkPhysicalDeviceMemoryProperties& mem_props, const VkDeviceSize size, const VkBufferUsageFlags usage);
-    data create(const VkDevice device, const VkPhysicalDeviceMemoryProperties& mem_props, const VkDeviceSize offset, VkBufferUsageFlags usage, const std::vector<uint8_t>& data, const VkQueue xfer_q, const VkCommandBuffer cmd_buff);
+    data create(const VkDevice device, const VkPhysicalDeviceMemoryProperties& mem_props, const VkDeviceSize size, const VkBufferUsageFlags usage, const std::string& name);
+    data create(const VkDevice device, const VkPhysicalDeviceMemoryProperties& mem_props, const VkDeviceSize offset, VkBufferUsageFlags usage, const std::vector<uint8_t>& data, const VkQueue xfer_q, const VkCommandBuffer cmd_buff, const std::string& name);
 
     void destroy(const data bm, const VkDevice device);
 }

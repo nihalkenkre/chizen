@@ -62,9 +62,9 @@ vk_renderer::vk_renderer(const HWND h_wnd) : img_idx(0), acq_wait_sem_val(0)
     surface = vk_surface::create(instance, GetModuleHandleA(nullptr), h_wnd);
     phy_dev = vk_phy_dev::get_phy_dev(instance, &surface);
     device = vk_device::create(phy_dev.phy_dev, phy_dev.q_fly_idx, phy_dev.q_count);
-    swapchain = vk_swapchain::create(device, surface, phy_dev);
-    acq_sig_sem = vk_semaphore::create(device, false);
-    acq_wait_sem = vk_semaphore::create(device, true);
+    swapchain = vk_swapchain::create(device, surface, phy_dev, "swapchain");
+    acq_sig_sem = vk_semaphore::create(device, false, "acquire signal semaphore");
+    acq_wait_sem = vk_semaphore::create(device, true, "acquire wait semaphore");
 
     // signalling so that the render function does not stall on vkAcquireNextImage the first time
     const VkSemaphoreSignalInfo sem_sig_info = {
@@ -88,7 +88,7 @@ vk_renderer::vk_renderer(const HWND h_wnd) : img_idx(0), acq_wait_sem_val(0)
     queue_info.queueIndex = 1;
     vkGetDeviceQueue2(device, &queue_info, &xfer_q);
 
-    xfer_cmd_pool = vk_command_pool::create(device, phy_dev.q_fly_idx, 1);
+    xfer_cmd_pool = vk_command_pool::create(device, phy_dev.q_fly_idx, 1, "xfer command pool");
 }
 
 void vk_renderer::import_scene_data(const std::string& file_path)
@@ -104,7 +104,7 @@ void vk_renderer::resize(const UINT width, const UINT height)
     VK_CHECK("get surface capabilities", vkGetPhysicalDeviceSurfaceCapabilitiesKHR(phy_dev.phy_dev, surface.surface, &surface.surf_caps));
 
     vk_swapchain::destroy(swapchain, device);
-    swapchain = vk_swapchain::create(device, surface, phy_dev);
+    swapchain = vk_swapchain::create(device, surface, phy_dev, "swapchain");
 }
 
 void vk_renderer::begin_frame()
@@ -412,13 +412,13 @@ scene_data::data scene_data::create(const std::string& file_path, const vk_phy_d
                 if (std::filesystem::is_directory(pipeline_type)) {
 
                     if (pipeline_type.path().string().find("mesh") != std::string::npos) {
-                        d.mesh_d_sets_pipeline = vk_graphics_pipeline::create(device, pipeline_type.path().string(), CHI_PIPELINE_TYPE::MESH, surface.format.format, phy_dev.desc_buff_props);
+                        d.mesh_pipeline_d_sets = vk_graphics_pipeline::create(device, pipeline_type.path().string(), CHI_PIPELINE_TYPE::MESH, surface.format.format, phy_dev.desc_buff_props, "mesh pipeline d sets");
 #ifdef DESC_BUFFER
                         d.mesh_d_buff_pipeline = vk_graphics_pipeline::create(device, pipeline_type.path().string(), CHI_PIPELINE_TYPE::MESH, surface.format.format, phy_dev.desc_buff_props);
 #endif // DESC_BUFFER
                     }
                     else if (pipeline_type.path().string().find("vertex") != std::string::npos) {
-                        d.vtx_pipeline_d_sets = vk_graphics_pipeline::create(device, pipeline_type.path().string(), CHI_PIPELINE_TYPE::VERTEX, surface.format.format, phy_dev.desc_buff_props);
+                        d.vtx_pipeline_d_sets = vk_graphics_pipeline::create(device, pipeline_type.path().string(), CHI_PIPELINE_TYPE::VERTEX, surface.format.format, phy_dev.desc_buff_props, "vtx pipeline d sets");
 #ifdef DESC_BUFFER
                         d.vtx_pipeline_d_buff = vk_graphics_pipeline::create(device, pipeline_type.path().string(), CHI_PIPELINE_TYPE::VERTEX, surface.format.format, phy_dev.desc_buff_props);
 #endif // DESC_BUFFER
@@ -708,11 +708,11 @@ scene_data::data scene_data::create(const std::string& file_path, const vk_phy_d
     d.geom_buff_mem = device_buffer_memory::create(
         device, phy_dev.mem_props, 0,
         VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_VERTEX_BUFFER_BIT | VK_BUFFER_USAGE_INDEX_BUFFER_BIT,
-        vertex_geom_data, xfer_q, cmd_buff);
+        vertex_geom_data, xfer_q, cmd_buff, "geom buffer memory");
     d.uni_buff_mem = host_buffer_memory::create(
         device, phy_dev.mem_props, 0,
         VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT | VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT,
-        xform_data);
+        xform_data, "uniform buffer memory");
 
     {
         // create descriptors for vertex pipeline
@@ -775,8 +775,8 @@ void scene_data::destroy(const data d, const VkDevice device)
     host_buffer_memory::destroy(d.desc_buff_mem, device);
     device_buffer_memory::destroy(d.geom_buff_mem, device);
     vk_descriptor_pool::destroy(d.desc_pool, device);
-    vk_graphics_pipeline::destroy(d.mesh_d_sets_pipeline, device);
-    vk_graphics_pipeline::destroy(d.mesh_d_buff_pipeline, device);
+    vk_graphics_pipeline::destroy(d.mesh_pipeline_d_sets, device);
+    vk_graphics_pipeline::destroy(d.mesh_pipeline_d_buff, device);
     vk_graphics_pipeline::destroy(d.vtx_pipeline_d_sets, device);
     vk_graphics_pipeline::destroy(d.vtx_pipeline_d_buff, device);
 }

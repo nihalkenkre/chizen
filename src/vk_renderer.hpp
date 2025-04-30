@@ -103,8 +103,8 @@ namespace scene_data
         VkDescriptorPool desc_pool = VK_NULL_HANDLE;
         std::vector<VkDescriptorSet> desc_sets;
 
-        vk_graphics_pipeline::data mesh_d_sets_pipeline;
-        vk_graphics_pipeline::data mesh_d_buff_pipeline;
+        vk_graphics_pipeline::data mesh_pipeline_d_sets;
+        vk_graphics_pipeline::data mesh_pipeline_d_buff;
         vk_graphics_pipeline::data vtx_pipeline_d_sets;
         vk_graphics_pipeline::data vtx_pipeline_d_buff;
     };
