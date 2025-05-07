@@ -18,6 +18,10 @@ enum CHI_PIPELINE_TYPE
     MESH,
 };
 
+uint32_t get_memory_type_id(const VkPhysicalDeviceMemoryProperties mem_props, const VkMemoryRequirements mem_reqs, uint32_t mem_prop_types);
+void copy_buffer_to_buffer(const VkBuffer src_buffer, const VkBuffer dst_buffer, const std::vector<VkBufferCopy> regions, const VkCommandBuffer cmd_buff, const VkQueue xfer_q);
+void copy_buffer_to_image(const VkBuffer src_buffer, const VkImage dst_image, const VkImageLayout dst_image_layout, const std::vector<VkBufferImageCopy2>& regions, const VkCommandBuffer cmd_buff, const VkQueue xfer_q);
+
 static inline void VK_CHECK(const std::string& action, const VkResult result)
 {
     if (result < VK_SUCCESS)
@@ -88,8 +92,8 @@ namespace vk_surface
     {
         VkSurfaceKHR surface = VK_NULL_HANDLE;
         VkSurfaceCapabilitiesKHR surf_caps = {};
-        VkSurfaceFormatKHR format = {};
         VkPresentModeKHR present_mode = {};
+        VkSurfaceFormatKHR format = {};
         HINSTANCE h_instance = nullptr;
         HWND h_wnd = nullptr;
     };
@@ -294,12 +298,12 @@ namespace vk_swapchain
         VkSwapchainKHR swapchain;
         VkCommandPool cmd_pool;
 
-        uint32_t images_count;
         std::vector<VkImage> images;
         std::vector<VkImageView> image_views;
         std::vector<VkCommandBuffer> cmd_buffs;
         std::vector<VkSemaphore> rndr_semaphores;
         std::vector<VkFence> present_fences;
+        uint32_t images_count;
     };
 
     vk_swapchain::data create(const VkDevice device, const vk_surface::data& surface, const vk_phy_dev::data& phy_dev, const std::string& name);
@@ -420,8 +424,8 @@ namespace vk_semaphore
 {
     struct data
     {
-        bool is_timeline;
         VkSemaphore semaphore;
+        bool is_timeline;
     };
 
     data create(const VkDevice device, const bool is_timeline, const std::string& name);
@@ -701,7 +705,7 @@ namespace vk_graphics_pipeline
 
 namespace vk_descriptor_pool
 {
-    VkDescriptorPool create(const VkDevice& device, const uint32_t& max_sets, const std::vector<VkDescriptorPoolSize>& pool_sizes);
+    VkDescriptorPool create(const VkDevice& device, const uint32_t& max_sets, const std::vector<VkDescriptorPoolSize>& pool_sizes, const std::string& name);
     void destroy(const VkDescriptorPool desc_pool, const VkDevice device);
 }
 
@@ -719,7 +723,7 @@ namespace vk_descriptor_pool
 
 namespace vk_descriptor_sets
 {
-    std::vector<VkDescriptorSet> allocate(const VkDevice& device, const VkDescriptorPool& desc_pool, const std::vector<VkDescriptorSetLayout>& desc_set_layouts);
+    std::vector<VkDescriptorSet> allocate(const VkDevice& device, const VkDescriptorPool& desc_pool, const std::vector<VkDescriptorSetLayout>& desc_set_layouts, const std::string& name);
 }
 
 //class vk_image
@@ -736,15 +740,21 @@ namespace vk_descriptor_sets
 
 namespace vk_image
 {
-    VkImage create(const VkDevice device, const VkExtent3D& extent, const VkFormat format, const VkImageUsageFlags usage);
+    VkImage create(const VkDevice device, const VkExtent3D& extent, const VkFormat format, const VkImageUsageFlags usage, const std::string& name);
     void destroy(const VkImage image, const VkDevice device);
 }
 
 namespace vk_image_view
 {
-    VkImageView create(const VkDevice device, const VkImage image, const VkImageViewType view_type, const VkFormat format);
+    VkImageView create(const VkDevice device, const VkImage image, const VkImageViewType view_type, const VkFormat format, const std::string& name);
     void destroy(const VkImageView image_view, const VkDevice device);
 };
+
+namespace vk_sampler
+{
+    VkSampler create(const VkDevice device, const VkFilter min_filter, const VkFilter mag_filter, const VkSamplerAddressMode address_mode_u, const VkSamplerAddressMode address_mode_v, const float& max_anisotropy, const float min_lod, const float max_lod, const std::string& name);
+    void destroy(const VkSampler sampler, const VkDevice device);
+}
 
 //struct host_buffer_memory
 //{
@@ -798,9 +808,9 @@ namespace host_buffer_memory
 
         // Only valid for buffers with VK**SHADER_ADDRESS_BIT
         VkDeviceAddress addr = 0;
-        VkBufferUsageFlags usage = VK_BUFFER_USAGE_FLAG_BITS_MAX_ENUM;
-
         void* map = nullptr;
+
+        VkBufferUsageFlags usage = VK_BUFFER_USAGE_FLAG_BITS_MAX_ENUM;
     };
 
     data create(const VkDevice device, const VkPhysicalDeviceMemoryProperties& mem_props, const VkDeviceSize size, const VkBufferUsageFlags usage, const std::string& name);
@@ -868,4 +878,14 @@ namespace device_buffer_memory
     void destroy(const data bm, const VkDevice device);
 }
 
-static void copy_buffer_to_buffer(VkBuffer src_buffer, const VkBuffer dst_buffer, const std::vector<VkBufferCopy> regions, const VkCommandBuffer cmd_buff, const VkQueue xfer_q);
+namespace vk_desc_img_info
+{
+    struct data
+    {
+        VkDescriptorImageInfo desc;
+        VkImage image;
+    };
+
+    data create(const VkDevice device);
+    void destroy(const data image_info, const VkDevice device);
+}

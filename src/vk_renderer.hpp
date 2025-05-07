@@ -8,6 +8,7 @@
 
 #include <cglm/include/cglm/cglm.h>
 
+#include <stb/stb_image.h>
 
 struct float3
 {
@@ -38,10 +39,11 @@ struct vertex_shader_info
     VkDeviceSize positions_offset = 0;
     VkDeviceSize uvs_offsets = 0;
     VkDeviceSize indices_offset = 0;
-    uint32_t indices_count = 0;
 
     std::vector<uint8_t> xform_d_buff_desc;
     VkDescriptorBufferInfo xform_d_set_desc = {};
+
+    uint32_t indices_count = 0;
 };
 
 struct metal_rough_descriptors
@@ -49,9 +51,27 @@ struct metal_rough_descriptors
     VkDescriptorImageInfo base_color_desc;
     VkDescriptorImageInfo metal_rough_desc;
 
+    VkImage base_color_image;
+    VkImage metal_rough_image;
+
+    VkMemoryRequirements base_color_mem_reqs;
+    VkMemoryRequirements metal_rough_mem_reqs;
+
     float base_color_factors[4];
     float metalness_factor;
     float roughness_factor;
+
+    stbi_uc* base_color_pixels;
+    int base_color_width;
+    int base_color_height;
+    VkDeviceSize base_color_len;
+    VkDeviceSize base_color_pixels_offset;
+
+    stbi_uc* metal_rough_pixels;
+    int metal_rough_width;
+    int metal_rough_height;
+    VkDeviceSize metal_rough_len;
+    VkDeviceSize metal_rough_pixels_offsets;
 };
 
 struct clearcoat_descriptors
@@ -76,16 +96,24 @@ struct primitive_data
     std::vector<uint8_t> positions;
     std::vector<uint8_t> uvs;
 
-    material_descriptors mat_dscs;
-
+    // primitive level xform desc 
+    VkDescriptorBufferInfo xform_desc;
+    // primitive level desc pool 
     VkDescriptorPool desc_pool = VK_NULL_HANDLE;
+    // primitive level desc set
     VkDescriptorSet desc_set = VK_NULL_HANDLE;
 };
 
 struct material_info
 {
     uint64_t id;
+    material_descriptors mat_dscs;
     std::vector<primitive_data> pds;
+
+    // material level desc pool
+    VkDescriptorPool desc_pool = VK_NULL_HANDLE;
+    // material level desc set
+    VkDescriptorSet desc_set = VK_NULL_HANDLE;
 };
 
 namespace scene_data
@@ -97,11 +125,16 @@ namespace scene_data
         host_buffer_memory::data uni_buff_mem;
         host_buffer_memory::data desc_buff_mem;
 
-        std::vector<uint8_t> cam_xform_d_buff_desc;
-        VkDescriptorBufferInfo cam_xform_d_set_desc = {};
+        VkDeviceMemory images_memory = VK_NULL_HANDLE;
 
+        std::vector<uint8_t> cam_xform_d_buff_desc;
+
+        // scene level camera xform desc 
+        VkDescriptorBufferInfo cam_desc;
+        // scene level desc pool
         VkDescriptorPool desc_pool = VK_NULL_HANDLE;
-        std::vector<VkDescriptorSet> desc_sets;
+        // scene level desc set
+        VkDescriptorSet desc_set = VK_NULL_HANDLE;
 
         vk_graphics_pipeline::data mesh_pipeline_d_sets;
         vk_graphics_pipeline::data mesh_pipeline_d_buff;
@@ -119,7 +152,10 @@ public:
     vk_renderer(const HWND h_wnd);
 
     void import_scene_data(const std::string& file_path) override;
-    void resize(const UINT width, const UINT height) override;
+    void handle_mouse_move(const POINT pt) override;
+    void handle_mouse_l_btn_down() override;
+    void handle_mouse_l_btn_up() override;
+    void resize(const uint32_t width, const uint32_t height) override;
     void begin_frame() override;
     void clear_frame(const float color[]) override;
     void render_world() override;

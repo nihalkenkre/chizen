@@ -13,6 +13,127 @@ inline static VkDeviceSize ALIGNED_SIZE(VkDeviceSize value, VkDeviceSize alignme
     return (value + alignment - 1) & ~(alignment - 1);
 }
 
+uint32_t get_memory_type_id(const VkPhysicalDeviceMemoryProperties mem_props, const VkMemoryRequirements mem_reqs, uint32_t mem_prop_types)
+{
+    uint32_t mem_id = UINT32_MAX;
+
+    for (uint32_t mt = 0; mt < mem_props.memoryTypeCount; ++mt)
+    {
+        if (mem_reqs.memoryTypeBits & (1 << mt))
+        {
+            if (mem_props.memoryTypes[mt].propertyFlags & mem_prop_types)
+            {
+                if (mem_props.memoryHeaps[mem_props.memoryTypes[mt].heapIndex].size > mem_reqs.size)
+                {
+                    mem_id = mt;
+                    break;
+                }
+            }
+        }
+    }
+
+    return mem_id;
+}
+
+void copy_buffer_to_buffer(const VkBuffer src_buffer, const VkBuffer dst_buffer, const std::vector<VkBufferCopy> regions, const VkCommandBuffer cmd_buff, const VkQueue xfer_q)
+{
+    const VkCommandBufferBeginInfo begin_info = {
+        .sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO,
+        .flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT,
+    };
+    VK_CHECK("begin command buffer", vkBeginCommandBuffer(cmd_buff, &begin_info));
+
+    vkCmdCopyBuffer(cmd_buff, src_buffer, dst_buffer, static_cast<uint32_t>(regions.size()), regions.data());
+
+    VK_CHECK("end command buffer", vkEndCommandBuffer(cmd_buff));
+
+    const VkSubmitInfo submit_infos[] = {
+        {
+            .sType = VK_STRUCTURE_TYPE_SUBMIT_INFO,
+            .commandBufferCount = 1,
+            .pCommandBuffers = &cmd_buff,
+        },
+    };
+
+    VK_CHECK("queue submit", vkQueueSubmit(xfer_q, _countof(submit_infos), submit_infos, VK_NULL_HANDLE));
+    VK_CHECK("queue wait idle", vkQueueWaitIdle(xfer_q));
+    VK_CHECK("reset buffer copy cmd buff", vkResetCommandBuffer(cmd_buff, VK_COMMAND_BUFFER_RESET_RELEASE_RESOURCES_BIT));
+}
+
+void copy_buffer_to_image(const VkBuffer src_buffer, const VkImage dst_image, const VkImageLayout dst_image_layout, const std::vector<VkBufferImageCopy2>& regions, const VkCommandBuffer cmd_buff, const VkQueue xfer_q)
+{
+    const VkCommandBufferBeginInfo begin_info = {
+        .sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO,
+        .flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT,
+    };
+    VK_CHECK("begin command buffer", vkBeginCommandBuffer(cmd_buff, &begin_info));
+
+    const VkImageMemoryBarrier2 img_copy_bar = {
+        .sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER_2,
+        .srcStageMask = VK_PIPELINE_STAGE_2_TOP_OF_PIPE_BIT,
+        .srcAccessMask = 0,
+        .dstStageMask = VK_PIPELINE_STAGE_2_TRANSFER_BIT,
+        .dstAccessMask = VK_ACCESS_2_TRANSFER_WRITE_BIT,
+        .oldLayout = VK_IMAGE_LAYOUT_UNDEFINED,
+        .newLayout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
+        .image = dst_image,
+        .subresourceRange = {
+            .aspectMask = VK_IMAGE_ASPECT_COLOR_BIT,
+            .levelCount = 1,
+            .layerCount = 1,
+        },
+    };
+    VkDependencyInfo dependency_info = {
+        .sType = VK_STRUCTURE_TYPE_DEPENDENCY_INFO,
+        .imageMemoryBarrierCount = 1,
+        .pImageMemoryBarriers = &img_copy_bar,
+    };
+    vkCmdPipelineBarrier2(cmd_buff, &dependency_info);
+
+    const VkCopyBufferToImageInfo2 copy_info = {
+        .sType = VK_STRUCTURE_TYPE_COPY_BUFFER_TO_IMAGE_INFO_2,
+        .srcBuffer = src_buffer,
+        .dstImage = dst_image,
+        .dstImageLayout = dst_image_layout,
+        .regionCount = static_cast<uint32_t>(regions.size()),
+        .pRegions = regions.data(),
+    };
+    vkCmdCopyBufferToImage2(cmd_buff, &copy_info);
+
+    const VkImageMemoryBarrier2 img_lyt_chng_bar = {
+        .sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER_2,
+        .srcStageMask = VK_PIPELINE_STAGE_2_TRANSFER_BIT,
+        .srcAccessMask = VK_ACCESS_2_TRANSFER_WRITE_BIT,
+        .dstStageMask = VK_PIPELINE_STAGE_2_BOTTOM_OF_PIPE_BIT,
+        .dstAccessMask = 0,
+        .oldLayout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
+        .newLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
+        .image = dst_image,
+        .subresourceRange = {
+            .aspectMask = VK_IMAGE_ASPECT_COLOR_BIT,
+            .levelCount = 1,
+            .layerCount = 1,
+        },
+    };
+
+    dependency_info.pImageMemoryBarriers = &img_lyt_chng_bar;
+    vkCmdPipelineBarrier2(cmd_buff, &dependency_info);
+
+    VK_CHECK("end command buffer", vkEndCommandBuffer(cmd_buff));
+
+    const VkSubmitInfo submit_infos[] = {
+        {
+            .sType = VK_STRUCTURE_TYPE_SUBMIT_INFO,
+            .commandBufferCount = 1,
+            .pCommandBuffers = &cmd_buff,
+        },
+    };
+
+    VK_CHECK("queue submit", vkQueueSubmit(xfer_q, _countof(submit_infos), submit_infos, VK_NULL_HANDLE));
+    VK_CHECK("queue wait idle", vkQueueWaitIdle(xfer_q));
+    VK_CHECK("reset buffer copy cmd buff", vkResetCommandBuffer(cmd_buff, VK_COMMAND_BUFFER_RESET_RELEASE_RESOURCES_BIT));
+}
+
 VkInstance vk_instance::create()
 {
     std::vector<const char*> req_ext_names = {
@@ -193,7 +314,6 @@ VkDevice vk_device::create(const VkPhysicalDevice phy_dev, const uint32_t q_fly_
         VK_EXT_SWAPCHAIN_MAINTENANCE_1_EXTENSION_NAME,
         VK_EXT_MESH_SHADER_EXTENSION_NAME,
         VK_EXT_EXTENDED_DYNAMIC_STATE_3_EXTENSION_NAME,
-        VK_KHR_MAINTENANCE_4_EXTENSION_NAME,
 #ifdef DESC_BUFFER
         VK_EXT_DESCRIPTOR_BUFFER_EXTENSION_NAME,
 #endif // DESC_BUFFER
@@ -407,29 +527,36 @@ vk_swapchain::data vk_swapchain::create(const VkDevice device, const vk_surface:
 
     for (uint32_t i = 0; i < d.images_count; ++i)
     {
+        char i_str[16];
+        char object_name[128] = "swapchain image ";
+
         name_info.objectType = VK_OBJECT_TYPE_IMAGE;
         name_info.objectHandle = reinterpret_cast<uint64_t>(d.images[i]);
-        name_info.pObjectName = "swapchain image" + i;
+        name_info.pObjectName = std::strcat(object_name, _itoa(i, i_str, 10));
         VK_CHECK("setting swapchain image name", vkSetDebugUtilsObjectNameEXT(device, &name_info));
 
+        std::strcpy(object_name, "swapchain image view ");
         name_info.objectType = VK_OBJECT_TYPE_IMAGE_VIEW;
         name_info.objectHandle = reinterpret_cast<uint64_t>(d.image_views[i]);
-        name_info.pObjectName = "swapchain image view" + i;
+        name_info.pObjectName = std::strcat(object_name, _itoa(i, i_str, 10));
         VK_CHECK("setting swapcahin image view name", vkSetDebugUtilsObjectNameEXT(device, &name_info));
 
+        std::strcpy(object_name, "swapchain command buffer ");
         name_info.objectType = VK_OBJECT_TYPE_COMMAND_BUFFER;
         name_info.objectHandle = reinterpret_cast<uint64_t>(d.cmd_buffs[i]);
-        name_info.pObjectName = "swapchain command buffer " + i;
+        name_info.pObjectName = std::strcat(object_name, _itoa(i, i_str, 10));
         VK_CHECK("setting swapchain command buffer name", vkSetDebugUtilsObjectNameEXT(device, &name_info));
 
+        std::strcpy(object_name, "swapchain render semaphore ");
         name_info.objectType = VK_OBJECT_TYPE_SEMAPHORE;
         name_info.objectHandle = reinterpret_cast<uint64_t>(d.rndr_semaphores[i]);
-        name_info.pObjectName = "swapchain render sem " + i;
+        name_info.pObjectName = std::strcat(object_name, _itoa(i, i_str, 10));
         VK_CHECK("setting swapchain render sem name", vkSetDebugUtilsObjectNameEXT(device, &name_info));
 
+        std::strcpy(object_name, "swapchain present fence ");
         name_info.objectType = VK_OBJECT_TYPE_FENCE;
         name_info.objectHandle = reinterpret_cast<uint64_t>(d.present_fences[i]);
-        name_info.pObjectName = "swapchain present fence " + i;
+        name_info.pObjectName = std::strcat(object_name, _itoa(i, i_str, 10));
         VK_CHECK("setting swapchain present fence name", vkSetDebugUtilsObjectNameEXT(device, &name_info));
     }
 #endif // DEBUG
@@ -680,53 +807,6 @@ void vk_device_memory::free(const VkDeviceMemory memory, const VkDevice device)
     }
 }
 
-static uint32_t get_memory_type_id(const VkPhysicalDeviceMemoryProperties mem_props, const VkMemoryRequirements mem_reqs, uint32_t mem_prop_types)
-{
-    uint32_t mem_id = UINT32_MAX;
-
-    for (uint32_t mt = 0; mt < mem_props.memoryTypeCount; ++mt)
-    {
-        if (mem_reqs.memoryTypeBits & (1 << mt))
-        {
-            if (mem_props.memoryTypes[mt].propertyFlags & mem_prop_types)
-            {
-                if (mem_props.memoryHeaps[mem_props.memoryTypes[mt].heapIndex].size > mem_reqs.size)
-                {
-                    mem_id = mt;
-                    break;
-                }
-            }
-        }
-    }
-
-    return mem_id;
-}
-
-static void copy_buffer_to_buffer(VkBuffer src_buffer, const VkBuffer dst_buffer, const std::vector<VkBufferCopy> regions, const VkCommandBuffer cmd_buff, const VkQueue xfer_q)
-{
-    const VkCommandBufferBeginInfo begin_info = {
-        .sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO,
-        .flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT,
-    };
-    VK_CHECK("begin command buffer", vkBeginCommandBuffer(cmd_buff, &begin_info));
-
-    vkCmdCopyBuffer(cmd_buff, src_buffer, dst_buffer, static_cast<uint32_t>(regions.size()), regions.data());
-
-    VK_CHECK("end command buffer", vkEndCommandBuffer(cmd_buff));
-
-    const VkSubmitInfo submit_infos[] = {
-        {
-            .sType = VK_STRUCTURE_TYPE_SUBMIT_INFO,
-            .commandBufferCount = 1,
-            .pCommandBuffers = &cmd_buff,
-        },
-    };
-
-    VK_CHECK("queue submit", vkQueueSubmit(xfer_q, _countof(submit_infos), submit_infos, VK_NULL_HANDLE));
-    VK_CHECK("queue wait idle", vkQueueWaitIdle(xfer_q));
-    VK_CHECK("reset buffer copy cmd buff", vkResetCommandBuffer(cmd_buff, VK_COMMAND_BUFFER_RESET_RELEASE_RESOURCES_BIT));
-}
-
 host_buffer_memory::data host_buffer_memory::create(const VkDevice device, const VkPhysicalDeviceMemoryProperties& mem_props, const VkDeviceSize size, const VkBufferUsageFlags usage, const std::string& name)
 {
     host_buffer_memory::data d;
@@ -834,15 +914,8 @@ host_buffer_memory::data host_buffer_memory::create(const VkDevice device, const
 
 void host_buffer_memory::destroy(const data bm, const VkDevice device)
 {
-    if (bm.buffer != VK_NULL_HANDLE && device != VK_NULL_HANDLE)
-    {
-        vkDestroyBuffer(device, bm.buffer, nullptr);
-    }
-
-    if (bm.memory != VK_NULL_HANDLE && device != VK_NULL_HANDLE)
-    {
-        vkFreeMemory(device, bm.memory, nullptr);
-    }
+    vk_buffer::destroy(bm.buffer, device);
+    vk_device_memory::free(bm.memory, device);
 }
 
 device_buffer_memory::data device_buffer_memory::create(const VkDevice device, const VkPhysicalDeviceMemoryProperties& mem_props, const VkDeviceSize size, const VkBufferUsageFlags usage, const std::string& name)
@@ -937,7 +1010,7 @@ device_buffer_memory::data device_buffer_memory::create(const VkDevice device, c
         d.usage = usage;
     }
 
-    std::vector<VkBufferCopy> regions = {
+    const std::vector<VkBufferCopy> regions = {
         {
             .size = data.size(),
         },
@@ -963,15 +1036,8 @@ device_buffer_memory::data device_buffer_memory::create(const VkDevice device, c
 
 void device_buffer_memory::destroy(const data bm, const VkDevice device)
 {
-    if (bm.buffer != VK_NULL_HANDLE && device != VK_NULL_HANDLE)
-    {
-        vkDestroyBuffer(device, bm.buffer, nullptr);
-    }
-
-    if (bm.memory != VK_NULL_HANDLE && device != VK_NULL_HANDLE)
-    {
-        vkFreeMemory(device, bm.memory, nullptr);
-    }
+    vk_buffer::destroy(bm.buffer, device);
+    vk_device_memory::free(bm.memory, device);
 }
 
 //vk_descriptor_set_layout::vk_descriptor_set_layout(const VkDevice device, const SpvReflectDescriptorSet* spv_dsl, const VkShaderStageFlags stage, const VkDeviceSize alignment)
@@ -1315,11 +1381,14 @@ vk_graphics_pipeline::data vk_graphics_pipeline::create(const VkDevice device, c
     VkDebugUtilsObjectNameInfoEXT name_info = {
         .sType = VK_STRUCTURE_TYPE_DEBUG_UTILS_OBJECT_NAME_INFO_EXT,
     };
-    for (const auto& dsl : d.dsls)
+
+    for (size_t i = 0; i < dsl_cis.size(); ++i)
     {
-        std::string tmp_name = name + " dsl";
+        char i_str[8];
+        _itoa(static_cast<int>(i), i_str, 10);
+        std::string tmp_name = name + " dsl " + i_str;
         name_info.objectType = VK_OBJECT_TYPE_DESCRIPTOR_SET_LAYOUT;
-        name_info.objectHandle = reinterpret_cast<uint64_t>(dsl);
+        name_info.objectHandle = reinterpret_cast<uint64_t>(d.dsls[i]);
         name_info.pObjectName = tmp_name.c_str();
         VK_CHECK("setting descriptor set layout name", vkSetDebugUtilsObjectNameEXT(device, &name_info));
     }
@@ -1336,7 +1405,6 @@ vk_graphics_pipeline::data vk_graphics_pipeline::create(const VkDevice device, c
     VK_CHECK("setting pipeline name", vkSetDebugUtilsObjectNameEXT(device, &name_info));
 
 #endif // DEBUG
-
 
     return d;
 }
@@ -1355,7 +1423,7 @@ void vk_graphics_pipeline::destroy(const data d, const VkDevice device)
     }
 }
 
-VkDescriptorPool vk_descriptor_pool::create(const VkDevice& device, const uint32_t& max_sets, const std::vector<VkDescriptorPoolSize>& pool_sizes)
+VkDescriptorPool vk_descriptor_pool::create(const VkDevice& device, const uint32_t& max_sets, const std::vector<VkDescriptorPoolSize>& pool_sizes, const std::string& name)
 {
     const VkDescriptorPoolCreateInfo create_info = {
         .sType = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO,
@@ -1366,6 +1434,18 @@ VkDescriptorPool vk_descriptor_pool::create(const VkDevice& device, const uint32
 
     VkDescriptorPool desc_pool = VK_NULL_HANDLE;
     VK_CHECK("create descriptor pool", vkCreateDescriptorPool(device, &create_info, nullptr, &desc_pool));
+
+#ifdef DEBUG
+    const VkDebugUtilsObjectNameInfoEXT name_info = {
+        .sType = VK_STRUCTURE_TYPE_DEBUG_UTILS_OBJECT_NAME_INFO_EXT,
+        .objectType = VK_OBJECT_TYPE_DESCRIPTOR_POOL,
+        .objectHandle = reinterpret_cast<uint64_t>(desc_pool),
+        .pObjectName = name.c_str(),
+    };
+
+    VK_CHECK("setting descriptor pool name", vkSetDebugUtilsObjectNameEXT(device, &name_info));
+
+#endif // DEBUG
 
     return desc_pool;
 }
@@ -1378,7 +1458,7 @@ void vk_descriptor_pool::destroy(const VkDescriptorPool desc_pool, const VkDevic
     }
 }
 
-std::vector<VkDescriptorSet> vk_descriptor_sets::allocate(const VkDevice& device, const VkDescriptorPool& desc_pool, const std::vector<VkDescriptorSetLayout>& desc_set_layouts)
+std::vector<VkDescriptorSet> vk_descriptor_sets::allocate(const VkDevice& device, const VkDescriptorPool& desc_pool, const std::vector<VkDescriptorSetLayout>& desc_set_layouts, const std::string& name)
 {
     const VkDescriptorSetAllocateInfo alloc_info = {
         .sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO,
@@ -1391,10 +1471,32 @@ std::vector<VkDescriptorSet> vk_descriptor_sets::allocate(const VkDevice& device
 
     VK_CHECK("allocate descriptor sets", vkAllocateDescriptorSets(device, &alloc_info, desc_sets.data()));
 
+#ifdef DEBUG
+
+    VkDebugUtilsObjectNameInfoEXT name_info = {
+        .sType = VK_STRUCTURE_TYPE_DEBUG_UTILS_OBJECT_NAME_INFO_EXT,
+        .objectType = VK_OBJECT_TYPE_DESCRIPTOR_SET,
+    };
+
+    for (size_t i = 0; i < desc_set_layouts.size(); ++i)
+    {
+        char i_str[8];
+        _itoa(static_cast<int>(i), i_str, 10);
+
+        char name_str[128];
+        std::strcpy(name_str, name.c_str());
+
+        name_info.objectHandle = reinterpret_cast<uint64_t>(desc_sets[i]);
+        name_info.pObjectName = std::strcat(name_str, i_str);
+        VK_CHECK("setting descriptor set name", vkSetDebugUtilsObjectNameEXT(device, &name_info));
+    }
+
+#endif // DEBUG
+
     return desc_sets;
 }
 
-VkImage vk_image::create(const VkDevice device, const VkExtent3D& extent, const VkFormat format, const VkImageUsageFlags usage)
+VkImage vk_image::create(const VkDevice device, const VkExtent3D& extent, const VkFormat format, const VkImageUsageFlags usage, const std::string& name)
 {
     const VkImageCreateInfo create_info = {
         .sType = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO,
@@ -1411,6 +1513,17 @@ VkImage vk_image::create(const VkDevice device, const VkExtent3D& extent, const 
     VkImage image = VK_NULL_HANDLE;
     VK_CHECK("create image", vkCreateImage(device, &create_info, nullptr, &image));
 
+#ifdef  DEBUG
+    const VkDebugUtilsObjectNameInfoEXT name_info = {
+        .sType = VK_STRUCTURE_TYPE_DEBUG_UTILS_OBJECT_NAME_INFO_EXT,
+        .objectType = VK_OBJECT_TYPE_IMAGE,
+        .objectHandle = reinterpret_cast<uint64_t>(image),
+        .pObjectName = name.c_str(),
+    };
+
+    VK_CHECK("setting image name", vkSetDebugUtilsObjectNameEXT(device, &name_info));
+#endif //  DEBUG
+
     return image;
 }
 
@@ -1422,7 +1535,7 @@ void vk_image::destroy(const VkImage image, const VkDevice device)
     }
 }
 
-VkImageView vk_image_view::create(const VkDevice device, const VkImage image, const VkImageViewType view_type, const VkFormat format)
+VkImageView vk_image_view::create(const VkDevice device, const VkImage image, const VkImageViewType view_type, const VkFormat format, const std::string& name)
 {
     const VkImageViewCreateInfo create_info = {
         .sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO,
@@ -1446,6 +1559,17 @@ VkImageView vk_image_view::create(const VkDevice device, const VkImage image, co
 
     VK_CHECK("create image view", vkCreateImageView(device, &create_info, nullptr, &iv));
 
+#ifdef  DEBUG
+    const VkDebugUtilsObjectNameInfoEXT name_info = {
+        .sType = VK_STRUCTURE_TYPE_DEBUG_UTILS_OBJECT_NAME_INFO_EXT,
+        .objectType = VK_OBJECT_TYPE_IMAGE_VIEW,
+        .objectHandle = reinterpret_cast<uint64_t>(iv),
+        .pObjectName = name.c_str(),
+    };
+
+    VK_CHECK("setting image view name", vkSetDebugUtilsObjectNameEXT(device, &name_info));
+#endif //  DEBUG
+
     return iv;
 }
 
@@ -1454,5 +1578,60 @@ void vk_image_view::destroy(const VkImageView iv, const VkDevice device)
     if (iv != VK_NULL_HANDLE && device != VK_NULL_HANDLE)
     {
         vkDestroyImageView(device, iv, nullptr);
+    }
+}
+
+VkSampler vk_sampler::create(const VkDevice device, const VkFilter min_filter, const VkFilter mag_filter, const VkSamplerAddressMode address_mode_u, const VkSamplerAddressMode address_mode_v, const float& max_anisotropy, const float min_lod, const float max_lod, const std::string& name)
+{
+    const VkSamplerCreateInfo create_info = {
+        .sType = VK_STRUCTURE_TYPE_SAMPLER_CREATE_INFO,
+        .magFilter = mag_filter,
+        .minFilter = min_filter,
+        .addressModeU = address_mode_u,
+        .addressModeV = address_mode_v,
+        .addressModeW = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_BORDER,
+        .anisotropyEnable = VK_TRUE,
+        .maxAnisotropy = max_anisotropy,
+        .compareEnable = VK_FALSE,
+    };
+
+    VkSampler sampler = VK_NULL_HANDLE;
+
+    VK_CHECK("create sampler", vkCreateSampler(device, &create_info, nullptr, &sampler));
+
+#ifdef DEBUG
+    const VkDebugUtilsObjectNameInfoEXT name_info = {
+        .sType = VK_STRUCTURE_TYPE_DEBUG_UTILS_OBJECT_NAME_INFO_EXT,
+        .objectType = VK_OBJECT_TYPE_SAMPLER,
+        .objectHandle = reinterpret_cast<uint64_t>(sampler),
+        .pObjectName = name.c_str(),
+    };
+
+    VK_CHECK("setting sampler name", vkSetDebugUtilsObjectNameEXT(device, &name_info));
+#endif // DEBUG
+
+    return sampler;
+}
+
+void vk_sampler::destroy(const VkSampler sampler, const VkDevice device)
+{
+    if (sampler != VK_NULL_HANDLE && device != VK_NULL_HANDLE)
+    {
+        vkDestroySampler(device, sampler, nullptr);
+    }
+}
+
+vk_desc_img_info::data vk_desc_img_info::create(const VkDevice device)
+{
+    return vk_desc_img_info::data{ .desc = VK_NULL_HANDLE, .image = VK_NULL_HANDLE };
+}
+
+void vk_desc_img_info::destroy(const vk_desc_img_info::data image_info, const VkDevice device)
+{
+    if (device != VK_NULL_HANDLE)
+    {
+        vk_image::destroy(image_info.image, device);
+        vk_image_view::destroy(image_info.desc.imageView, device);
+        vk_sampler::destroy(image_info.desc.sampler, device);
     }
 }

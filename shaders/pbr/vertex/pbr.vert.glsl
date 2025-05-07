@@ -9,7 +9,7 @@ layout(set = 0, binding = 0) uniform VP {
 } vp;
 
 // prim level
-layout(set = 1, binding = 0) uniform M {
+layout(set = 2, binding = 0) uniform M {
     mat4 m;
 } m;
 

@@ -15,8 +15,12 @@ class renderer
 {
 public:
 	renderer() {}
+
 	virtual void import_scene_data(const std::string& file_path) = 0;
-	virtual void resize(const UINT width, const UINT height) = 0;
+    virtual void handle_mouse_move(const POINT mouse_pos) = 0;
+	virtual void handle_mouse_l_btn_down() = 0;
+	virtual void handle_mouse_l_btn_up() = 0;
+	virtual void resize(const uint32_t width, const uint32_t height) = 0;
 	virtual void begin_frame() = 0;
 	virtual void clear_frame(const float color[]) = 0;
 	virtual void render_world() = 0;

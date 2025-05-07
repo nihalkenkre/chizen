@@ -99,7 +99,7 @@ void world_scene::render(renderer* r)
 	r->begin_frame();
 	float color[] = { 0.2, 0.2, 0.2, 1 };
 	r->clear_frame(color);
-	//r->render_world();
+	r->render_world();
 	r->end_frame();
 }
 

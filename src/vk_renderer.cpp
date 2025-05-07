@@ -9,6 +9,8 @@
 
 #include <SPIRV-Reflect/spirv_reflect.h>
 
+#include <stb/stb_image.h>
+
 constexpr uint8_t MAX_VERTICES = 64;
 constexpr uint8_t MAX_TRIANGLES = 124;
 
@@ -96,7 +98,19 @@ void vk_renderer::import_scene_data(const std::string& file_path)
     sd = scene_data::create(file_path, phy_dev, surface, device, xfer_q, xfer_cmd_pool.cmd_buffs[0]);
 }
 
-void vk_renderer::resize(const UINT width, const UINT height)
+void vk_renderer::handle_mouse_move(const POINT pt)
+{
+}
+
+void vk_renderer::handle_mouse_l_btn_down()
+{
+}
+
+void vk_renderer::handle_mouse_l_btn_up()
+{
+}
+
+void vk_renderer::resize(const uint32_t width, const uint32_t height)
 {
     VK_CHECK("wait for present fence", vkWaitForFences(device, 1, &swapchain.present_fences[img_idx], VK_TRUE, UINT64_MAX));
     VK_CHECK("reset present fence", vkResetFences(device, 1, &swapchain.present_fences[img_idx]));
@@ -109,13 +123,11 @@ void vk_renderer::resize(const UINT width, const UINT height)
 
 void vk_renderer::begin_frame()
 {
-    uint64_t wait_values = acq_wait_sem_val;
-
     const VkSemaphoreWaitInfo wait_info = {
         .sType = VK_STRUCTURE_TYPE_SEMAPHORE_WAIT_INFO,
         .semaphoreCount = 1,
         .pSemaphores = &acq_wait_sem.semaphore,
-        .pValues = &wait_values,
+        .pValues = &acq_wait_sem_val,
     };
     vkWaitSemaphores(device, &wait_info, UINT64_MAX);
 
@@ -251,12 +263,18 @@ void vk_renderer::render_world()
     vkCmdBindPipeline(swapchain.cmd_buffs[img_idx], VK_PIPELINE_BIND_POINT_GRAPHICS, sd.vtx_pipeline_d_sets.pipeline);
 
     // set 0 scene level
-    vkCmdBindDescriptorSets(swapchain.cmd_buffs[img_idx], VK_PIPELINE_BIND_POINT_GRAPHICS, sd.vtx_pipeline_d_sets.pipeline_layout, 0, 1, &sd.desc_sets[0], 0, nullptr);
+    vkCmdBindDescriptorSets(swapchain.cmd_buffs[img_idx], VK_PIPELINE_BIND_POINT_GRAPHICS, sd.vtx_pipeline_d_sets.pipeline_layout, 0, 1, &sd.desc_set, 0, nullptr);
 
     for (auto const& mi : sd.mis)
     {
+        // set 1 material level
+        vkCmdBindDescriptorSets(swapchain.cmd_buffs[img_idx], VK_PIPELINE_BIND_POINT_GRAPHICS, sd.vtx_pipeline_d_sets.pipeline_layout, 1, 1, &mi.desc_set, 0, nullptr);
+
         for (auto const& pd : mi.pds)
         {
+            // set 2 primitive level
+            vkCmdBindDescriptorSets(swapchain.cmd_buffs[img_idx], VK_PIPELINE_BIND_POINT_GRAPHICS, sd.vtx_pipeline_d_sets.pipeline_layout, 2, 1, &pd.desc_set, 0, nullptr);
+
             const VkBuffer buffers[] = {
                 sd.geom_buff_mem.buffer,
                 sd.geom_buff_mem.buffer,
@@ -433,11 +451,23 @@ scene_data::data scene_data::create(const std::string& file_path, const vk_phy_d
     cgltf_options options = {};
     cgltf_data* data = nullptr;
 
+    if (cgltf_parse_file(&options, file_path.c_str(), &data) != cgltf_result_success ||
+        cgltf_validate(data) != cgltf_result_success ||
+        cgltf_load_buffers(&options, data, file_path.c_str()) != cgltf_result_success)
+    {
+        std::cerr << "ERR Could not parse gltf file\n";
+        return d;
+    }
+
     // Meshlets data (positions, meshlets, vertices, indices)
     std::vector<uint8_t> mesh_geom_data;
+
     // Vertex, index data
     std::vector<uint8_t> vertex_geom_data;
+    // Xform data for camera and primitives
     std::vector<uint8_t> xform_data;
+    // images data
+    std::vector<uint8_t> images_data;
 
     mat4 identity_mat;
     glm_mat4_identity(identity_mat);
@@ -459,13 +489,6 @@ scene_data::data scene_data::create(const std::string& file_path, const vk_phy_d
 
     xform_data.resize(aligned_mat_size);
     std::memcpy(xform_data.data(), vp, sizeof(vp));
-
-    if (cgltf_parse_file(&options, file_path.c_str(), &data) != cgltf_result_success ||
-        cgltf_validate(data) != cgltf_result_success ||
-        cgltf_load_buffers(&options, data, file_path.c_str()) != cgltf_result_success)
-    {
-        std::cerr << "ERR Could not parse gltf file\n";
-    }
 
     for (cgltf_size n = 0; n < data->nodes_count; ++n)
     {
@@ -663,9 +686,14 @@ scene_data::data scene_data::create(const std::string& file_path, const vk_phy_d
 
             cgltf_material* mat = curr_prim->material;
 
+            material_descriptors mat_dscs = {};
+
             if (mat->has_pbr_metallic_roughness)
             {
                 metal_rough_descriptors mr_dscs = {
+                    .base_color_desc = {
+                        .imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
+                    },
                     .base_color_factors = {
                         mat->pbr_metallic_roughness.base_color_factor[0],
                         mat->pbr_metallic_roughness.base_color_factor[1],
@@ -675,13 +703,124 @@ scene_data::data scene_data::create(const std::string& file_path, const vk_phy_d
                     .metalness_factor = mat->pbr_metallic_roughness.metallic_factor,
                     .roughness_factor = mat->pbr_metallic_roughness.roughness_factor,
                 };
+
+                if (mat->pbr_metallic_roughness.base_color_texture.texture != nullptr)
+                {
+                    cgltf_texture* tex = mat->pbr_metallic_roughness.base_color_texture.texture;
+                    if (tex->image != nullptr)
+                    {
+                        cgltf_image* img = tex->image;
+                        if (img->uri != nullptr)
+                        {
+
+                        }
+                        else
+                        {
+                            mr_dscs.base_color_pixels = stbi_load_from_memory(reinterpret_cast<stbi_uc*>(reinterpret_cast<uint64_t>(img->buffer_view->buffer->data) + img->buffer_view->offset), static_cast<int>(img->buffer_view->size), &mr_dscs.base_color_width, &mr_dscs.base_color_height, nullptr, 4);
+                            mr_dscs.base_color_len = static_cast<VkDeviceSize>(mr_dscs.base_color_width) * static_cast<VkDeviceSize>(mr_dscs.base_color_height) * 4;
+                        }
+
+                        mr_dscs.base_color_image = vk_image::create(device,
+                            { .width = static_cast<uint32_t>(mr_dscs.base_color_width), .height = static_cast<uint32_t>(mr_dscs.base_color_height), .depth = 1 },
+                            VK_FORMAT_R8G8B8A8_UNORM,
+                            VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT,
+                            "base color texture image"
+                        );
+
+                        vkGetImageMemoryRequirements(device, mr_dscs.base_color_image, &mr_dscs.base_color_mem_reqs);
+
+                        size_t image_data_current_size = images_data.size();
+                        mr_dscs.base_color_pixels_offset = image_data_current_size;
+                        images_data.resize(image_data_current_size + mr_dscs.base_color_mem_reqs.size);
+                        std::memcpy(images_data.data() + image_data_current_size, mr_dscs.base_color_pixels, mr_dscs.base_color_len);
+                    }
+
+                    if (tex->sampler != nullptr)
+                    {
+                        VkFilter min_filter = VK_FILTER_NEAREST;
+
+                        switch (tex->sampler->min_filter)
+                        {
+                        case cgltf_filter_type_linear:
+                        case cgltf_filter_type_linear_mipmap_linear:
+                            min_filter = VK_FILTER_LINEAR;
+                            break;
+
+                        case cgltf_filter_type_nearest:
+                        case cgltf_filter_type_nearest_mipmap_linear:
+                            min_filter = VK_FILTER_NEAREST;
+                            break;
+
+                        default:
+                            break;
+                        }
+
+                        VkFilter mag_filter = VK_FILTER_NEAREST;
+
+                        switch (tex->sampler->min_filter)
+                        {
+                        case cgltf_filter_type_linear:
+                        case cgltf_filter_type_linear_mipmap_linear:
+                            mag_filter = VK_FILTER_LINEAR;
+                            break;
+
+                        case cgltf_filter_type_nearest:
+                        case cgltf_filter_type_nearest_mipmap_linear:
+                            mag_filter = VK_FILTER_NEAREST;
+                            break;
+
+                        default:
+                            break;
+                        }
+
+                        VkSamplerAddressMode address_mode_u = VK_SAMPLER_ADDRESS_MODE_REPEAT;
+
+                        switch (tex->sampler->wrap_s)
+                        {
+                        case cgltf_wrap_mode_clamp_to_edge:
+                            address_mode_u = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE;
+                            break;
+
+                        case cgltf_wrap_mode_repeat:
+                            address_mode_u = VK_SAMPLER_ADDRESS_MODE_REPEAT;
+                            break;
+
+                        case cgltf_wrap_mode_mirrored_repeat:
+                            address_mode_u = VK_SAMPLER_ADDRESS_MODE_MIRRORED_REPEAT;
+                            break;
+
+                        default:
+                            break;
+                        }
+
+                        VkSamplerAddressMode address_mode_v = VK_SAMPLER_ADDRESS_MODE_REPEAT;
+
+                        switch (tex->sampler->wrap_s)
+                        {
+                        case cgltf_wrap_mode_clamp_to_edge:
+                            address_mode_v = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE;
+                            break;
+
+                        case cgltf_wrap_mode_repeat:
+                            address_mode_v = VK_SAMPLER_ADDRESS_MODE_REPEAT;
+                            break;
+
+                        case cgltf_wrap_mode_mirrored_repeat:
+                            address_mode_v = VK_SAMPLER_ADDRESS_MODE_MIRRORED_REPEAT;
+                            break;
+
+                        default:
+                            break;
+                        }
+
+                        mr_dscs.base_color_desc.sampler = vk_sampler::create(device, min_filter, mag_filter, address_mode_u, address_mode_v, phy_dev.props.properties.limits.maxSamplerAnisotropy, 0.0, 0.0, "base color sampler");
+                    }
+                }
+
+                mat_dscs.met_rough_dscs = mr_dscs;
             }
             else
             {
-                pd.mat_dscs.met_rough_dscs = {
-                    .base_color_desc = VK_NULL_HANDLE,
-                    .metal_rough_desc = VK_NULL_HANDLE,
-                };
             }
 
             uint64_t mat_id = std::hash<std::string>{}(curr_prim->material->name);
@@ -691,6 +830,7 @@ scene_data::data scene_data::create(const std::string& file_path, const vk_phy_d
             {
                 material_info mi = {
                     .id = mat_id,
+                    .mat_dscs = mat_dscs,
                     .pds = {pd},
                 };
 
@@ -705,6 +845,39 @@ scene_data::data scene_data::create(const std::string& file_path, const vk_phy_d
 
     cgltf_free(data);
 
+    //std::vector<uint8_t> gray(images_data.size(), 128);
+
+    host_buffer_memory::data images_staging = host_buffer_memory::create(device, phy_dev.mem_props, 0, VK_IMAGE_USAGE_TRANSFER_SRC_BIT, images_data, "images staging buffer");
+
+    // nasty hack. the format of the images are the same, and thus the memory type id would also be the same, so just get the mem_reqs of the first one and allocate.
+    d.images_memory = vk_device_memory::allocate(device, images_data.size(), get_memory_type_id(phy_dev.mem_props, d.mis[0].mat_dscs.met_rough_dscs.base_color_mem_reqs, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT), "images device memory");
+
+    for (auto& mi : d.mis)
+    {
+        VK_CHECK("bind image to memory", vkBindImageMemory(device, mi.mat_dscs.met_rough_dscs.base_color_image, d.images_memory, mi.mat_dscs.met_rough_dscs.base_color_pixels_offset));
+
+        mi.mat_dscs.met_rough_dscs.base_color_desc.imageView = vk_image_view::create(device, mi.mat_dscs.met_rough_dscs.base_color_image, VK_IMAGE_VIEW_TYPE_2D, VK_FORMAT_R8G8B8A8_UNORM, "base color texture image view");
+
+        const std::vector<VkBufferImageCopy2> regions = {
+            {
+                .sType = VK_STRUCTURE_TYPE_BUFFER_IMAGE_COPY_2,
+                .bufferOffset = mi.mat_dscs.met_rough_dscs.base_color_pixels_offset,
+                .imageSubresource = {
+                    .aspectMask = VK_IMAGE_ASPECT_COLOR_BIT,
+                    .layerCount = 1,
+                },
+                .imageExtent = {
+                    .width = static_cast<uint32_t>(mi.mat_dscs.met_rough_dscs.base_color_width),
+                    .height = static_cast<uint32_t>(mi.mat_dscs.met_rough_dscs.base_color_height),
+                    .depth = 1,
+                },
+            },
+        };
+        copy_buffer_to_image(images_staging.buffer, mi.mat_dscs.met_rough_dscs.base_color_image, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, regions, cmd_buff, xfer_q);
+    }
+
+    host_buffer_memory::destroy(images_staging, device);
+
     d.geom_buff_mem = device_buffer_memory::create(
         device, phy_dev.mem_props, 0,
         VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_VERTEX_BUFFER_BIT | VK_BUFFER_USAGE_INDEX_BUFFER_BIT,
@@ -714,63 +887,135 @@ scene_data::data scene_data::create(const std::string& file_path, const vk_phy_d
         VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT | VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT,
         xform_data, "uniform buffer memory");
 
+    // create camera and xform descriptors for vertex pipeline
+
+    VkDeviceSize uni_buff_offset = 0;
+
+    d.cam_desc = {
+        .buffer = d.uni_buff_mem.buffer,
+        .offset = uni_buff_offset,
+        .range = sizeof(mat4),
+    };
+
+    uni_buff_offset += ALIGNED_SIZE(sizeof(mat4), phy_dev.props.properties.limits.minUniformBufferOffsetAlignment);
+
+    for (auto& mi : d.mis)
     {
-        // create descriptors for vertex pipeline
-
-        VkDeviceSize uni_buff_offset = 0;
-
-        d.cam_xform_d_set_desc = {
-            .buffer = d.uni_buff_mem.buffer,
-            .offset = uni_buff_offset,
-            .range = sizeof(mat4),
-        };
-
-        uni_buff_offset += ALIGNED_SIZE(sizeof(mat4), phy_dev.props.properties.limits.minUniformBufferOffsetAlignment);
-
-        for (auto& mi : d.mis)
+        for (auto& pd : mi.pds)
         {
-            for (auto& pd : mi.pds)
-            {
-                pd.vsi.xform_d_set_desc = {
-                    .buffer = d.uni_buff_mem.buffer,
-                    .offset = uni_buff_offset,
-                    .range = sizeof(mat4),
-                };
+            pd.xform_desc = {
+                .buffer = d.uni_buff_mem.buffer,
+                .offset = uni_buff_offset,
+                .range = sizeof(mat4),
+            };
 
-                uni_buff_offset += ALIGNED_SIZE(sizeof(mat4), phy_dev.props.properties.limits.minUniformBufferOffsetAlignment);
-            }
+            uni_buff_offset += ALIGNED_SIZE(sizeof(mat4), phy_dev.props.properties.limits.minUniformBufferOffsetAlignment);
         }
     }
 
-    std::vector<VkDescriptorPoolSize> pool_sizes = {
+    {
+        std::vector<VkDescriptorPoolSize> pool_sizes = {
+            {
+                .type = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER,
+                .descriptorCount = 1,
+            },
+        };
+
+        // create camera desc pool/set
+        d.desc_pool = vk_descriptor_pool::create(device, 1, pool_sizes, "cam xform descriptor pool");
+        std::vector<VkDescriptorSetLayout> dsls(1, d.vtx_pipeline_d_sets.dsls[0]);
+        d.desc_set = vk_descriptor_sets::allocate(device, d.desc_pool, dsls, "cam xform descriptor set")[0];
+
+        const VkWriteDescriptorSet write_desc_sets[] = {
+            {
+                .sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
+                .dstSet = d.desc_set,
+                .dstBinding = 0,
+                .descriptorCount = 1,
+                .descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER,
+                .pBufferInfo = &d.cam_desc,
+            },
+        };
+
+        vkUpdateDescriptorSets(device, _countof(write_desc_sets), write_desc_sets, 0, nullptr);
+    }
+
+    {
+        for (auto& mi : d.mis)
         {
-            .type = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER,
-            .descriptorCount = 1,
-        },
-    };
+            // create texture desc pools/sets per material
+            std::vector<VkDescriptorPoolSize> pool_sizes = {
+               {
+                   .type = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
+                   .descriptorCount = 5,
+               },
+            };
 
-    d.desc_pool = vk_descriptor_pool::create(device, 1, pool_sizes);
-    std::vector<VkDescriptorSetLayout> dsls(1, d.vtx_pipeline_d_sets.dsls[0]);
-    d.desc_sets = vk_descriptor_sets::allocate(device, d.desc_pool, dsls);
+            mi.desc_pool = vk_descriptor_pool::create(device, 1, pool_sizes, "per material textures desc pool");
+            std::vector<VkDescriptorSetLayout> dsls(1, d.vtx_pipeline_d_sets.dsls[1]);
+            mi.desc_set = vk_descriptor_sets::allocate(device, mi.desc_pool, dsls, "per material textures desc set ")[0];
 
-    const VkWriteDescriptorSet write_desc_sets[] = {
-        {
-            .sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
-            .dstSet = d.desc_sets[0],
-            .dstBinding = 0,
-            .descriptorCount = 1,
-            .descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER,
-            .pBufferInfo = &d.cam_xform_d_set_desc,
-        },
-    };
+            const VkWriteDescriptorSet write_desc_sets[] = {
+                {
+                    .sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
+                    .dstSet = mi.desc_set,
+                    .dstBinding = 0,
+                    .descriptorCount = 1,
+                    .descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
+                    .pImageInfo = &mi.mat_dscs.met_rough_dscs.base_color_desc,
+                },
+                //{
+                //    .sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
+                //    .dstSet = mi.desc_set,
+                //    .dstBinding = 1,
+                //    .descriptorCount = 1,
+                //    .descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
+                //    .pImageInfo = &mi.mat_dscs.met_rough_dscs.metal_rough_desc,
+                //}
+            };
 
-    vkUpdateDescriptorSets(device, _countof(write_desc_sets), write_desc_sets, 0, nullptr);
+            vkUpdateDescriptorSets(device, _countof(write_desc_sets), write_desc_sets, 0, nullptr);
+
+            for (auto& pd : mi.pds)
+            {
+                std::vector<VkDescriptorPoolSize> pool_sizes = {
+                   {
+                       .type = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER,
+                       .descriptorCount = 1,
+                   },
+                };
+
+                // create xform desc pools/sets per primitive
+                pd.desc_pool = vk_descriptor_pool::create(device, 1, pool_sizes, "per primtive xform desc pool");
+                std::vector<VkDescriptorSetLayout> dsls(1, d.vtx_pipeline_d_sets.dsls[2]);
+                pd.desc_set = vk_descriptor_sets::allocate(device, pd.desc_pool, dsls, "per primitive xform desc set ")[0];
+
+                const VkWriteDescriptorSet write_desc_sets[] = {
+                    {
+                        .sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
+                        .dstSet = pd.desc_set,
+                        .descriptorCount = 1,
+                        .descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER,
+                        .pBufferInfo = &pd.xform_desc,
+                    },
+                };
+
+                vkUpdateDescriptorSets(device, _countof(write_desc_sets), write_desc_sets, 0, nullptr);
+            }
+        }
+    }
 
     return d;
 }
 
 void scene_data::destroy(const data d, const VkDevice device)
 {
+    for (auto const& mi : d.mis)
+    {
+        vk_image::destroy(mi.mat_dscs.met_rough_dscs.base_color_image, device);
+        vk_image_view::destroy(mi.mat_dscs.met_rough_dscs.base_color_desc.imageView, device);
+    }
+    vk_device_memory::free(d.images_memory, device);
     host_buffer_memory::destroy(d.uni_buff_mem, device);
     host_buffer_memory::destroy(d.desc_buff_mem, device);
     device_buffer_memory::destroy(d.geom_buff_mem, device);

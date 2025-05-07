@@ -18,7 +18,10 @@ class dx12_renderer : public renderer
 public:
 	dx12_renderer(const HWND h_wnd);
 	void import_scene_data(const std::string& file_path) override;
-	void resize(const UINT width, const UINT height) override;
+	void handle_mouse_move(const POINT pt) override {}
+	void handle_mouse_l_btn_down() override {}
+	void handle_mouse_l_btn_up() override {}
+	void resize(const uint32_t width, const uint32_t height) override;
 	void begin_frame() override;
 	void clear_frame(const float color[]) override;
 	void render_world() override;

@@ -741,7 +741,7 @@ dx12_renderer::dx12_renderer(const HWND h_wnd)
 	gnrl_fnc_val = 0;
 }
 
-void dx12_renderer::resize(const UINT width, const UINT height)
+void dx12_renderer::resize(const uint32_t width, const uint32_t height)
 {
 	wnd_rect.right = width;
 	wnd_rect.bottom = height;

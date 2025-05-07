@@ -22,6 +22,10 @@ using Microsoft::WRL::ComPtr;
 #define CGLM_IMPLEMENTATION
 #include <cglm/include/cglm/cglm.h>
 
+#define STB_IMAGE_IMPLEMENTATION
+#define STBI_NO_FAILURE_STRINGS
+#include <stb/stb_image.h>
+
 extern "C"
 {
     __declspec(dllexport) extern const UINT D3D12SDKVersion = 615;
@@ -244,6 +248,21 @@ LRESULT CALLBACK WindowProc(HWND h_wnd, UINT msg, WPARAM w_param, LPARAM l_param
             .y = GET_Y_LPARAM(l_param),
         };
         s->handle_mouse_move(p);
+        r->handle_mouse_move(p);
+        break;
+
+    case WM_LBUTTONDOWN:
+        r->handle_mouse_l_btn_down();
+        break;
+
+    case WM_LBUTTONUP:
+        r->handle_mouse_l_btn_up();
+        break;
+
+    case WM_RBUTTONDOWN:
+        break;
+
+    case WM_MBUTTONDOWN:
         break;
 
     case WM_SIZE:

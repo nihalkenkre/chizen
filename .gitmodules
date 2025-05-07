@@ -10,3 +10,6 @@
 [submodule "cglm"]
 	path = cglm
 	url = git@github.com:recp/cglm.git
+[submodule "stb"]
+	path = stb
+	url = git@gihub.com:nothings/stb.git
