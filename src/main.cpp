@@ -1,9 +1,6 @@
 #include <Windows.h>
 #include <Windowsx.h>
 #include <ShObjIdl.h>
-#include <wrl.h>
-
-using Microsoft::WRL::ComPtr;
 
 #include <iostream>
 #include <memory>
@@ -26,11 +23,13 @@ using Microsoft::WRL::ComPtr;
 #define STBI_NO_FAILURE_STRINGS
 #include <stb/stb_image.h>
 
+/*
 extern "C"
 {
     __declspec(dllexport) extern const UINT D3D12SDKVersion = 615;
     __declspec(dllexport) extern const char* D3D12SDKPath = ".\\D3D12\\";
 }
+*/
 
 #define FILE_MENU_OPEN 10
 #define DX_12_RADIO_BTN 101
@@ -46,7 +45,7 @@ std::unique_ptr<renderer> r;
 
 RENDERING_API r_api = RENDERING_API::VULKAN;
 
-HWND create_control_panel(const HINSTANCE h_instance)
+static HWND create_control_panel(const HINSTANCE h_instance)
 {
     HMENU h_file_label = CreateMenu();
     HMENU h_file_menu = CreateMenu();
@@ -69,14 +68,13 @@ HWND create_control_panel(const HINSTANCE h_instance)
     return h_ctrl_pnl;
 }
 
-HWND create_wnd(const HINSTANCE h_instance)
+static HWND create_wnd(const HINSTANCE h_instance)
 {
-    RECT wnd_rect = {
-        .left = 0,
-        .top = 0,
-        .right = 1280,
-        .bottom = 720,
-    };
+    RECT wnd_rect = {};
+    wnd_rect.left = 0;
+    wnd_rect.top = 0;
+    wnd_rect.right = 1280;
+    wnd_rect.bottom = 720;
 
     UINT dw_style = WS_OVERLAPPED | WS_SIZEBOX;
 
@@ -96,7 +94,7 @@ HWND create_wnd(const HINSTANCE h_instance)
         nullptr);
 }
 
-LRESULT CALLBACK RendererWndProc(HWND h_wnd, UINT msg, WPARAM w_param, LPARAM l_param)
+static LRESULT CALLBACK RendererWndProc(HWND h_wnd, UINT msg, WPARAM w_param, LPARAM l_param)
 {
     HINSTANCE h_instance = GetModuleHandleA(nullptr);
     HWND dx12 = nullptr;
@@ -111,8 +109,8 @@ LRESULT CALLBACK RendererWndProc(HWND h_wnd, UINT msg, WPARAM w_param, LPARAM l_
         break;
 
     case WM_CREATE:
-        vk = CreateWindowA("BUTTON", "Vulkan", WS_CHILD | WS_VISIBLE | BS_AUTORADIOBUTTON | WS_GROUP | WS_TABSTOP, 10, 10, 100, 30, h_wnd, (HMENU)VULKAN_RADIO_BTN, h_instance, nullptr);
-        dx12 = CreateWindowA("BUTTON", "DX 12", WS_CHILD | WS_VISIBLE | BS_AUTORADIOBUTTON, 10, 40, 100, 30, h_wnd, (HMENU)DX_12_RADIO_BTN, h_instance, nullptr);
+        vk = CreateWindowA("BUTTON", "Vulkan", WS_CHILD | WS_VISIBLE | BS_AUTORADIOBUTTON | WS_GROUP | WS_TABSTOP, 10, 10, 100, 30, h_wnd, reinterpret_cast<HMENU>(VULKAN_RADIO_BTN), h_instance, nullptr);
+        dx12 = CreateWindowA("BUTTON", "DX 12", WS_CHILD | WS_VISIBLE | BS_AUTORADIOBUTTON, 10, 40, 100, 30, h_wnd, reinterpret_cast<HMENU>(DX_12_RADIO_BTN), h_instance, nullptr);
 
         Button_SetCheck(vk, 1);
         break;
@@ -153,7 +151,7 @@ LRESULT CALLBACK RendererWndProc(HWND h_wnd, UINT msg, WPARAM w_param, LPARAM l_
     return 0;
 }
 
-HWND create_rndrr_wnd(const HINSTANCE h_instance)
+static HWND create_rndrr_wnd(const HINSTANCE h_instance)
 {
     HWND wnd = CreateWindowA(
         "Renderer",
@@ -170,7 +168,7 @@ HWND create_rndrr_wnd(const HINSTANCE h_instance)
     return wnd;
 }
 
-void open_file(const HWND h_wnd)
+static void open_file(const HWND h_wnd)
 {
     ComPtr<IFileDialog> file_open;
     if SUCCEEDED(CoCreateInstance(CLSID_FileOpenDialog, nullptr, CLSCTX_ALL, IID_PPV_ARGS(&file_open)))
@@ -212,7 +210,7 @@ void open_file(const HWND h_wnd)
     }
 }
 
-LRESULT CALLBACK WindowProc(HWND h_wnd, UINT msg, WPARAM w_param, LPARAM l_param)
+static LRESULT CALLBACK WindowProc(HWND h_wnd, UINT msg, WPARAM w_param, LPARAM l_param)
 {
     POINT p = {};
 
@@ -243,12 +241,77 @@ LRESULT CALLBACK WindowProc(HWND h_wnd, UINT msg, WPARAM w_param, LPARAM l_param
         break;
 
     case WM_MOUSEMOVE:
-        p = {
-            .x = GET_X_LPARAM(l_param),
-            .y = GET_Y_LPARAM(l_param),
-        };
+        p.x = GET_X_LPARAM(l_param);
+        p.y = GET_Y_LPARAM(l_param);
+
         s->handle_mouse_move(p);
         r->handle_mouse_move(p);
+        break;
+
+    case WM_KEYDOWN:
+        std::cout << "key down " << w_param << '\n';
+        switch (w_param)
+        {
+        case 87:   // w
+            r->handle_w_down();
+            break;
+
+        case 65:    // a
+            r->handle_a_down();
+            break;
+
+        case 83:   // s
+            r->handle_s_down();
+            break;
+
+        case 68:   // d
+            r->handle_d_down();
+            break;
+
+        case 81:    // q
+            r->handle_q_down();
+            break;
+
+        case 69:    // e
+            r->handle_e_down();
+            break;
+
+        default:
+            break;
+        }
+        break;
+
+    case WM_KEYUP:
+        std::cout << "key up " << w_param << '\n';
+        switch (w_param)
+        {
+        case 87:   // w
+            r->handle_w_up();
+            break;
+
+        case 65:    // a
+            r->handle_a_up();
+            break;
+
+        case 83:   // s
+            r->handle_s_up();
+            break;
+
+        case 68:   // d
+            r->handle_d_up();
+            break;
+
+        case 81:    // q
+            r->handle_q_up();
+            break;
+
+        case 69:    // e
+            r->handle_e_up();
+            break;
+
+        default:
+            break;
+        }
         break;
 
     case WM_LBUTTONDOWN:
@@ -259,10 +322,20 @@ LRESULT CALLBACK WindowProc(HWND h_wnd, UINT msg, WPARAM w_param, LPARAM l_param
         r->handle_mouse_l_btn_up();
         break;
 
-    case WM_RBUTTONDOWN:
+    case WM_MBUTTONDOWN:
+        r->handle_mouse_m_btn_down();
         break;
 
-    case WM_MBUTTONDOWN:
+    case WM_MBUTTONUP:
+        r->handle_mouse_m_btn_up();
+        break;
+
+    case WM_RBUTTONDOWN:
+        r->handle_mouse_r_btn_down();
+        break;
+
+    case WM_RBUTTONUP:
+        r->handle_mouse_r_btn_up();
         break;
 
     case WM_SIZE:
@@ -288,13 +361,12 @@ int main(int argc, char** argv)
 
     std::cout << "Hi\n";
 
-    WNDCLASSA wc = {
-        .style = CS_HREDRAW | CS_VREDRAW | CS_OWNDC,
-        .lpfnWndProc = WindowProc,
-        .hInstance = h_instance,
-        .hCursor = LoadCursorA(h_instance, MAKEINTRESOURCEA(32512)),
-        .lpszClassName = "Chizen",
-    };
+    WNDCLASSA wc = {};
+    wc.style = CS_HREDRAW | CS_VREDRAW | CS_OWNDC;
+    wc.lpfnWndProc = WindowProc;
+    wc.hInstance = h_instance;
+    wc.hCursor = LoadCursorA(h_instance, MAKEINTRESOURCEA(32512));
+    wc.lpszClassName = "Chizen";
 
     if (!RegisterClassA(&wc))
     {

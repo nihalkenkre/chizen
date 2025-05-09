@@ -37,7 +37,8 @@ struct mesh_shader_info
 struct vertex_shader_info
 {
     VkDeviceSize positions_offset = 0;
-    VkDeviceSize uvs_offsets = 0;
+    VkDeviceSize uvs_offset = 0;
+    VkDeviceSize nrms_offset = 0;
     VkDeviceSize indices_offset = 0;
 
     std::vector<uint8_t> xform_d_buff_desc;
@@ -116,6 +117,21 @@ struct material_info
     VkDescriptorSet desc_set = VK_NULL_HANDLE;
 };
 
+struct camera
+{
+    // map value from the uniform buffer memory;
+    void* xform;
+
+    vec3 pos;
+    vec3 forward;
+    vec3 right;
+    vec3 up;
+
+    // one descriptor for each swapchain image
+    std::vector<VkDescriptorBufferInfo> xform_descs;
+    VkDescriptorPool desc_pool;
+};
+
 namespace scene_data
 {
     struct data
@@ -129,8 +145,7 @@ namespace scene_data
 
         std::vector<uint8_t> cam_xform_d_buff_desc;
 
-        // scene level camera xform desc 
-        VkDescriptorBufferInfo cam_desc;
+        camera cam;
         // scene level desc pool
         VkDescriptorPool desc_pool = VK_NULL_HANDLE;
         // scene level desc set
@@ -142,8 +157,24 @@ namespace scene_data
         vk_graphics_pipeline::data vtx_pipeline_d_buff;
     };
 
-    data create(const std::string& file_path, const vk_phy_dev::data& phy_dev, const vk_surface::data& surface, const VkDevice& device, const VkQueue& xfer_q, const VkCommandBuffer& cmd_buff);
+    data create(const std::string& file_path, const vk_phy_dev::data& phy_dev, const vk_surface::data& surface, const uint32_t swapchain_images_count, const VkDevice& device, const VkQueue& xfer_q, const VkCommandBuffer& cmd_buff);
     void destroy(const data d, const VkDevice device);
+};
+
+struct input_state
+{
+    POINT mouse_pos;
+
+    bool l_btn_down;
+    bool m_btn_down;
+    bool r_btn_down;
+
+    bool w_down;
+    bool a_down;
+    bool s_down;
+    bool d_down;
+    bool q_down;
+    bool e_down;
 };
 
 class vk_renderer : public renderer
@@ -152,9 +183,25 @@ public:
     vk_renderer(const HWND h_wnd);
 
     void import_scene_data(const std::string& file_path) override;
-    void handle_mouse_move(const POINT pt) override;
+    void handle_mouse_move(const POINT mouse_pos) override;
     void handle_mouse_l_btn_down() override;
     void handle_mouse_l_btn_up() override;
+    void handle_mouse_m_btn_down() override;
+    void handle_mouse_m_btn_up() override;
+    void handle_mouse_r_btn_down() override;
+    void handle_mouse_r_btn_up() override;
+    void handle_w_down() override;
+    void handle_a_down() override;
+    void handle_s_down() override;
+    void handle_d_down() override;
+    void handle_q_down() override;
+    void handle_e_down() override;
+    void handle_w_up() override;
+    void handle_a_up() override;
+    void handle_s_up() override;
+    void handle_d_up() override;
+    void handle_q_up() override;
+    void handle_e_up() override;
     void resize(const uint32_t width, const uint32_t height) override;
     void begin_frame() override;
     void clear_frame(const float color[]) override;
@@ -178,9 +225,10 @@ private:
     VkQueue gfx_q;
     VkQueue xfer_q;
 
-    uint32_t img_idx;
     uint64_t acq_wait_sem_val;
     VkViewport viewport;
 
     scene_data::data sd;
+    input_state i = {};
+    uint32_t img_idx;
 };

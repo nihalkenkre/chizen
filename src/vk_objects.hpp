@@ -10,6 +10,8 @@
 
 #include <SPIRV-Reflect/spirv_reflect.h>
 
+#include <cgltf.h>
+
 //#define DESC_BUFFER
 
 enum CHI_PIPELINE_TYPE
@@ -188,7 +190,7 @@ namespace vk_phy_dev
         VkPhysicalDeviceProperties2 props = {};
         VkPhysicalDeviceMemoryProperties mem_props = {};
         // Setting .sType so let vkGetPhysicalDeviceFeatures know what struct this is
-        VkPhysicalDeviceDescriptorBufferPropertiesEXT desc_buff_props = { .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_DESCRIPTOR_BUFFER_PROPERTIES_EXT };
+        VkPhysicalDeviceDescriptorBufferPropertiesEXT desc_buff_props = {};
     };
 
     data get_phy_dev(const VkInstance instance, vk_surface::data* surface);
@@ -425,10 +427,10 @@ namespace vk_semaphore
     struct data
     {
         VkSemaphore semaphore;
-        bool is_timeline;
+        VkSemaphoreType type;
     };
 
-    data create(const VkDevice device, const bool is_timeline, const std::string& name);
+    vk_semaphore::data create(const VkDevice device, const VkSemaphoreType semaphore_type, const std::string& name);
     void destroy(const VkSemaphore semaphore, const VkDevice device);
 }
 
@@ -752,7 +754,7 @@ namespace vk_image_view
 
 namespace vk_sampler
 {
-    VkSampler create(const VkDevice device, const VkFilter min_filter, const VkFilter mag_filter, const VkSamplerAddressMode address_mode_u, const VkSamplerAddressMode address_mode_v, const float& max_anisotropy, const float min_lod, const float max_lod, const std::string& name);
+    VkSampler create(const VkDevice device, const cgltf_filter_type min_filter, const cgltf_filter_type mag_filter, const cgltf_wrap_mode wrap_s, const cgltf_wrap_mode wrap_t, const float& max_anisotropy, const float min_lod, const float max_lod, const std::string& name);
     void destroy(const VkSampler sampler, const VkDevice device);
 }
 
@@ -813,8 +815,8 @@ namespace host_buffer_memory
         VkBufferUsageFlags usage = VK_BUFFER_USAGE_FLAG_BITS_MAX_ENUM;
     };
 
-    data create(const VkDevice device, const VkPhysicalDeviceMemoryProperties& mem_props, const VkDeviceSize size, const VkBufferUsageFlags usage, const std::string& name);
     data create(const VkDevice device, const VkPhysicalDeviceMemoryProperties& mem_props, const VkDeviceSize offset, const VkBufferUsageFlags usage, const std::vector<uint8_t>& data, const std::string& name);
+    data create(const VkDevice device, const VkPhysicalDeviceMemoryProperties& mem_props, const VkDeviceSize size, const VkBufferUsageFlags usage, const std::string& name);
 
     void destroy(const data bm, const VkDevice device);
 }

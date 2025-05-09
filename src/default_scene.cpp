@@ -1,8 +1,6 @@
 #include "default_scene.hpp"
 #include "renderer.hpp"
 
-#include <DirectXMath.h>
-
 void default_scene::handle_mouse_move(const POINT mouse_pos)
 {
 	this->mouse_pos = mouse_pos;
