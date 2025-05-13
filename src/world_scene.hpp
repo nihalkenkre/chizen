@@ -5,45 +5,54 @@
 #include <string>
 #include <vector>
 
+#define CGLM_FORCE_ZERO_TO_ONE
+#include <cglm/include/cglm/cglm.h>
+
 class world_scene : public scene
 {
 public:
-	world_scene(const std::string& file_path, renderer* r);
+    world_scene(const std::string& file_path, renderer* r);
 
-	void handle_mouse_move(const POINT mouse_pos) override;
-	void update() override;
-	void render(renderer* r) override;
-	~world_scene();
+    void handle_mouse_move(const POINT mouse_pos) override;
+    void handle_mouse_l_btn_down() override;
+    void handle_mouse_l_btn_up() override;
+    void handle_mouse_m_btn_down() override;
+    void handle_mouse_m_btn_up() override;
+    void handle_mouse_r_btn_down() override;
+    void handle_mouse_r_btn_repeat() override;
+    void handle_mouse_r_btn_up() override;
+    void handle_w_down() override;
+    void handle_a_down() override;
+    void handle_s_down() override;
+    void handle_d_down() override;
+    void handle_q_down() override;
+    void handle_e_down() override;
+    void handle_w_up() override;
+    void handle_a_up() override;
+    void handle_s_up() override;
+    void handle_d_up() override;
+    void handle_q_up() override;
+    void handle_e_up() override;
+    void process_input_state() override;
+    void update() override;
+    void render(renderer* r) override;
+    ~world_scene();
 
 private:
-	void import_scene_data(const cgltf_data* data);
+    struct camera
+    {
+        mat4 xform;
 
-	struct mesh
-	{
-		std::string name;
-		uint8_t prims_count;
+        mat4 p;
 
-		bool operator==(const std::string& name)
-		{
-			return this->name == name;
-		}
-	};
+        vec3 eye;
+        vec3 dir;
+        vec3 right;
+        vec3 up;
+    };
 
-	struct material
-	{
-		std::string name;
-		std::vector<mesh> meshes;
-
-		bool operator==(const std::string& name)
-		{
-			return this->name == name;
-		}
-	};
-
-	struct scene_data
-	{
-		std::vector<material> mats;
-	};
-
-	std::unique_ptr<scene_data> sd;
+    void import_scene_data(const cgltf_data* data);
+    input_state i = {};
+    camera cam = {};
+    RECT wnd_rect = {};
 };

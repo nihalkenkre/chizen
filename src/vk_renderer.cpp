@@ -2,6 +2,7 @@
 
 #include <iostream>
 #include <meshoptimizer/src/meshoptimizer.h>
+#define CGLM_FORCE_ZERO_TO_ONE
 #include <cglm/include/cglm/cglm.h>
 
 #include <Shlwapi.h>
@@ -12,7 +13,6 @@
 
 constexpr uint8_t MAX_VERTICES = 64;
 constexpr uint8_t MAX_TRIANGLES = 124;
-constexpr float CAMERA_MOVEMENT_SPEED = 5.0;
 
 inline static VkDeviceSize ALIGNED_SIZE(VkDeviceSize value, VkDeviceSize alignment)
 {
@@ -93,101 +93,6 @@ void vk_renderer::import_scene_data(const std::string& file_path)
     sd = scene_data::create(file_path, phy_dev, surface, swapchain.images_count, device, xfer_q, xfer_cmd_pool.cmd_buffs[0]);
 }
 
-void vk_renderer::handle_mouse_move(const POINT mouse_pos)
-{
-    i.mouse_pos = mouse_pos;
-}
-
-void vk_renderer::handle_mouse_l_btn_down()
-{
-    i.l_btn_down = true;
-}
-
-void vk_renderer::handle_mouse_l_btn_up()
-{
-    i.l_btn_down = false;
-}
-
-void vk_renderer::handle_mouse_m_btn_down()
-{
-    i.m_btn_down = true;
-}
-
-void vk_renderer::handle_mouse_m_btn_up()
-{
-    i.m_btn_down = false;
-}
-
-void vk_renderer::handle_mouse_r_btn_down()
-{
-    i.r_btn_down = true;
-}
-
-void vk_renderer::handle_mouse_r_btn_up()
-{
-    i.r_btn_down = false;
-}
-
-void vk_renderer::handle_w_down()
-{
-    i.w_down = true;
-}
-
-void vk_renderer::handle_a_down()
-{
-    i.a_down = true;
-}
-
-void vk_renderer::handle_s_down()
-{
-    i.s_down = true;
-}
-
-void vk_renderer::handle_d_down()
-{
-    i.d_down = true;
-}
-
-void vk_renderer::handle_q_down()
-{
-    i.q_down = true;
-}
-
-void vk_renderer::handle_e_down()
-{
-    i.e_down = true;
-}
-
-void vk_renderer::handle_w_up()
-{
-    i.w_down = false;
-}
-
-void vk_renderer::handle_a_up()
-{
-    i.a_down = false;
-}
-
-void vk_renderer::handle_s_up()
-{
-    i.s_down = false;
-}
-
-void vk_renderer::handle_d_up()
-{
-    i.d_down = false;
-}
-
-void vk_renderer::handle_q_up()
-{
-    i.q_down = false;
-}
-
-void vk_renderer::handle_e_up()
-{
-    i.e_down = false;
-}
-
 void vk_renderer::resize(const uint32_t width, const uint32_t height)
 {
     VK_CHECK("wait for present fence", vkWaitForFences(device, 1, &swapchain.present_fences[img_idx], VK_TRUE, UINT64_MAX));
@@ -262,9 +167,11 @@ void vk_renderer::clear_frame(const float color[])
     vkCmdBeginRendering(swapchain.cmd_buffs[img_idx], &rendering_info);
 }
 
-void vk_renderer::render_world()
+void vk_renderer::render_world(const mat4 cam_xform)
 {
-    std::vector<VkViewport>viewports(1);
+    std::memcpy(reinterpret_cast<void*>(reinterpret_cast<uint64_t>(sd.cam.xform) + (img_idx * ALIGNED_SIZE(sizeof(mat4), phy_dev.props.properties.limits.minUniformBufferOffsetAlignment))), cam_xform, sizeof(mat4));
+
+    std::vector<VkViewport> viewports(1);
     viewports[0].width = static_cast<float>(surface.surf_caps.currentExtent.width);
     viewports[0].height = static_cast<float>(surface.surf_caps.currentExtent.height);
     viewports[0].minDepth = 0;
@@ -471,31 +378,6 @@ scene_data::data scene_data::create(const std::string& file_path, const vk_phy_d
 
     std::string raster_vtx_path = std::string(curr_dir).append("\\shaders\\pbr\\raster\\vertex\\");
     d.vtx_pipeline_d_sets = vk_graphics_pipeline::create(device, raster_vtx_path, CHI_PIPELINE_TYPE::VERTEX, surface.format.format, phy_dev.desc_buff_props, "vtx pipeline d sets");
-
-    //    for (auto const& file : std::filesystem::directory_iterator(std::filesystem::path(tmp)))
-    //    {
-    //        if (std::filesystem::is_directory(file))
-    //        {
-    //            for (auto const& pipeline_type : std::filesystem::directory_iterator(std::filesystem::path(file)))
-    //            {
-    //                if (std::filesystem::is_directory(pipeline_type)) {
-    //
-    //                    if (pipeline_type.path().string().find("mesh") != std::string::npos) {
-    //                        d.mesh_pipeline_d_sets = vk_graphics_pipeline::create(device, pipeline_type.path().string(), CHI_PIPELINE_TYPE::MESH, surface.format.format, phy_dev.desc_buff_props, "mesh pipeline d sets");
-    //#ifdef DESC_BUFFER
-    //                        d.mesh_d_buff_pipeline = vk_graphics_pipeline::create(device, pipeline_type.path().string(), CHI_PIPELINE_TYPE::MESH, surface.format.format, phy_dev.desc_buff_props);
-    //#endif // DESC_BUFFER
-    //                    }
-    //                    else if (pipeline_type.path().string().find("vertex") != std::string::npos) {
-    //                        d.vtx_pipeline_d_sets = vk_graphics_pipeline::create(device, pipeline_type.path().string(), CHI_PIPELINE_TYPE::VERTEX, surface.format.format, phy_dev.desc_buff_props, "vtx pipeline d sets");
-    //#ifdef DESC_BUFFER
-    //                        d.vtx_pipeline_d_buff = vk_graphics_pipeline::create(device, pipeline_type.path().string(), CHI_PIPELINE_TYPE::VERTEX, surface.format.format, phy_dev.desc_buff_props);
-    //#endif // DESC_BUFFER
-    //                    }
-    //                }
-    //            }
-    //        }
-    //    }
 
     d.cam_xform_d_buff_desc.resize(phy_dev.desc_buff_props.uniformBufferDescriptorSize);
 
@@ -849,26 +731,7 @@ scene_data::data scene_data::create(const std::string& file_path, const vk_phy_d
         VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT | VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT,
         xform_data, "uniform buffer memory");
 
-    mat4 identity_mat;
-    glm_mat4_identity(identity_mat);
-
-    // initial viewport camera xform
-    mat4 v;
-    vec3 eye = { 2, 5, -2 };
-    vec3 center = { 0, 1, 0 };
-    vec3 up = { 0, 1, 0 };
-    glm_lookat(eye, center, up, v);
-
-    mat4 p;
-    glm_perspective(90.f, (float)surface.surf_caps.currentExtent.width / (float)surface.surf_caps.currentExtent.height, 0.1, 1000.f, p);
-    p[1][1] *= -1;
-
-    mat4 vp;
-    glm_mul(p, v, vp);
-
     d.cam.xform = d.uni_buff_mem.map;
-    std::memcpy(d.cam.xform, vp, sizeof(mat4));
-    std::memcpy(reinterpret_cast<void*>(reinterpret_cast<uint64_t>(d.cam.xform) + aligned_mat_size), vp, sizeof(mat4));
 
     // prepare scene level descs (camera xform descs)
     VkDeviceSize uni_buff_offset = 0;

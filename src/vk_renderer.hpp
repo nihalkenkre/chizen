@@ -6,6 +6,7 @@
 #include <memory>
 #include <array>
 
+#define CGLM_FORCE_ZERO_TO_ONE
 #include <cglm/include/cglm/cglm.h>
 
 #include <stb/stb_image.h>
@@ -117,23 +118,19 @@ struct material_info
     VkDescriptorSet desc_set = VK_NULL_HANDLE;
 };
 
-struct camera
-{
-    // map value from the uniform buffer memory;
-    void* xform;
-
-    vec3 pos;
-    vec3 forward;
-    vec3 right;
-    vec3 up;
-
-    // one descriptor for each swapchain image
-    std::vector<VkDescriptorBufferInfo> xform_descs;
-    VkDescriptorPool desc_pool;
-};
 
 namespace scene_data
 {
+    struct camera
+    {
+        // map value from the uniform buffer memory;
+        void* xform;
+
+        // one descriptor for each swapchain image
+        std::vector<VkDescriptorBufferInfo> xform_descs;
+        VkDescriptorPool desc_pool;
+    };
+
     struct data
     {
         std::vector<material_info> mis;
@@ -160,52 +157,16 @@ namespace scene_data
     data create(const std::string& file_path, const vk_phy_dev::data& phy_dev, const vk_surface::data& surface, const uint32_t swapchain_images_count, const VkDevice& device, const VkQueue& xfer_q, const VkCommandBuffer& cmd_buff);
     void destroy(const data d, const VkDevice device);
 };
-
-struct input_state
-{
-    POINT mouse_pos;
-
-    bool l_btn_down;
-    bool m_btn_down;
-    bool r_btn_down;
-
-    bool w_down;
-    bool a_down;
-    bool s_down;
-    bool d_down;
-    bool q_down;
-    bool e_down;
-};
-
 class vk_renderer : public renderer
 {
 public:
     vk_renderer(const HWND h_wnd);
 
     void import_scene_data(const std::string& file_path) override;
-    void handle_mouse_move(const POINT mouse_pos) override;
-    void handle_mouse_l_btn_down() override;
-    void handle_mouse_l_btn_up() override;
-    void handle_mouse_m_btn_down() override;
-    void handle_mouse_m_btn_up() override;
-    void handle_mouse_r_btn_down() override;
-    void handle_mouse_r_btn_up() override;
-    void handle_w_down() override;
-    void handle_a_down() override;
-    void handle_s_down() override;
-    void handle_d_down() override;
-    void handle_q_down() override;
-    void handle_e_down() override;
-    void handle_w_up() override;
-    void handle_a_up() override;
-    void handle_s_up() override;
-    void handle_d_up() override;
-    void handle_q_up() override;
-    void handle_e_up() override;
     void resize(const uint32_t width, const uint32_t height) override;
     void begin_frame() override;
     void clear_frame(const float color[]) override;
-    void render_world() override;
+    void render_world(const mat4 cam_xform) override;
     void end_frame() override;
     void clear_scene_data() override;
 
@@ -229,6 +190,6 @@ private:
     VkViewport viewport;
 
     scene_data::data sd;
-    input_state i = {};
+    // current image index of the swapchain
     uint32_t img_idx;
 };

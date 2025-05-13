@@ -13,15 +13,19 @@
 #include "vk_renderer.hpp"
 
 #define CGLTF_IMPLEMENTATION
-#define CGLM_FORCE_ZERO_TO_ONE
 #include <cgltf/cgltf.h>
 
 #define CGLM_IMPLEMENTATION
+#define CGLM_FORCE_ZERO_TO_ONE
 #include <cglm/include/cglm/cglm.h>
 
 #define STB_IMAGE_IMPLEMENTATION
 #define STBI_NO_FAILURE_STRINGS
 #include <stb/stb_image.h>
+
+#include <wrl.h>
+
+using Microsoft::WRL::ComPtr;
 
 /*
 extern "C"
@@ -34,6 +38,12 @@ extern "C"
 #define FILE_MENU_OPEN 10
 #define DX_12_RADIO_BTN 101
 #define VULKAN_RADIO_BTN 102
+
+UINT_PTR r_btn_timer_id = 0;
+#define R_BTN_TIMER_ID 201
+#define R_BTN_INTERVAL 16
+#define RENDER_TIMER_ID 202
+#define RENDER_INTERVAL 16
 
 HWND h_scene_wnd = nullptr;
 HWND h_ctrl_pnl = nullptr;
@@ -52,7 +62,7 @@ static HWND create_control_panel(const HINSTANCE h_instance)
     AppendMenuA(h_file_menu, MF_STRING, FILE_MENU_OPEN, "Open");
     AppendMenuA(h_file_label, MF_POPUP, (UINT_PTR)h_file_menu, "File");
 
-    HWND h_ctrl_pnl = CreateWindowA(
+    return CreateWindowA(
         "Chizen",
         "Chizen",
         WS_OVERLAPPED | WS_CAPTION | WS_SYSMENU | WS_SIZEBOX,
@@ -64,8 +74,6 @@ static HWND create_control_panel(const HINSTANCE h_instance)
         h_file_label,
         h_instance,
         nullptr);
-
-    return h_ctrl_pnl;
 }
 
 static HWND create_wnd(const HINSTANCE h_instance)
@@ -83,7 +91,7 @@ static HWND create_wnd(const HINSTANCE h_instance)
     return CreateWindowA(
         "Chizen",
         "Chizen",
-        dw_style,
+        WS_OVERLAPPED | WS_SIZEBOX,
         CW_USEDEFAULT,
         CW_USEDEFAULT,
         wnd_rect.right - wnd_rect.left,
@@ -94,6 +102,7 @@ static HWND create_wnd(const HINSTANCE h_instance)
         nullptr);
 }
 
+/*
 static LRESULT CALLBACK RendererWndProc(HWND h_wnd, UINT msg, WPARAM w_param, LPARAM l_param)
 {
     HINSTANCE h_instance = GetModuleHandleA(nullptr);
@@ -118,7 +127,6 @@ static LRESULT CALLBACK RendererWndProc(HWND h_wnd, UINT msg, WPARAM w_param, LP
     case WM_COMMAND:
         switch (w_param)
         {
-        default:
         case DX_12_RADIO_BTN:
             std::cout << "setting dx12\n";
             r.reset();
@@ -142,7 +150,6 @@ static LRESULT CALLBACK RendererWndProc(HWND h_wnd, UINT msg, WPARAM w_param, LP
 
             break;
         }
-        break;
 
     default:
         return DefWindowProcA(h_wnd, msg, w_param, l_param);
@@ -167,6 +174,7 @@ static HWND create_rndrr_wnd(const HINSTANCE h_instance)
 
     return wnd;
 }
+*/
 
 static void open_file(const HWND h_wnd)
 {
@@ -210,9 +218,15 @@ static void open_file(const HWND h_wnd)
     }
 }
 
+static void CALLBACK timer_cb(HWND h_wnd, UINT msg, UINT timer_id, DWORD current_system_time)
+{
+    std::cout << timer_id << ' ' << current_system_time << '\n';
+}
+
 static LRESULT CALLBACK WindowProc(HWND h_wnd, UINT msg, WPARAM w_param, LPARAM l_param)
 {
     POINT p = {};
+    PAINTSTRUCT ps = {};
 
     switch (msg)
     {
@@ -237,7 +251,10 @@ static LRESULT CALLBACK WindowProc(HWND h_wnd, UINT msg, WPARAM w_param, LPARAM 
         break;
 
     case WM_PAINT:
+        BeginPaint(h_wnd, &ps);
         s->render(r.get());
+        EndPaint(h_wnd, &ps);
+
         break;
 
     case WM_MOUSEMOVE:
@@ -245,35 +262,33 @@ static LRESULT CALLBACK WindowProc(HWND h_wnd, UINT msg, WPARAM w_param, LPARAM 
         p.y = GET_Y_LPARAM(l_param);
 
         s->handle_mouse_move(p);
-        r->handle_mouse_move(p);
         break;
 
     case WM_KEYDOWN:
-        std::cout << "key down " << w_param << '\n';
         switch (w_param)
         {
         case 87:   // w
-            r->handle_w_down();
+            s->handle_w_down();
             break;
 
         case 65:    // a
-            r->handle_a_down();
+            s->handle_a_down();
             break;
 
         case 83:   // s
-            r->handle_s_down();
+            s->handle_s_down();
             break;
 
         case 68:   // d
-            r->handle_d_down();
+            s->handle_d_down();
             break;
 
         case 81:    // q
-            r->handle_q_down();
+            //s->handle_q_down();
             break;
 
         case 69:    // e
-            r->handle_e_down();
+            //s->handle_e_down();
             break;
 
         default:
@@ -282,31 +297,30 @@ static LRESULT CALLBACK WindowProc(HWND h_wnd, UINT msg, WPARAM w_param, LPARAM 
         break;
 
     case WM_KEYUP:
-        std::cout << "key up " << w_param << '\n';
         switch (w_param)
         {
         case 87:   // w
-            r->handle_w_up();
+            s->handle_w_up();
             break;
 
         case 65:    // a
-            r->handle_a_up();
+            s->handle_a_up();
             break;
 
         case 83:   // s
-            r->handle_s_up();
+            s->handle_s_up();
             break;
 
         case 68:   // d
-            r->handle_d_up();
+            s->handle_d_up();
             break;
 
         case 81:    // q
-            r->handle_q_up();
+            //s->handle_q_up();
             break;
 
         case 69:    // e
-            r->handle_e_up();
+            //s->handle_e_up();
             break;
 
         default:
@@ -315,27 +329,41 @@ static LRESULT CALLBACK WindowProc(HWND h_wnd, UINT msg, WPARAM w_param, LPARAM 
         break;
 
     case WM_LBUTTONDOWN:
-        r->handle_mouse_l_btn_down();
+        s->handle_mouse_l_btn_down();
         break;
 
     case WM_LBUTTONUP:
-        r->handle_mouse_l_btn_up();
+        s->handle_mouse_l_btn_up();
         break;
 
     case WM_MBUTTONDOWN:
-        r->handle_mouse_m_btn_down();
+        s->handle_mouse_m_btn_down();
         break;
 
     case WM_MBUTTONUP:
-        r->handle_mouse_m_btn_up();
+        s->handle_mouse_m_btn_up();
         break;
 
     case WM_RBUTTONDOWN:
-        r->handle_mouse_r_btn_down();
+        s->handle_mouse_r_btn_down();
+
+        r_btn_timer_id = SetTimer(h_wnd, R_BTN_TIMER_ID, R_BTN_INTERVAL, nullptr);
+
+        if (r_btn_timer_id == 0)
+        {
+            std::cerr << "Failed to create r btn down timer\n";
+        }
+
         break;
 
     case WM_RBUTTONUP:
-        r->handle_mouse_r_btn_up();
+        s->handle_mouse_r_btn_up();
+
+        if (!KillTimer(h_wnd, r_btn_timer_id))
+        {
+            std::cerr << "Failed to kill r btn down timer\n";
+        }
+
         break;
 
     case WM_SIZE:
@@ -346,6 +374,23 @@ static LRESULT CALLBACK WindowProc(HWND h_wnd, UINT msg, WPARAM w_param, LPARAM 
 
             r->resize(width, height);
         }
+        break;
+
+    case WM_TIMER:
+        switch (w_param)
+        {
+        case RENDER_TIMER_ID:
+            InvalidateRect(h_wnd, &r->wnd_rect, FALSE);
+            break;
+
+        case R_BTN_TIMER_ID:
+            s->handle_mouse_r_btn_repeat();
+            break;
+
+        default:
+            break;
+        }
+
         break;
 
     default:
@@ -362,7 +407,7 @@ int main(int argc, char** argv)
     std::cout << "Hi\n";
 
     WNDCLASSA wc = {};
-    wc.style = CS_HREDRAW | CS_VREDRAW | CS_OWNDC;
+    wc.style = CS_HREDRAW | CS_VREDRAW;
     wc.lpfnWndProc = WindowProc;
     wc.hInstance = h_instance;
     wc.hCursor = LoadCursorA(h_instance, MAKEINTRESOURCEA(32512));
@@ -387,42 +432,45 @@ int main(int argc, char** argv)
     ShowWindow(h_scene_wnd, SW_SHOW);
     ShowWindow(h_ctrl_pnl, SW_SHOW);
 
-    //WNDCLASSA rc = {
-    //    .style = CS_HREDRAW | CS_VREDRAW | CS_OWNDC,
-    //    .lpfnWndProc = RendererWndProc,
-    //    .hInstance = h_instance,
-    //    .hCursor = LoadCursorA(h_instance, MAKEINTRESOURCEA(32512)),
-    //    .lpszClassName = "Renderer",
-    //};
+    /*
+        WNDCLASSA rc = {
+                .style = CS_HREDRAW | CS_VREDRAW | CS_OWNDC,
+                .lpfnWndProc = RendererWndProc,
+                .hInstance = h_instance,
+                .hCursor = LoadCursorA(h_instance, MAKEINTRESOURCEA(32512)),
+                .lpszClassName = "Renderer",
+            };
 
-    //if (!RegisterClassA(&rc))
-    //{
-    //    DWORD err = GetLastError();
-    //    std::cout << err << '\n';
-    //    return err;
-    //}
+            if (!RegisterClassA(&rc))
+            {
+                DWORD err = GetLastError();
+                std::cout << err << '\n';
+                return err;
+            }
 
-    //h_rndrr_wnd = create_rndrr_wnd(h_instance);
+            h_rndrr_wnd = create_rndrr_wnd(h_instance);
 
-    //ShowWindow(h_rndrr_wnd, SW_SHOW);
+            ShowWindow(h_rndrr_wnd, SW_SHOW);
+    */
 
     VK_CHECK("volk initialize", volkInitialize());
     r = std::make_unique<vk_renderer>(h_scene_wnd);
     s = std::make_unique<default_scene>();
 
+    UpdateWindow(h_scene_wnd);
+
     MSG msg = { 0 };
+
+    UINT_PTR t = SetTimer(h_scene_wnd, RENDER_TIMER_ID, RENDER_INTERVAL, nullptr);
 
     while (GetMessageA(&msg, nullptr, 0, 0))
     {
-        if (msg.message == WM_QUIT || msg.message == WM_CLOSE || msg.message == WM_DESTROY)
-        {
-            break;
-        }
-        TranslateMessage(&msg);
         DispatchMessageA(&msg);
     }
 
     CoUninitialize();
+
+    KillTimer(h_scene_wnd, t);
 
     std::cout << "Bye\n";
 
