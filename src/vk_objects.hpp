@@ -748,7 +748,7 @@ namespace vk_image
 
 namespace vk_image_view
 {
-    VkImageView create(const VkDevice device, const VkImage image, const VkImageViewType view_type, const VkFormat format, const std::string& name);
+    VkImageView create(const VkDevice device, const VkImage image, const VkImageViewType view_type, const VkFormat format, const VkImageAspectFlags aspect_mask, const std::string& name);
     void destroy(const VkImageView image_view, const VkDevice device);
 };
 

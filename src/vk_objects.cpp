@@ -1257,6 +1257,14 @@ vk_graphics_pipeline::data vk_graphics_pipeline::create(const VkDevice device, c
     ds_ci.dynamicStateCount = static_cast<uint32_t>(ds.size());
     ds_ci.pDynamicStates = ds.data();
 
+    VkPipelineDepthStencilStateCreateInfo dss_ci = {};
+    dss_ci.sType = VK_STRUCTURE_TYPE_PIPELINE_DEPTH_STENCIL_STATE_CREATE_INFO;
+    dss_ci.depthWriteEnable = VK_TRUE;
+    dss_ci.depthTestEnable = VK_TRUE;
+    dss_ci.depthCompareOp = VK_COMPARE_OP_LESS_OR_EQUAL;
+    dss_ci.minDepthBounds = 0;
+    dss_ci.maxDepthBounds = 1;
+
     std::vector<VkFormat>col_attch_forms(1);
     col_attch_forms[0] = format;
 
@@ -1264,6 +1272,7 @@ vk_graphics_pipeline::data vk_graphics_pipeline::create(const VkDevice device, c
     rend_info.sType = VK_STRUCTURE_TYPE_PIPELINE_RENDERING_CREATE_INFO;
     rend_info.colorAttachmentCount = static_cast<uint32_t>(col_attch_forms.size());
     rend_info.pColorAttachmentFormats = col_attch_forms.data();
+    rend_info.depthAttachmentFormat = VK_FORMAT_D32_SFLOAT;
 
     VkGraphicsPipelineCreateInfo p_ci = {};
     p_ci.sType = VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_CREATE_INFO;
@@ -1276,6 +1285,7 @@ vk_graphics_pipeline::data vk_graphics_pipeline::create(const VkDevice device, c
     p_ci.pRasterizationState = &rs_ci;
     p_ci.pMultisampleState = &ms_ci;
     p_ci.pColorBlendState = &cbs_ci;
+    p_ci.pDepthStencilState = &dss_ci;
     p_ci.pDynamicState = &ds_ci;
     p_ci.layout = d.pipeline_layout;
 
@@ -1443,7 +1453,7 @@ void vk_image::destroy(const VkImage image, const VkDevice device)
     }
 }
 
-VkImageView vk_image_view::create(const VkDevice device, const VkImage image, const VkImageViewType view_type, const VkFormat format, const std::string& name)
+VkImageView vk_image_view::create(const VkDevice device, const VkImage image, const VkImageViewType view_type, const VkFormat format, const VkImageAspectFlags aspect_mask, const std::string& name)
 {
     VkImageViewCreateInfo create_info = {};
     create_info.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;
@@ -1454,7 +1464,7 @@ VkImageView vk_image_view::create(const VkDevice device, const VkImage image, co
     create_info.components.g = VK_COMPONENT_SWIZZLE_G;
     create_info.components.b = VK_COMPONENT_SWIZZLE_B;
     create_info.components.a = VK_COMPONENT_SWIZZLE_A;
-    create_info.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+    create_info.subresourceRange.aspectMask = aspect_mask;
     create_info.subresourceRange.levelCount = 1;
     create_info.subresourceRange.layerCount = 1;
 

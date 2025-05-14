@@ -157,12 +157,22 @@ void vk_renderer::clear_frame(const float color[])
     color_attachment_infos[0].clearValue.color.float32[2] = color[2];
     color_attachment_infos[0].clearValue.color.float32[3] = color[3];
 
+    VkRenderingAttachmentInfo depth_attachment_info = {};
+    depth_attachment_info.sType = VK_STRUCTURE_TYPE_RENDERING_ATTACHMENT_INFO;
+    depth_attachment_info.imageView = sd.depth_texture_view;
+    depth_attachment_info.imageLayout = VK_IMAGE_LAYOUT_DEPTH_ATTACHMENT_OPTIMAL;
+    depth_attachment_info.loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR;
+    depth_attachment_info.storeOp = VK_ATTACHMENT_STORE_OP_STORE;
+    depth_attachment_info.clearValue.depthStencil.depth = 1.f;
+    depth_attachment_info.clearValue.depthStencil.stencil = 0;
+
     VkRenderingInfoKHR rendering_info = {};
     rendering_info.sType = VK_STRUCTURE_TYPE_RENDERING_INFO;
     rendering_info.renderArea.extent = surface.surf_caps.currentExtent;
     rendering_info.layerCount = 1;
     rendering_info.colorAttachmentCount = static_cast<uint32_t>(color_attachment_infos.size());
     rendering_info.pColorAttachments = color_attachment_infos.data();
+    rendering_info.pDepthAttachment = &depth_attachment_info;
 
     vkCmdBeginRendering(swapchain.cmd_buffs[img_idx], &rendering_info);
 }
@@ -706,7 +716,7 @@ scene_data::data scene_data::create(const std::string& file_path, const vk_phy_d
     {
         VK_CHECK("bind image to memory", vkBindImageMemory(device, mi.mat_dscs.met_rough_dscs.base_color_image, d.images_memory, mi.mat_dscs.met_rough_dscs.base_color_pixels_offset));
 
-        mi.mat_dscs.met_rough_dscs.base_color_desc.imageView = vk_image_view::create(device, mi.mat_dscs.met_rough_dscs.base_color_image, VK_IMAGE_VIEW_TYPE_2D, VK_FORMAT_R8G8B8A8_UNORM, "base color texture image view");
+        mi.mat_dscs.met_rough_dscs.base_color_desc.imageView = vk_image_view::create(device, mi.mat_dscs.met_rough_dscs.base_color_image, VK_IMAGE_VIEW_TYPE_2D, VK_FORMAT_R8G8B8A8_UNORM, VK_IMAGE_ASPECT_COLOR_BIT, "base color texture image view");
 
         std::vector<VkBufferImageCopy2> regions(1);
         regions[0].sType = VK_STRUCTURE_TYPE_BUFFER_IMAGE_COPY_2;
@@ -769,6 +779,7 @@ scene_data::data scene_data::create(const std::string& file_path, const vk_phy_d
         std::vector<VkDescriptorSetLayout> dsls(1, d.vtx_pipeline_d_sets.dsls[1]);
         mi.desc_set = vk_descriptor_sets::allocate(device, mi.desc_pool, dsls, "per material textures desc set ")[0];
 
+        // base color desc
         std::vector<VkWriteDescriptorSet> write_desc_sets(1);
         write_desc_sets[0].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
         write_desc_sets[0].dstSet = mi.desc_set;
@@ -776,14 +787,6 @@ scene_data::data scene_data::create(const std::string& file_path, const vk_phy_d
         write_desc_sets[0].descriptorCount = 1;
         write_desc_sets[0].descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
         write_desc_sets[0].pImageInfo = &mi.mat_dscs.met_rough_dscs.base_color_desc;
-        //{
-        //    .sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
-        //    .dstSet = mi.desc_set,
-        //    .dstBinding = 1,
-        //    .descriptorCount = 1,
-        //    .descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
-        //    .pImageInfo = &mi.mat_dscs.met_rough_dscs.metal_rough_desc,
-        //}
 
         vkUpdateDescriptorSets(device, static_cast<uint32_t>(write_desc_sets.size()), write_desc_sets.data(), 0, nullptr);
 
@@ -814,6 +817,14 @@ scene_data::data scene_data::create(const std::string& file_path, const vk_phy_d
             uni_buff_offset += aligned_mat_size;
         }
     }
+
+    // depth texture
+    d.depth_texture = vk_image::create(device, VkExtent3D{ surface.surf_caps.currentExtent.width, surface.surf_caps.currentExtent.height, 1 }, VK_FORMAT_D32_SFLOAT, VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT, "depth texture");
+    VkMemoryRequirements mem_reqs = {};
+    vkGetImageMemoryRequirements(device, d.depth_texture, &mem_reqs);
+    d.depth_texture_memory = vk_device_memory::allocate(device, mem_reqs.size, get_memory_type_id(phy_dev.mem_props, mem_reqs, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT), "depth texture memory");
+    vkBindImageMemory(device, d.depth_texture, d.depth_texture_memory, 0);
+    d.depth_texture_view = vk_image_view::create(device, d.depth_texture, VK_IMAGE_VIEW_TYPE_2D, VK_FORMAT_D32_SFLOAT, VK_IMAGE_ASPECT_DEPTH_BIT, "depth texture image view");
 
     return d;
 }

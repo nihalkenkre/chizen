@@ -138,6 +138,10 @@ namespace scene_data
         host_buffer_memory::data uni_buff_mem;
         host_buffer_memory::data desc_buff_mem;
 
+        VkImage depth_texture = VK_NULL_HANDLE;
+        VkImageView depth_texture_view = VK_NULL_HANDLE;
+        VkDeviceMemory depth_texture_memory = VK_NULL_HANDLE;
+
         VkDeviceMemory images_memory = VK_NULL_HANDLE;
 
         std::vector<uint8_t> cam_xform_d_buff_desc;
