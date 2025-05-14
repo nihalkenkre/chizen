@@ -284,11 +284,11 @@ static LRESULT CALLBACK WindowProc(HWND h_wnd, UINT msg, WPARAM w_param, LPARAM 
             break;
 
         case 81:    // q
-            //s->handle_q_down();
+            s->handle_q_down();
             break;
 
         case 69:    // e
-            //s->handle_e_down();
+            s->handle_e_down();
             break;
 
         default:
@@ -316,11 +316,11 @@ static LRESULT CALLBACK WindowProc(HWND h_wnd, UINT msg, WPARAM w_param, LPARAM 
             break;
 
         case 81:    // q
-            //s->handle_q_up();
+            s->handle_q_up();
             break;
 
         case 69:    // e
-            //s->handle_e_up();
+            s->handle_e_up();
             break;
 
         default:

@@ -146,8 +146,8 @@ void world_scene::handle_mouse_r_btn_repeat()
     // yaw
     float yaw_step = static_cast<float>(GLM_PI * 2) / static_cast<float>(wnd_rect.right - wnd_rect.left);
     float yaw = static_cast<float>(i.last_mouse_pos.x - i.curr_mouse_pos.x) * yaw_step;
-    glm_vec3_rotate(cam.dir, yaw * CAMERA_LOOK_AROUND_SCALE, cam.up);
-    glm_vec3_rotate(cam.right, yaw * CAMERA_LOOK_AROUND_SCALE, cam.up);
+    glm_vec3_rotate(cam.dir, yaw * CAMERA_LOOK_AROUND_SCALE, vec3{ 0,1,0 });
+    glm_vec3_rotate(cam.right, yaw * CAMERA_LOOK_AROUND_SCALE, vec3{ 0,1,0 });
 
     // pitch
     float pitch_step = static_cast<float>(GLM_PI) / static_cast<float>(wnd_rect.bottom - wnd_rect.top);
@@ -155,7 +155,7 @@ void world_scene::handle_mouse_r_btn_repeat()
     glm_vec3_rotate(cam.dir, pitch * CAMERA_LOOK_AROUND_SCALE, cam.right);
     glm_vec3_rotate(cam.up, pitch * CAMERA_LOOK_AROUND_SCALE, cam.right);
 
-    glm_look(cam.eye, cam.dir, cam.up, cam.xform);
+    glm_look(cam.eye, cam.dir, vec3{ 0,1,0 }, cam.xform);
     glm_mul(cam.p, cam.xform, cam.xform);
 
     i.last_mouse_pos = i.curr_mouse_pos;
@@ -173,7 +173,7 @@ void world_scene::handle_w_down()
     vec3 translate = { CAMERA_MOVEMENT_SPEED,  CAMERA_MOVEMENT_SPEED, CAMERA_MOVEMENT_SPEED };
     glm_vec3_mul(translate, cam.dir, translate);
     glm_vec3_add(cam.eye, translate, cam.eye);
-    glm_look(cam.eye, cam.dir, cam.up, cam.xform);
+    glm_look(cam.eye, cam.dir, vec3{ 0,1,0 }, cam.xform);
     glm_mul(cam.p, cam.xform, cam.xform);
 }
 
@@ -184,7 +184,7 @@ void world_scene::handle_a_down()
     vec3 translate = { CAMERA_MOVEMENT_SPEED ,  CAMERA_MOVEMENT_SPEED, CAMERA_MOVEMENT_SPEED };
     glm_vec3_mul(translate, cam.right, translate);
     glm_vec3_add(cam.eye, translate, cam.eye);
-    glm_look(cam.eye, cam.dir, cam.up, cam.xform);
+    glm_look(cam.eye, cam.dir, vec3{ 0,1,0 }, cam.xform);
     glm_mul(cam.p, cam.xform, cam.xform);
 }
 
@@ -192,10 +192,10 @@ void world_scene::handle_s_down()
 {
     i.s_down = true;
 
-    vec3 translate = { -CAMERA_MOVEMENT_SPEED   ,  -CAMERA_MOVEMENT_SPEED   , -CAMERA_MOVEMENT_SPEED };
+    vec3 translate = { -CAMERA_MOVEMENT_SPEED,  -CAMERA_MOVEMENT_SPEED, -CAMERA_MOVEMENT_SPEED };
     glm_vec3_mul(translate, cam.dir, translate);
     glm_vec3_add(cam.eye, translate, cam.eye);
-    glm_look(cam.eye, cam.dir, cam.up, cam.xform);
+    glm_look(cam.eye, cam.dir, vec3{ 0,1,0 }, cam.xform);
     glm_mul(cam.p, cam.xform, cam.xform);
 }
 
@@ -203,10 +203,10 @@ void world_scene::handle_d_down()
 {
     i.d_down = true;
 
-    vec3 translate = { -CAMERA_MOVEMENT_SPEED   ,  -CAMERA_MOVEMENT_SPEED   , -CAMERA_MOVEMENT_SPEED };
+    vec3 translate = { -CAMERA_MOVEMENT_SPEED,  -CAMERA_MOVEMENT_SPEED, -CAMERA_MOVEMENT_SPEED };
     glm_vec3_mul(translate, cam.right, translate);
     glm_vec3_add(cam.eye, translate, cam.eye);
-    glm_look(cam.eye, cam.dir, cam.up, cam.xform);
+    glm_look(cam.eye, cam.dir, vec3{ 0,1,0 }, cam.xform);
     glm_mul(cam.p, cam.xform, cam.xform);
 }
 
@@ -214,11 +214,10 @@ void world_scene::handle_q_down()
 {
     i.q_down = true;
 
-    vec3 translate = { -CAMERA_MOVEMENT_SPEED   ,  -CAMERA_MOVEMENT_SPEED   , -CAMERA_MOVEMENT_SPEED };
-    glm_vec3_mul(translate, cam.up, translate);
-
+    vec3 translate = { CAMERA_MOVEMENT_SPEED,  CAMERA_MOVEMENT_SPEED, CAMERA_MOVEMENT_SPEED };
+    glm_vec3_mul(translate, vec3{ 0,1,0 }, translate);
     glm_vec3_add(cam.eye, translate, cam.eye);
-    glm_look(cam.eye, cam.dir, cam.up, cam.xform);
+    glm_look(cam.eye, cam.dir, vec3{ 0,1,0 }, cam.xform);
     glm_mul(cam.p, cam.xform, cam.xform);
 }
 
@@ -226,12 +225,10 @@ void world_scene::handle_e_down()
 {
     i.e_down = true;
 
-    vec3 translate = { CAMERA_MOVEMENT_SPEED    ,  CAMERA_MOVEMENT_SPEED    , CAMERA_MOVEMENT_SPEED };
-    glm_vec3_mul(translate, cam.up, translate);
-    glm_translate(cam.xform, translate);
-
+    vec3 translate = { -CAMERA_MOVEMENT_SPEED,  -CAMERA_MOVEMENT_SPEED, -CAMERA_MOVEMENT_SPEED };
+    glm_vec3_mul(translate, vec3{ 0,1,0 }, translate);
     glm_vec3_add(cam.eye, translate, cam.eye);
-    glm_look(cam.eye, cam.dir, cam.up, cam.xform);
+    glm_look(cam.eye, cam.dir, vec3{ 0,1,0 }, cam.xform);
     glm_mul(cam.p, cam.xform, cam.xform);
 }
 
