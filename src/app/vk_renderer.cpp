@@ -647,7 +647,13 @@ scene_data::data scene_data::create(const std::string& file_path, const vk_phy_d
                         cgltf_image* img = tex->image;
                         if (img->uri != nullptr)
                         {
+                            char* file_path_c = (char*)file_path.c_str();
+                            PathRemoveFileSpecA(file_path_c);
+                            strcat(file_path_c, "\\");
+                            strcat(file_path_c, img->uri);
 
+                            mr_dscs.base_color_pixels = stbi_load_from_file(fopen(file_path_c, "rb"), &mr_dscs.base_color_width, &mr_dscs.base_color_height, nullptr, 4);
+                            mr_dscs.base_color_len = static_cast<VkDeviceSize>(mr_dscs.base_color_width) * static_cast<VkDeviceSize>(mr_dscs.base_color_height) * 4;
                         }
                         else
                         {
@@ -677,6 +683,10 @@ scene_data::data scene_data::create(const std::string& file_path, const vk_phy_d
                     if (tex->sampler != nullptr)
                     {
                         mr_dscs.base_color_desc.sampler = vk_sampler::create(device, tex->sampler->min_filter, tex->sampler->mag_filter, tex->sampler->wrap_s, tex->sampler->wrap_t, phy_dev.props.properties.limits.maxSamplerAnisotropy, 0.0, 0.0, "base color sampler");
+                    }
+                    else
+                    {
+                        mr_dscs.base_color_desc.sampler = vk_sampler::create(device, cgltf_filter_type_nearest, cgltf_filter_type_linear, cgltf_wrap_mode_repeat, cgltf_wrap_mode_repeat, phy_dev.props.properties.limits.maxSamplerAnisotropy, 0, 0, "base color sampler");
                     }
                 }
 
