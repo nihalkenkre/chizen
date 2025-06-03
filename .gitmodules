@@ -1,9 +1,6 @@
 [submodule "cgltf"]
 	path = cgltf
 	url = git@github.com:jkuhlmann/cgltf.git
-[submodule "d3d-helpers"]
-	path = d3d-helpers
-	url = git@github.com:microsoft/DirectX-Headers.git
 [submodule "meshoptimizer"]
 	path = meshoptimizer
 	url = git@github.com:zeux/meshoptimizer.git
