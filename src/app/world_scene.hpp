@@ -5,6 +5,8 @@
 #include <string>
 #include <vector>
 
+#include <cgltf/cgltf.h>
+
 #define CGLM_FORCE_ZERO_TO_ONE
 #include <cglm/include/cglm/cglm.h>
 

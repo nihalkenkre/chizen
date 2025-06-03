@@ -1,8 +1,10 @@
 #pragma once
 
-#include <Volk/volk.h>
+//#include <Volk/volk.h>
 
 #include <Windows.h>
+#include <vulkan/vulkan.h>
+#include <vulkan/vulkan_win32.h>
 
 #include <vector>
 #include <sstream>
@@ -20,7 +22,16 @@ enum CHI_PIPELINE_TYPE
     MESH,
 };
 
-uint32_t get_memory_type_id(const VkPhysicalDeviceMemoryProperties mem_props, const VkMemoryRequirements mem_reqs, uint32_t mem_prop_types);
+namespace func_ptrs
+{
+   extern "C" PFN_vkSetDebugUtilsObjectNameEXT vk_SetDebugUtilsObjectNameEXT;
+   extern "C" PFN_vkCreateRayTracingPipelinesKHR vk_CreateRayTracingPipelinesKHR;
+   extern "C" PFN_vkGetAccelerationStructureBuildSizesKHR vk_GetAccelerationStructureBuildSizesKHR;
+   extern "C" PFN_vkCreateAccelerationStructureKHR vk_CreateAccelerationStructureKHR;
+   extern "C" PFN_vkDestroyAccelerationStructureKHR vk_DestroyAccelerationStructureKHR;
+}
+
+uint32_t get_memory_type_id(const VkPhysicalDeviceMemoryProperties2 mem_props, const VkMemoryRequirements2 mem_reqs, const uint32_t mem_prop_types);
 void copy_buffer_to_buffer(const VkBuffer src_buffer, const VkBuffer dst_buffer, const std::vector<VkBufferCopy> regions, const VkCommandBuffer cmd_buff, const VkQueue xfer_q);
 void copy_buffer_to_image(const VkBuffer src_buffer, const VkImage dst_image, const VkImageLayout dst_image_layout, const std::vector<VkBufferImageCopy2>& regions, const VkCommandBuffer cmd_buff, const VkQueue xfer_q);
 
@@ -180,7 +191,7 @@ namespace vk_surface
 //    VkPhysicalDeviceDescriptorBufferPropertiesEXT desc_buff_props = { .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_DESCRIPTOR_BUFFER_PROPERTIES_EXT };
 //};
 
-namespace vk_phy_dev
+namespace vk_phydev
 {
     struct data
     {
@@ -188,12 +199,12 @@ namespace vk_phy_dev
         uint32_t q_count = 0;
         uint32_t q_fly_idx = 0;
         VkPhysicalDeviceProperties2 props = {};
-        VkPhysicalDeviceMemoryProperties mem_props = {};
-        // Setting .sType so let vkGetPhysicalDeviceFeatures know what struct this is
+        VkPhysicalDeviceMemoryProperties2 mem_props = {};
         VkPhysicalDeviceDescriptorBufferPropertiesEXT desc_buff_props = {};
     };
 
     data get_phy_dev(const VkInstance instance, vk_surface::data* surface);
+    data get_phy_dev(const VkInstance instance);
 }
 
 //class vk_device
@@ -308,7 +319,7 @@ namespace vk_swapchain
         uint32_t images_count;
     };
 
-    vk_swapchain::data create(const VkDevice device, const vk_surface::data& surface, const vk_phy_dev::data& phy_dev, const std::string& name);
+    vk_swapchain::data create(const VkDevice device, const vk_surface::data& surface, const vk_phydev::data& phy_dev, const std::string& name);
     void destroy(vk_swapchain::data data, const VkDevice device);
 }
 
@@ -359,7 +370,7 @@ namespace vk_command_pool
     };
 
     data create(const VkDevice device, const uint32_t q_fly_idx, const uint32_t cmd_buffs_count, const std::string& name);
-    void destroy(const VkCommandPool cmd_pool, const VkDevice device);
+    void destroy(vk_command_pool::data cmd_pool, const VkDevice device);
 }
 
 //class vk_command_buffer
@@ -469,6 +480,12 @@ namespace vk_semaphore
 //private:
 //    VkDevice device = VK_NULL_HANDLE;
 //};
+
+namespace vk_fence
+{
+    VkFence create(const VkDevice device, const VkFenceCreateFlags flags, const std::string& name);
+    void destroy(const VkFence fence, const VkDevice device);
+}
 
 //class vk_buffer
 //{
@@ -652,7 +669,7 @@ struct dsl_info
 //    VkDevice device;
 //};
 
-namespace vk_graphics_pipeline
+namespace vk_raster_pipeline
 {
     struct data
     {
@@ -665,7 +682,7 @@ namespace vk_graphics_pipeline
         CHI_PIPELINE_TYPE p_type = CHI_PIPELINE_TYPE::VERTEX;
     };
 
-    vk_graphics_pipeline::data create(const VkDevice device, const std::string& path, const CHI_PIPELINE_TYPE& p_type, const VkFormat format, const VkPhysicalDeviceDescriptorBufferPropertiesEXT& desc_buff_props, const std::string& name);
+    vk_raster_pipeline::data create(const VkDevice device, const std::string& path, const CHI_PIPELINE_TYPE& p_type, const VkFormat format, const VkPhysicalDeviceDescriptorBufferPropertiesEXT& desc_buff_props, const std::string& name);
     void destroy(const data d, const VkDevice device);
 }
 
@@ -813,10 +830,11 @@ namespace host_buffer_memory
         void* map = nullptr;
 
         VkBufferUsageFlags usage = VK_BUFFER_USAGE_FLAG_BITS_MAX_ENUM;
+        VkDeviceSize size = 0;
     };
 
-    data create(const VkDevice device, const VkPhysicalDeviceMemoryProperties& mem_props, const VkDeviceSize offset, const VkBufferUsageFlags usage, const std::vector<uint8_t>& data, const std::string& name);
-    data create(const VkDevice device, const VkPhysicalDeviceMemoryProperties& mem_props, const VkDeviceSize size, const VkBufferUsageFlags usage, const std::string& name);
+    data create(const VkDevice device, const VkPhysicalDeviceMemoryProperties2& mem_props, const VkDeviceSize offset, const VkBufferUsageFlags usage, const std::vector<uint8_t>& data, const std::string& name);
+    data create(const VkDevice device, const VkPhysicalDeviceMemoryProperties2& mem_props, const VkDeviceSize size, const VkBufferUsageFlags usage, const std::string& name);
 
     void destroy(const data bm, const VkDevice device);
 }
@@ -869,13 +887,13 @@ namespace device_buffer_memory
         VkBuffer buffer = VK_NULL_HANDLE;
         VkDeviceMemory memory = VK_NULL_HANDLE;
 
-        // Only valid for buffers with VK**SHADER_ADDRESS_BIT
+        // Only valid for buffers with VK**SHADER_DEVICE_ADDRESS_BIT
         VkDeviceAddress addr = 0;
         VkBufferUsageFlags usage = VK_BUFFER_USAGE_FLAG_BITS_MAX_ENUM;
     };
 
-    data create(const VkDevice device, const VkPhysicalDeviceMemoryProperties& mem_props, const VkDeviceSize size, const VkBufferUsageFlags usage, const std::string& name);
-    data create(const VkDevice device, const VkPhysicalDeviceMemoryProperties& mem_props, const VkDeviceSize offset, VkBufferUsageFlags usage, const std::vector<uint8_t>& data, const VkQueue xfer_q, const VkCommandBuffer cmd_buff, const std::string& name);
+    device_buffer_memory::data create(const VkDevice device, const VkPhysicalDeviceMemoryProperties2& mem_props, const VkDeviceSize size, const VkBufferUsageFlags usage, const std::string& name);
+    device_buffer_memory::data create(const VkDevice device, const VkPhysicalDeviceMemoryProperties2& mem_props, const VkDeviceSize offset, VkBufferUsageFlags usage, const std::vector<uint8_t>& data, const VkQueue xfer_q, const VkCommandBuffer cmd_buff, const std::string& name);
 
     void destroy(const data bm, const VkDevice device);
 }

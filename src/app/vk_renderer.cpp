@@ -6,9 +6,7 @@
 #include <cglm/include/cglm/cglm.h>
 
 #include <Shlwapi.h>
-
 #include <SPIRV-Reflect/spirv_reflect.h>
-
 #include <stb/stb_image.h>
 
 constexpr uint8_t MAX_VERTICES = 64;
@@ -57,9 +55,9 @@ inline static RECT SANITIZE_RECT_FOR_RENDER(const RECT& rect)
 vk_renderer::vk_renderer(const HWND h_wnd) : img_idx(0), acq_wait_sem_val(0)
 {
     instance = vk_instance::create();
-    volkLoadInstance(instance);
+    //volkLoadInstance(instance);
     surface = vk_surface::create(instance, GetModuleHandleA(nullptr), h_wnd);
-    phy_dev = vk_phy_dev::get_phy_dev(instance, &surface);
+    phy_dev = vk_phydev::get_phy_dev(instance, &surface);
     device = vk_device::create(phy_dev.phy_dev, phy_dev.q_fly_idx, phy_dev.q_count);
     swapchain = vk_swapchain::create(device, surface, phy_dev, "swapchain");
     acq_sig_sem = vk_semaphore::create(device, VK_SEMAPHORE_TYPE_BINARY, "acquire signal semaphore");
@@ -192,48 +190,8 @@ void vk_renderer::render_world(const mat4 cam_xform)
 
     vkCmdSetScissor(swapchain.cmd_buffs[img_idx], 0, static_cast<uint32_t>(scissors.size()), scissors.data());
     vkCmdSetPrimitiveTopology(swapchain.cmd_buffs[img_idx], VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST);
-    vkCmdSetPolygonModeEXT(swapchain.cmd_buffs[img_idx], VK_POLYGON_MODE_FILL);
     vkCmdSetViewport(swapchain.cmd_buffs[img_idx], 0, static_cast<uint32_t>(viewports.size()), viewports.data());
 
-#ifdef DESC_BUFFER
-    vkCmdBindPipeline(swapchain.cmd_buffs[img_idx], VK_PIPELINE_BIND_POINT_GRAPHICS, vtx_pipeline_d_buff->pipeline);
-    const VkDescriptorBufferBindingInfoEXT binding_infos[] = {
-        {
-            .sType = VK_STRUCTURE_TYPE_DESCRIPTOR_BUFFER_BINDING_INFO_EXT,
-            .address = sd.desc_buff_mem->addr,
-            .usage = sd.desc_buff_mem->usage,
-        },
-    };
-
-    vkCmdBindDescriptorBuffersEXT(swapchain.cmd_buffs[img_idx], _countof(binding_infos), binding_infos);
-
-    const uint32_t buff_idxs[] = { 0 };
-    VkDeviceSize desc_buff_offset = 0;
-
-    for (auto const& mi : sd.mis)
-    {
-        for (auto const& pd : mi.pds)
-        {
-            vkCmdSetDescriptorBufferOffsetsEXT(swapchain.cmd_buffs[img_idx], VK_PIPELINE_BIND_POINT_GRAPHICS, vtx_pipeline_d_buff->pipeline_layout, 0, _countof(buff_idxs), buff_idxs, &desc_buff_offset);
-
-            const VkBuffer buffers[] = {
-                sd.geom_buff_mem->buffer->buffer,
-                sd.geom_buff_mem->buffer->buffer,
-            };
-
-            const VkDeviceSize offsets[] = {
-                pd.vsi.positions_offset,
-                pd.vsi.uvs_offsets,
-            };
-
-            vkCmdBindVertexBuffers(swapchain.cmd_buffs[img_idx], 0, _countof(buffers), buffers, offsets);
-            vkCmdBindIndexBuffer(swapchain.cmd_buffs[img_idx], sd.geom_buff_mem->buffer->buffer, pd.vsi.indices_offset, VK_INDEX_TYPE_UINT32);
-            vkCmdDrawIndexed(swapchain.cmd_buffs[img_idx], pd.vsi.indices_count, 1, 0, 0, 0);
-            desc_buff_offset += vtx_pipeline_d_buff->dsl_infos[0].aligned_size;
-        }
-    }
-
-#else
     vkCmdBindPipeline(swapchain.cmd_buffs[img_idx], VK_PIPELINE_BIND_POINT_GRAPHICS, sd.vtx_pipeline_d_sets.pipeline);
 
     std::vector<VkWriteDescriptorSet> write_desc_sets(1);
@@ -276,7 +234,6 @@ void vk_renderer::render_world(const mat4 cam_xform)
             vkCmdDrawIndexed(swapchain.cmd_buffs[img_idx], pd.vsi.indices_count, 1, 0, 0, 0);
         }
     }
-#endif // DESC_BUFFER
 }
 
 void vk_renderer::end_frame()
@@ -305,7 +262,7 @@ void vk_renderer::end_frame()
 
     vkCmdPipelineBarrier2(swapchain.cmd_buffs[img_idx], &dep_info);
 
-    vkEndCommandBuffer(swapchain.cmd_buffs[img_idx]);
+    VK_CHECK("end buffer", vkEndCommandBuffer(swapchain.cmd_buffs[img_idx]));
 
     std::vector<VkSemaphoreSubmitInfo> wait_sem_infos(1);
     wait_sem_infos[0].sType = VK_STRUCTURE_TYPE_SEMAPHORE_SUBMIT_INFO;
@@ -334,7 +291,7 @@ void vk_renderer::end_frame()
     submit_info.signalSemaphoreInfoCount = static_cast<uint32_t>(sig_sem_infos.size());
     submit_info.pSignalSemaphoreInfos = sig_sem_infos.data();
 
-    vkQueueSubmit2(gfx_q, 1, &submit_info, VK_NULL_HANDLE);
+    VK_CHECK("queue submit", vkQueueSubmit2(gfx_q, 1, &submit_info, VK_NULL_HANDLE));
 
     VkSwapchainPresentFenceInfoEXT present_fence_info = {};
     present_fence_info.sType = VK_STRUCTURE_TYPE_SWAPCHAIN_PRESENT_FENCE_INFO_EXT;
@@ -351,7 +308,7 @@ void vk_renderer::end_frame()
     present_info.pImageIndices = &img_idx;
 
     VK_CHECK("reset present fence", vkResetFences(device, 1, &swapchain.present_fences[img_idx]));
-    vkQueuePresentKHR(gfx_q, &present_info);
+    VK_CHECK("queue present", vkQueuePresentKHR(gfx_q, &present_info));
 }
 
 void vk_renderer::clear_scene_data()
@@ -362,6 +319,65 @@ void vk_renderer::clear_scene_data()
     scene_data::destroy(sd, device);
 }
 
+void vk_renderer::render_offline(const uint32_t render_width, const uint32_t render_height, uint8_t* pixels)
+{
+    std::vector<VkAccelerationStructureGeometryKHR> acc_str_geoms;
+
+    for (const auto& mi : sd.mis)
+    {
+        for (const auto& pd : mi.pds)
+        {
+            VkAccelerationStructureGeometryTrianglesDataKHR geom_tri_data = {};
+            geom_tri_data.sType = VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_GEOMETRY_TRIANGLES_DATA_KHR;
+            geom_tri_data.vertexFormat = VK_FORMAT_R32G32B32A32_SFLOAT;
+            geom_tri_data.vertexStride = 0;
+            geom_tri_data.vertexData = { sd.geom_buff_mem.addr + pd.vsi.positions_offset };
+            geom_tri_data.indexType = VK_INDEX_TYPE_UINT32;
+            geom_tri_data.indexData = { sd.geom_buff_mem.addr + pd.vsi.indices_offset };
+            geom_tri_data.maxVertex = pd.vsi.positions_count - 1;
+
+            VkAccelerationStructureGeometryDataKHR geom_data = {};
+            geom_data.triangles = geom_tri_data;
+
+            VkAccelerationStructureGeometryKHR acc_str_geom = {};
+            acc_str_geom.sType = VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_GEOMETRY_KHR;
+            acc_str_geom.geometryType = VK_GEOMETRY_TYPE_TRIANGLES_KHR;
+            acc_str_geom.geometry = geom_data;
+
+            acc_str_geoms.push_back(acc_str_geom);
+        }
+    }
+
+    VkAccelerationStructureBuildGeometryInfoKHR build_geom_info = {};
+    build_geom_info.sType = VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_BUILD_GEOMETRY_INFO_KHR;
+    build_geom_info.type = VK_ACCELERATION_STRUCTURE_TYPE_BOTTOM_LEVEL_KHR;
+    build_geom_info.geometryCount = acc_str_geoms.size();
+    build_geom_info.pGeometries = acc_str_geoms.data();
+    
+    VkAccelerationStructureBuildSizesInfoKHR acc_str_build_sizes_info = {};
+    acc_str_build_sizes_info.sType = VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_BUILD_SIZES_INFO_KHR;
+
+    vkGetAccelerationStructureBuildSizesKHR(device, VK_ACCELERATION_STRUCTURE_BUILD_TYPE_DEVICE_KHR, &build_geom_info, &build_geom_info.geometryCount, &acc_str_build_sizes_info);
+
+    device_buffer_memory::data acc_buff_mem = device_buffer_memory::create(device, phy_dev.mem_props, acc_str_build_sizes_info.accelerationStructureSize, VK_BUFFER_USAGE_ACCELERATION_STRUCTURE_STORAGE_BIT_KHR | VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT, "BLAS buff mem");
+
+    VkAccelerationStructureCreateInfoKHR acc_str_ci = {};
+    acc_str_ci.sType = VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_CREATE_INFO_KHR;
+    acc_str_ci.buffer = acc_buff_mem.buffer;
+    acc_str_ci.type = VK_ACCELERATION_STRUCTURE_TYPE_BOTTOM_LEVEL_KHR;
+
+    VkAccelerationStructureKHR blas = VK_NULL_HANDLE;
+
+    VK_CHECK("create BLAS", vkCreateAccelerationStructureKHR(device, &acc_str_ci, nullptr, &blas));
+
+    device_buffer_memory::data blas_scratch_buff_mem = device_buffer_memory::create(device, phy_dev.mem_props, acc_str_build_sizes_info.buildScratchSize, VK_BUFFER_USAGE_ACCELERATION_STRUCTURE_STORAGE_BIT_KHR | VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT, "BLAS scratch buff mem");
+
+    vkDestroyAccelerationStructureKHR(device, blas, nullptr);
+
+    device_buffer_memory::destroy(blas_scratch_buff_mem, device);
+    device_buffer_memory::destroy(acc_buff_mem, device);
+}
+
 vk_renderer::~vk_renderer()
 {
     VK_CHECK("wait for present fence", vkWaitForFences(device, 1, &swapchain.present_fences[img_idx], VK_TRUE, UINT64_MAX));
@@ -370,14 +386,14 @@ vk_renderer::~vk_renderer()
     scene_data::destroy(sd, device);
     vk_semaphore::destroy(acq_sig_sem.semaphore, device);
     vk_semaphore::destroy(acq_wait_sem.semaphore, device);
-    vk_command_pool::destroy(xfer_cmd_pool.cmd_pool, device);
+    vk_command_pool::destroy(xfer_cmd_pool, device);
     vk_swapchain::destroy(swapchain, device);
     vk_device::destroy(device);
     vk_surface::destroy(surface.surface, instance);
     vk_instance::destroy(instance);
 }
 
-scene_data::data scene_data::create(const std::string& file_path, const vk_phy_dev::data& phy_dev, const vk_surface::data& surface, const uint32_t swapchain_images_count, const VkDevice& device, const VkQueue& xfer_q, const VkCommandBuffer& cmd_buff)
+scene_data::data scene_data::create(const std::string& file_path, const vk_phydev::data& phy_dev, const vk_surface::data& surface, const uint32_t swapchain_images_count, const VkDevice& device, const VkQueue& xfer_q, const VkCommandBuffer& cmd_buff)
 {
     data d;
 
@@ -387,9 +403,9 @@ scene_data::data scene_data::create(const std::string& file_path, const vk_phy_d
     PathRemoveFileSpecA(curr_dir);
 
     std::string raster_vtx_path = std::string(curr_dir).append("\\shaders\\pbr\\raster\\vertex\\");
-    d.vtx_pipeline_d_sets = vk_graphics_pipeline::create(device, raster_vtx_path, CHI_PIPELINE_TYPE::VERTEX, surface.format.format, phy_dev.desc_buff_props, "vtx pipeline d sets");
-
-    d.cam_xform_d_buff_desc.resize(phy_dev.desc_buff_props.uniformBufferDescriptorSize);
+    d.vtx_pipeline_d_sets = vk_raster_pipeline::create(device, raster_vtx_path, CHI_PIPELINE_TYPE::VERTEX, surface.format.format, phy_dev.desc_buff_props, "vtx pipeline d sets");
+    std::string raster_mesh_path = std::string(curr_dir).append("\\shaders\\pbr\\raster\\mesh\\");
+    d.mesh_pipeline_d_sets = vk_raster_pipeline::create(device, raster_mesh_path, CHI_PIPELINE_TYPE::MESH, surface.format.format, phy_dev.desc_buff_props, "mesh pipeline d sets");
 
     cgltf_options options = {};
     cgltf_data* data = nullptr;
@@ -483,7 +499,7 @@ scene_data::data scene_data::create(const std::string& file_path, const vk_phy_d
             }
 
             primitive_data pd;
-            pd.vsi.indices_count = static_cast<uint32_t>(indices.size());
+            pd.vsi.indices_count = static_cast<uint32_t>(curr_prim->indices->count);
 
             for (cgltf_size a = 0; a < curr_prim->attributes_count; ++a)
             {
@@ -491,18 +507,24 @@ scene_data::data scene_data::create(const std::string& file_path, const vk_phy_d
 
                 if (std::strcmp(curr_attr->name, "POSITION") == 0)
                 {
+                    pd.vsi.positions_count = static_cast<uint32_t>(curr_attr->data->count);
+
                     size_t curr_pos_size = pos.size();
                     pos.resize(pos.size() + (curr_attr->data->count * curr_attr->data->stride));
                     std::memcpy(&pos[curr_pos_size], (void*)((ULONG_PTR)curr_attr->data->buffer_view->buffer->data + curr_attr->data->buffer_view->offset + curr_attr->data->offset), curr_attr->data->count * curr_attr->data->stride);
                 }
                 else if (std::strcmp(curr_attr->name, "TEXCOORD_0") == 0)
                 {
+                    pd.vsi.uvs_count = static_cast<uint32_t>(curr_attr->data->count);
+
                     size_t curr_uvs_size = uvs.size();
                     uvs.resize(uvs.size() + (curr_attr->data->count * curr_attr->data->stride));
                     std::memcpy(&uvs[curr_uvs_size], (void*)((ULONG_PTR)curr_attr->data->buffer_view->buffer->data + curr_attr->data->buffer_view->offset + curr_attr->data->offset), curr_attr->data->count * curr_attr->data->stride);
                 }
                 else if (std::strcmp(curr_attr->name, "NORMAL") == 0)
                 {
+                    pd.vsi.nrms_count = static_cast<uint32_t>(curr_attr->data->count);
+
                     size_t curr_nrm_size = nrms.size();
                     nrms.resize(nrms.size() + (curr_attr->data->count * curr_attr->data->stride));
                     std::memcpy(&nrms[curr_nrm_size], (void*)((ULONG_PTR)curr_attr->data->buffer_view->buffer->data + curr_attr->data->buffer_view->offset + curr_attr->data->offset), curr_attr->data->count * curr_attr->data->stride);
@@ -630,14 +652,18 @@ scene_data::data scene_data::create(const std::string& file_path, const vk_phy_d
 
             if (mat->has_pbr_metallic_roughness)
             {
-                metal_rough_descriptors mr_dscs = {};
-                mr_dscs.base_color_desc.imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
-                mr_dscs.base_color_factors[0] = mat->pbr_metallic_roughness.base_color_factor[0];
-                mr_dscs.base_color_factors[1] = mat->pbr_metallic_roughness.base_color_factor[1];
-                mr_dscs.base_color_factors[2] = mat->pbr_metallic_roughness.base_color_factor[2];
-                mr_dscs.base_color_factors[3] = mat->pbr_metallic_roughness.base_color_factor[3];
-                mr_dscs.metalness_factor = mat->pbr_metallic_roughness.metallic_factor;
-                mr_dscs.roughness_factor = mat->pbr_metallic_roughness.roughness_factor;
+                metal_rough_descriptors mtl_rgh_dscs = {};
+                mtl_rgh_dscs.base_color_desc.imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+                mtl_rgh_dscs.base_color_factors[0] = mat->pbr_metallic_roughness.base_color_factor[0];
+                mtl_rgh_dscs.base_color_factors[1] = mat->pbr_metallic_roughness.base_color_factor[1];
+                mtl_rgh_dscs.base_color_factors[2] = mat->pbr_metallic_roughness.base_color_factor[2];
+                mtl_rgh_dscs.base_color_factors[3] = mat->pbr_metallic_roughness.base_color_factor[3];
+                mtl_rgh_dscs.metalness_factor = mat->pbr_metallic_roughness.metallic_factor;
+                mtl_rgh_dscs.roughness_factor = mat->pbr_metallic_roughness.roughness_factor;
+                mtl_rgh_dscs.base_color_desc.imageView = VK_NULL_HANDLE;
+                mtl_rgh_dscs.base_color_desc.sampler = vk_sampler::create(device, cgltf_filter_type_nearest, cgltf_filter_type_linear, cgltf_wrap_mode_repeat, cgltf_wrap_mode_repeat, phy_dev.props.properties.limits.maxSamplerAnisotropy, 0, 0, "base color texture sampler");
+                mtl_rgh_dscs.metal_rough_desc.imageView = VK_NULL_HANDLE;
+                mtl_rgh_dscs.metal_rough_desc.sampler = vk_sampler::create(device, cgltf_filter_type_nearest, cgltf_filter_type_linear, cgltf_wrap_mode_repeat, cgltf_wrap_mode_repeat, phy_dev.props.properties.limits.maxSamplerAnisotropy, 0, 0, "metal roughness texture sampler");
 
                 if (mat->pbr_metallic_roughness.base_color_texture.texture != nullptr)
                 {
@@ -652,45 +678,45 @@ scene_data::data scene_data::create(const std::string& file_path, const vk_phy_d
                             strcat(file_path_c, "\\");
                             strcat(file_path_c, img->uri);
 
-                            mr_dscs.base_color_pixels = stbi_load_from_file(fopen(file_path_c, "rb"), &mr_dscs.base_color_width, &mr_dscs.base_color_height, nullptr, 4);
-                            mr_dscs.base_color_len = static_cast<VkDeviceSize>(mr_dscs.base_color_width) * static_cast<VkDeviceSize>(mr_dscs.base_color_height) * 4;
+                            mtl_rgh_dscs.base_color_pixels = stbi_load_from_file(fopen(file_path_c, "rb"), &mtl_rgh_dscs.base_color_width, &mtl_rgh_dscs.base_color_height, nullptr, 4);
+                            mtl_rgh_dscs.base_color_len = static_cast<VkDeviceSize>(mtl_rgh_dscs.base_color_width) * static_cast<VkDeviceSize>(mtl_rgh_dscs.base_color_height) * 4;
                         }
                         else
                         {
-                            mr_dscs.base_color_pixels = stbi_load_from_memory(reinterpret_cast<stbi_uc*>(reinterpret_cast<uint64_t>(img->buffer_view->buffer->data) + img->buffer_view->offset), static_cast<int>(img->buffer_view->size), &mr_dscs.base_color_width, &mr_dscs.base_color_height, nullptr, 4);
-                            mr_dscs.base_color_len = static_cast<VkDeviceSize>(mr_dscs.base_color_width) * static_cast<VkDeviceSize>(mr_dscs.base_color_height) * 4;
+                            mtl_rgh_dscs.base_color_pixels = stbi_load_from_memory(reinterpret_cast<stbi_uc*>(reinterpret_cast<uint64_t>(img->buffer_view->buffer->data) + img->buffer_view->offset), static_cast<int>(img->buffer_view->size), &mtl_rgh_dscs.base_color_width, &mtl_rgh_dscs.base_color_height, nullptr, 4);
+                            mtl_rgh_dscs.base_color_len = static_cast<VkDeviceSize>(mtl_rgh_dscs.base_color_width) * static_cast<VkDeviceSize>(mtl_rgh_dscs.base_color_height) * 4;
                         }
 
                         VkExtent3D extent = {};
-                        extent.width = static_cast<uint32_t>(mr_dscs.base_color_width);
-                        extent.height = static_cast<uint32_t>(mr_dscs.base_color_height);
+                        extent.width = static_cast<uint32_t>(mtl_rgh_dscs.base_color_width);
+                        extent.height = static_cast<uint32_t>(mtl_rgh_dscs.base_color_height);
                         extent.depth = 1;
-                        mr_dscs.base_color_image = vk_image::create(device,
+                        mtl_rgh_dscs.base_color_image = vk_image::create(device,
                             extent,
                             VK_FORMAT_R8G8B8A8_UNORM,
                             VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT,
                             "base color texture image"
                         );
 
-                        vkGetImageMemoryRequirements(device, mr_dscs.base_color_image, &mr_dscs.base_color_mem_reqs);
+                        VkImageMemoryRequirementsInfo2 base_color_img_mem_req_info = {};
+                        base_color_img_mem_req_info.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_REQUIREMENTS_INFO_2;
+                        base_color_img_mem_req_info.image = mtl_rgh_dscs.base_color_image;
+                        mtl_rgh_dscs.base_color_mem_reqs.sType = VK_STRUCTURE_TYPE_MEMORY_REQUIREMENTS_2;
+                        vkGetImageMemoryRequirements2(device, &base_color_img_mem_req_info, &mtl_rgh_dscs.base_color_mem_reqs);
 
                         size_t image_data_current_size = images_data.size();
-                        mr_dscs.base_color_pixels_offset = image_data_current_size;
-                        images_data.resize(image_data_current_size + mr_dscs.base_color_mem_reqs.size);
-                        std::memcpy(images_data.data() + image_data_current_size, mr_dscs.base_color_pixels, mr_dscs.base_color_len);
+                        mtl_rgh_dscs.base_color_pixels_offset = image_data_current_size;
+                        images_data.resize(image_data_current_size + mtl_rgh_dscs.base_color_mem_reqs.memoryRequirements.size);
+                        std::memcpy(images_data.data() + image_data_current_size, mtl_rgh_dscs.base_color_pixels, mtl_rgh_dscs.base_color_len);
                     }
 
                     if (tex->sampler != nullptr)
                     {
-                        mr_dscs.base_color_desc.sampler = vk_sampler::create(device, tex->sampler->min_filter, tex->sampler->mag_filter, tex->sampler->wrap_s, tex->sampler->wrap_t, phy_dev.props.properties.limits.maxSamplerAnisotropy, 0.0, 0.0, "base color sampler");
-                    }
-                    else
-                    {
-                        mr_dscs.base_color_desc.sampler = vk_sampler::create(device, cgltf_filter_type_nearest, cgltf_filter_type_linear, cgltf_wrap_mode_repeat, cgltf_wrap_mode_repeat, phy_dev.props.properties.limits.maxSamplerAnisotropy, 0, 0, "base color sampler");
+                        mtl_rgh_dscs.base_color_desc.sampler = vk_sampler::create(device, tex->sampler->min_filter, tex->sampler->mag_filter, tex->sampler->wrap_s, tex->sampler->wrap_t, phy_dev.props.properties.limits.maxSamplerAnisotropy, 0.0, 0.0, "base color sampler");
                     }
                 }
 
-                mat_dscs.met_rough_dscs = mr_dscs;
+                mat_dscs.mtl_rgh_dscs = mtl_rgh_dscs;
             }
             else
             {
@@ -717,35 +743,42 @@ scene_data::data scene_data::create(const std::string& file_path, const vk_phy_d
 
     cgltf_free(data);
 
-    host_buffer_memory::data images_staging = host_buffer_memory::create(device, phy_dev.mem_props, 0, VK_IMAGE_USAGE_TRANSFER_SRC_BIT, images_data, "images staging buffer");
-
-    // nasty hack. the format of the images are the same, and thus the memory type id would also be the same, so just get the mem_reqs of the first one and allocate.
-    d.images_memory = vk_device_memory::allocate(device, images_data.size(), get_memory_type_id(phy_dev.mem_props, d.mis[0].mat_dscs.met_rough_dscs.base_color_mem_reqs, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT), "images device memory");
-
-    for (auto& mi : d.mis)
+    if (images_data.size() > 0)
     {
-        VK_CHECK("bind image to memory", vkBindImageMemory(device, mi.mat_dscs.met_rough_dscs.base_color_image, d.images_memory, mi.mat_dscs.met_rough_dscs.base_color_pixels_offset));
+        host_buffer_memory::data images_staging = host_buffer_memory::create(device, phy_dev.mem_props, 0, VK_IMAGE_USAGE_TRANSFER_SRC_BIT, images_data, "images staging buffer");
 
-        mi.mat_dscs.met_rough_dscs.base_color_desc.imageView = vk_image_view::create(device, mi.mat_dscs.met_rough_dscs.base_color_image, VK_IMAGE_VIEW_TYPE_2D, VK_FORMAT_R8G8B8A8_UNORM, VK_IMAGE_ASPECT_COLOR_BIT, "base color texture image view");
+        // nasty hack. the format of the images are the same, and thus the memory type id would also be the same, so just get the mem_reqs of the first one and allocate.
+        d.images_memory = vk_device_memory::allocate(device, images_data.size(), get_memory_type_id(phy_dev.mem_props, d.mis[0].mat_dscs.mtl_rgh_dscs.base_color_mem_reqs, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT), "images device memory");
 
-        std::vector<VkBufferImageCopy2> regions(1);
-        regions[0].sType = VK_STRUCTURE_TYPE_BUFFER_IMAGE_COPY_2;
-        regions[0].bufferOffset = mi.mat_dscs.met_rough_dscs.base_color_pixels_offset;
-        regions[0].imageSubresource.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
-        regions[0].imageSubresource.layerCount = 1;
-        regions[0].imageExtent.width = static_cast<uint32_t>(mi.mat_dscs.met_rough_dscs.base_color_width);
-        regions[0].imageExtent.height = static_cast<uint32_t>(mi.mat_dscs.met_rough_dscs.base_color_height);
-        regions[0].imageExtent.depth = 1;
+        for (auto& mi : d.mis)
+        {
+            VK_CHECK("bind image to memory", vkBindImageMemory(device, mi.mat_dscs.mtl_rgh_dscs.base_color_image, d.images_memory, mi.mat_dscs.mtl_rgh_dscs.base_color_pixels_offset));
 
-        copy_buffer_to_image(images_staging.buffer, mi.mat_dscs.met_rough_dscs.base_color_image, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, regions, cmd_buff, xfer_q);
+            mi.mat_dscs.mtl_rgh_dscs.base_color_desc.imageView = vk_image_view::create(device, mi.mat_dscs.mtl_rgh_dscs.base_color_image, VK_IMAGE_VIEW_TYPE_2D, VK_FORMAT_R8G8B8A8_UNORM, VK_IMAGE_ASPECT_COLOR_BIT, "base color texture image view");
+
+            std::vector<VkBufferImageCopy2> regions(1);
+            regions[0].sType = VK_STRUCTURE_TYPE_BUFFER_IMAGE_COPY_2;
+            regions[0].bufferOffset = mi.mat_dscs.mtl_rgh_dscs.base_color_pixels_offset;
+            regions[0].imageSubresource.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+            regions[0].imageSubresource.layerCount = 1;
+            regions[0].imageExtent.width = static_cast<uint32_t>(mi.mat_dscs.mtl_rgh_dscs.base_color_width);
+            regions[0].imageExtent.height = static_cast<uint32_t>(mi.mat_dscs.mtl_rgh_dscs.base_color_height);
+            regions[0].imageExtent.depth = 1;
+
+            copy_buffer_to_image(images_staging.buffer, mi.mat_dscs.mtl_rgh_dscs.base_color_image, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, regions, cmd_buff, xfer_q);
+        }
+
+        host_buffer_memory::destroy(images_staging, device);
     }
 
-    host_buffer_memory::destroy(images_staging, device);
+    if (vertex_geom_data.size() > 0)
+    {
+        d.geom_buff_mem = device_buffer_memory::create(
+            device, phy_dev.mem_props, 0,
+            VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_VERTEX_BUFFER_BIT | VK_BUFFER_USAGE_INDEX_BUFFER_BIT | VK_BUFFER_USAGE_ACCELERATION_STRUCTURE_BUILD_INPUT_READ_ONLY_BIT_KHR | VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT,
+            vertex_geom_data, xfer_q, cmd_buff, "geom buffer memory");
+    }
 
-    d.geom_buff_mem = device_buffer_memory::create(
-        device, phy_dev.mem_props, 0,
-        VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_VERTEX_BUFFER_BIT | VK_BUFFER_USAGE_INDEX_BUFFER_BIT,
-        vertex_geom_data, xfer_q, cmd_buff, "geom buffer memory");
     d.uni_buff_mem = host_buffer_memory::create(
         device, phy_dev.mem_props, 0,
         VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT | VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT,
@@ -796,7 +829,7 @@ scene_data::data scene_data::create(const std::string& file_path, const vk_phy_d
         write_desc_sets[0].dstBinding = 0;
         write_desc_sets[0].descriptorCount = 1;
         write_desc_sets[0].descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
-        write_desc_sets[0].pImageInfo = &mi.mat_dscs.met_rough_dscs.base_color_desc;
+        write_desc_sets[0].pImageInfo = &mi.mat_dscs.mtl_rgh_dscs.base_color_desc;
 
         vkUpdateDescriptorSets(device, static_cast<uint32_t>(write_desc_sets.size()), write_desc_sets.data(), 0, nullptr);
 
@@ -830,9 +863,13 @@ scene_data::data scene_data::create(const std::string& file_path, const vk_phy_d
 
     // depth texture
     d.depth_texture = vk_image::create(device, VkExtent3D{ surface.surf_caps.currentExtent.width, surface.surf_caps.currentExtent.height, 1 }, VK_FORMAT_D32_SFLOAT, VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT, "depth texture");
-    VkMemoryRequirements mem_reqs = {};
-    vkGetImageMemoryRequirements(device, d.depth_texture, &mem_reqs);
-    d.depth_texture_memory = vk_device_memory::allocate(device, mem_reqs.size, get_memory_type_id(phy_dev.mem_props, mem_reqs, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT), "depth texture memory");
+    VkImageMemoryRequirementsInfo2 depth_img_mem_reqs = {};
+    depth_img_mem_reqs.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_REQUIREMENTS_INFO_2;
+    depth_img_mem_reqs.image = d.depth_texture;
+    VkMemoryRequirements2 mem_reqs = {};
+    mem_reqs.sType = VK_STRUCTURE_TYPE_MEMORY_REQUIREMENTS_2;
+    vkGetImageMemoryRequirements2(device, &depth_img_mem_reqs, &mem_reqs);
+    d.depth_texture_memory = vk_device_memory::allocate(device, mem_reqs.memoryRequirements.size, get_memory_type_id(phy_dev.mem_props, mem_reqs, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT), "depth texture memory");
     vkBindImageMemory(device, d.depth_texture, d.depth_texture_memory, 0);
     d.depth_texture_view = vk_image_view::create(device, d.depth_texture, VK_IMAGE_VIEW_TYPE_2D, VK_FORMAT_D32_SFLOAT, VK_IMAGE_ASPECT_DEPTH_BIT, "depth texture image view");
 
@@ -843,16 +880,16 @@ void scene_data::destroy(const data d, const VkDevice device)
 {
     for (auto const& mi : d.mis)
     {
-        vk_image::destroy(mi.mat_dscs.met_rough_dscs.base_color_image, device);
-        vk_image_view::destroy(mi.mat_dscs.met_rough_dscs.base_color_desc.imageView, device);
+        vk_image::destroy(mi.mat_dscs.mtl_rgh_dscs.base_color_image, device);
+        vk_image_view::destroy(mi.mat_dscs.mtl_rgh_dscs.base_color_desc.imageView, device);
     }
     vk_device_memory::free(d.images_memory, device);
     host_buffer_memory::destroy(d.uni_buff_mem, device);
     host_buffer_memory::destroy(d.desc_buff_mem, device);
     device_buffer_memory::destroy(d.geom_buff_mem, device);
     vk_descriptor_pool::destroy(d.desc_pool, device);
-    vk_graphics_pipeline::destroy(d.mesh_pipeline_d_sets, device);
-    vk_graphics_pipeline::destroy(d.mesh_pipeline_d_buff, device);
-    vk_graphics_pipeline::destroy(d.vtx_pipeline_d_sets, device);
-    vk_graphics_pipeline::destroy(d.vtx_pipeline_d_buff, device);
+    vk_raster_pipeline::destroy(d.mesh_pipeline_d_sets, device);
+    vk_raster_pipeline::destroy(d.mesh_pipeline_d_buff, device);
+    vk_raster_pipeline::destroy(d.vtx_pipeline_d_sets, device);
+    vk_raster_pipeline::destroy(d.vtx_pipeline_d_buff, device);
 }

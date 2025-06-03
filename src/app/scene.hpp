@@ -54,6 +54,8 @@ public:
     virtual void render(renderer* r) = 0;
     virtual ~scene() {}
 
+    void* cam_xform = nullptr;
+
 protected:
     input_state i = {};
 };

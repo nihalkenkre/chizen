@@ -11,13 +11,6 @@
 
 #include <stb/stb_image.h>
 
-struct float3
-{
-    float x;
-    float y;
-    float z;
-};
-
 struct mesh_shader_info
 {
     std::array<VkDeviceSize, 4> geom_data_sizes;
@@ -37,6 +30,11 @@ struct mesh_shader_info
 
 struct vertex_shader_info
 {
+    uint32_t indices_count = 0;
+    uint32_t positions_count = 0;
+    uint32_t uvs_count = 0;
+    uint32_t nrms_count = 0;
+
     VkDeviceSize positions_offset = 0;
     VkDeviceSize uvs_offset = 0;
     VkDeviceSize nrms_offset = 0;
@@ -44,8 +42,6 @@ struct vertex_shader_info
 
     std::vector<uint8_t> xform_d_buff_desc;
     VkDescriptorBufferInfo xform_d_set_desc = {};
-
-    uint32_t indices_count = 0;
 };
 
 struct metal_rough_descriptors
@@ -56,8 +52,8 @@ struct metal_rough_descriptors
     VkImage base_color_image;
     VkImage metal_rough_image;
 
-    VkMemoryRequirements base_color_mem_reqs;
-    VkMemoryRequirements metal_rough_mem_reqs;
+    VkMemoryRequirements2 base_color_mem_reqs;
+    VkMemoryRequirements2 metal_rough_mem_reqs;
 
     float base_color_factors[4];
     float metalness_factor;
@@ -85,7 +81,7 @@ struct clearcoat_descriptors
 
 struct material_descriptors
 {
-    metal_rough_descriptors met_rough_dscs;
+    metal_rough_descriptors mtl_rgh_dscs;
     clearcoat_descriptors cc_dsc;
 };
 
@@ -93,10 +89,6 @@ struct primitive_data
 {
     mesh_shader_info msi;
     vertex_shader_info vsi;
-
-    std::vector<uint32_t> indices;
-    std::vector<uint8_t> positions;
-    std::vector<uint8_t> uvs;
 
     // primitive level xform desc 
     VkDescriptorBufferInfo xform_desc;
@@ -144,23 +136,22 @@ namespace scene_data
 
         VkDeviceMemory images_memory = VK_NULL_HANDLE;
 
-        std::vector<uint8_t> cam_xform_d_buff_desc;
-
         camera cam;
         // scene level desc pool
         VkDescriptorPool desc_pool = VK_NULL_HANDLE;
         // scene level desc set
         VkDescriptorSet desc_set = VK_NULL_HANDLE;
 
-        vk_graphics_pipeline::data mesh_pipeline_d_sets;
-        vk_graphics_pipeline::data mesh_pipeline_d_buff;
-        vk_graphics_pipeline::data vtx_pipeline_d_sets;
-        vk_graphics_pipeline::data vtx_pipeline_d_buff;
+        vk_raster_pipeline::data mesh_pipeline_d_sets;
+        vk_raster_pipeline::data mesh_pipeline_d_buff;
+        vk_raster_pipeline::data vtx_pipeline_d_sets;
+        vk_raster_pipeline::data vtx_pipeline_d_buff;
     };
 
-    data create(const std::string& file_path, const vk_phy_dev::data& phy_dev, const vk_surface::data& surface, const uint32_t swapchain_images_count, const VkDevice& device, const VkQueue& xfer_q, const VkCommandBuffer& cmd_buff);
+    data create(const std::string& file_path, const vk_phydev::data& phy_dev, const vk_surface::data& surface, const uint32_t swapchain_images_count, const VkDevice& device, const VkQueue& xfer_q, const VkCommandBuffer& cmd_buff);
     void destroy(const data d, const VkDevice device);
 };
+
 class vk_renderer : public renderer
 {
 public:
@@ -173,13 +164,14 @@ public:
     void render_world(const mat4 cam_xform) override;
     void end_frame() override;
     void clear_scene_data() override;
+    void render_offline(const uint32_t render_width, const uint32_t render_height, uint8_t* pixels) override;
 
     ~vk_renderer();
 
 private:
     VkInstance instance;
     vk_surface::data surface;
-    vk_phy_dev::data phy_dev;
+    vk_phydev::data phy_dev;
     VkDevice device;
     vk_swapchain::data swapchain;
     vk_semaphore::data acq_sig_sem;

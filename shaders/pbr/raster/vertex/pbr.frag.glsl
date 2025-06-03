@@ -21,6 +21,7 @@ layout(location = 0) out vec4 out_color;
 
 void main()
 {
-    float dotp = dot(in_nrm, normalize((vec3(10, 10, 10) - in_pos.xyz)));
-    out_color = vec4((texture(base_color, in_uv).xyz * max(0, dotp)), 1);
+    // float dotp = dot(in_nrm, normalize((vec3(10, 10, 10) - in_pos.xyz)));
+    // out_color = vec4((texture(base_color, in_uv).xyz * max(0, dotp)), 1);
+    out_color = max(vec4(0.5, 0.5, 0.5, 1), texture(base_color, in_uv));
 }

@@ -49,6 +49,8 @@ world_scene::world_scene(const std::string& file_path, renderer* r)
     // v * p
     glm_mul(cam.p, cam.xform, cam.xform);
 
+    cam_xform = &cam.xform;
+
     wnd_rect = r->wnd_rect;
 }
 

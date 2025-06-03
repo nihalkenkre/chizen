@@ -6,10 +6,8 @@
 #include <memory>
 #include <string>
 
-#include "scene.hpp"
 #include "default_scene.hpp"
 #include "world_scene.hpp"
-
 #include "vk_renderer.hpp"
 
 #define CGLTF_IMPLEMENTATION
@@ -24,8 +22,9 @@
 #include <stb/stb_image.h>
 
 #include <wrl.h>
-
 using Microsoft::WRL::ComPtr;
+
+#include "offline_renderer.hpp"
 
 /*
 extern "C"
@@ -35,19 +34,26 @@ extern "C"
 }
 */
 
-#define FILE_MENU_OPEN 10
-#define DX_12_RADIO_BTN 101
-#define VULKAN_RADIO_BTN 102
+#define FILE_OPEN_MENU 10
+#define FILE_OPEN_HOT_KEY 11
+#define RENDER_BUTTON_ID 301
 
 UINT_PTR r_btn_timer_id = 0;
 #define R_BTN_TIMER_ID 201
-#define R_BTN_INTERVAL 16
+#define R_BTN_INTERVAL 2
 #define RENDER_TIMER_ID 202
 #define RENDER_INTERVAL 16
 
 HWND h_scene_wnd = nullptr;
 HWND h_ctrl_pnl = nullptr;
-HWND h_rndrr_wnd = nullptr;
+HWND h_render_settings_wnd = nullptr;
+HWND h_render_output_wnd = nullptr;
+
+static uint32_t render_width = 1920;
+static uint32_t render_height = 1080;
+
+HBITMAP h_bitmap = nullptr;
+uint8_t* pixels = nullptr;
 
 std::string file_path;
 std::unique_ptr<scene> s;
@@ -59,7 +65,7 @@ static HWND create_control_panel(const HINSTANCE h_instance)
 {
     HMENU h_file_label = CreateMenu();
     HMENU h_file_menu = CreateMenu();
-    AppendMenuA(h_file_menu, MF_STRING, FILE_MENU_OPEN, "Open");
+    AppendMenuA(h_file_menu, MF_STRING, FILE_OPEN_MENU, "Open");
     AppendMenuA(h_file_label, MF_POPUP, (UINT_PTR)h_file_menu, "File");
 
     return CreateWindowA(
@@ -76,7 +82,7 @@ static HWND create_control_panel(const HINSTANCE h_instance)
         nullptr);
 }
 
-static HWND create_wnd(const HINSTANCE h_instance)
+static HWND create_scene_wnd(const HINSTANCE h_instance)
 {
     RECT wnd_rect = {};
     wnd_rect.left = 0;
@@ -102,54 +108,64 @@ static HWND create_wnd(const HINSTANCE h_instance)
         nullptr);
 }
 
-/*
-static LRESULT CALLBACK RendererWndProc(HWND h_wnd, UINT msg, WPARAM w_param, LPARAM l_param)
+static HWND create_render_settings_wnd(const HINSTANCE h_instance)
+{
+    return CreateWindowA(
+        "Chizen",
+        "Render Settings",
+        WS_OVERLAPPED,
+        CW_USEDEFAULT,
+        CW_USEDEFAULT,
+        400,
+        100,
+        nullptr,
+        nullptr,
+        h_instance,
+        nullptr);
+}
+
+static LRESULT CALLBACK RenderOutputWndProc(HWND h_wnd, UINT msg, WPARAM w_param, LPARAM l_param)
 {
     HINSTANCE h_instance = GetModuleHandleA(nullptr);
-    HWND dx12 = nullptr;
-    HWND vk = nullptr;
 
     switch (msg)
     {
-    case WM_QUIT:
     case WM_CLOSE:
-    case WM_DESTROY:
-        PostQuitMessage(0);
+        DeleteObject(h_bitmap);
+        DestroyWindow(h_wnd);
+        h_render_output_wnd = nullptr;
         break;
 
     case WM_CREATE:
-        vk = CreateWindowA("BUTTON", "Vulkan", WS_CHILD | WS_VISIBLE | BS_AUTORADIOBUTTON | WS_GROUP | WS_TABSTOP, 10, 10, 100, 30, h_wnd, reinterpret_cast<HMENU>(VULKAN_RADIO_BTN), h_instance, nullptr);
-        dx12 = CreateWindowA("BUTTON", "DX 12", WS_CHILD | WS_VISIBLE | BS_AUTORADIOBUTTON, 10, 40, 100, 30, h_wnd, reinterpret_cast<HMENU>(DX_12_RADIO_BTN), h_instance, nullptr);
+    {
+        BITMAPINFO bmi = {};
+        bmi.bmiHeader.biSize = sizeof(BITMAPINFOHEADER);
+        bmi.bmiHeader.biWidth = static_cast<LONG>(render_width);
+        bmi.bmiHeader.biHeight = -static_cast<LONG>(render_height);
+        bmi.bmiHeader.biPlanes = 1;
+        bmi.bmiHeader.biBitCount = 32;
+        bmi.bmiHeader.biCompression = BI_RGB;
 
-        Button_SetCheck(vk, 1);
-        break;
+        HDC wnd_dc = GetDC(h_wnd);
+        h_bitmap = CreateDIBSection(wnd_dc, &bmi, DIB_RGB_COLORS, reinterpret_cast<void**>(&pixels), nullptr, 0);
 
-    case WM_COMMAND:
-        switch (w_param)
-        {
-        case DX_12_RADIO_BTN:
-            std::cout << "setting dx12\n";
-            r.reset();
-            r = std::make_unique<dx12_renderer>(h_scene_wnd);
+        ReleaseDC(h_wnd, wnd_dc);
+    }
+    break;
 
-            if (!file_path.empty())
-            {
-                r->import_scene_data(file_path);
-            }
-            break;
+    case WM_PAINT:
+    {
+        PAINTSTRUCT ps;
+        HDC hdc = BeginPaint(h_wnd, &ps);
 
-        case VULKAN_RADIO_BTN:
-            std::cout << "setting vulkan\n";
-            r.reset();
-            r = std::make_unique<vk_renderer>(h_scene_wnd);
+        HDC mem_dc = CreateCompatibleDC(hdc);
+        SelectObject(mem_dc, h_bitmap);
+        BitBlt(hdc, ps.rcPaint.left, ps.rcPaint.top, ps.rcPaint.right, ps.rcPaint.bottom, mem_dc, 0, 0, SRCCOPY);
+        DeleteDC(mem_dc);
 
-            if (!file_path.empty())
-            {
-                r->import_scene_data(file_path);
-            }
-
-            break;
-        }
+        EndPaint(h_wnd, &ps);
+    }
+    break;
 
     default:
         return DefWindowProcA(h_wnd, msg, w_param, l_param);
@@ -158,23 +174,21 @@ static LRESULT CALLBACK RendererWndProc(HWND h_wnd, UINT msg, WPARAM w_param, LP
     return 0;
 }
 
-static HWND create_rndrr_wnd(const HINSTANCE h_instance)
+static HWND create_render_output_wnd(const HINSTANCE h_instance)
 {
-    HWND wnd = CreateWindowA(
-        "Renderer",
-        "Renderer",
-        WS_OVERLAPPED,
+    return CreateWindowA(
+        "RenderOutput",
+        "Render Output",
+        WS_OVERLAPPED | WS_SIZEBOX | WS_CAPTION | WS_SYSMENU,
         CW_USEDEFAULT,
         CW_USEDEFAULT,
-        175, 150,
+        static_cast<int>(1280),
+        static_cast<int>(720),
         nullptr,
         nullptr,
         h_instance,
-        nullptr);
-
-    return wnd;
+        0);
 }
-*/
 
 static void open_file(const HWND h_wnd)
 {
@@ -218,32 +232,46 @@ static void open_file(const HWND h_wnd)
     }
 }
 
-static void CALLBACK timer_cb(HWND h_wnd, UINT msg, UINT timer_id, DWORD current_system_time)
-{
-    std::cout << timer_id << ' ' << current_system_time << '\n';
-}
-
 static LRESULT CALLBACK WindowProc(HWND h_wnd, UINT msg, WPARAM w_param, LPARAM l_param)
 {
-    POINT p = {};
-    PAINTSTRUCT ps = {};
-
     switch (msg)
     {
-    case WM_QUIT:
     case WM_CLOSE:
-    case WM_DESTROY:
         PostQuitMessage(0);
         break;
+
+    case WM_CREATE:
+    {
+        CREATESTRUCTA* create_info = reinterpret_cast<CREATESTRUCTA*>(l_param);
+        if (std::strcmp(create_info->lpszName, "Render Settings") != 0)
+            break;
+
+        CreateWindowA("BUTTON", "Render", WS_CHILD | WS_VISIBLE | BS_PUSHBUTTON, 10, 10, 75, 30, h_wnd, nullptr, GetModuleHandleA(nullptr), 0);
+    }
+    break;
 
     case WM_COMMAND:
         switch (w_param)
         {
-        case FILE_MENU_OPEN:
+        case FILE_OPEN_MENU:
 
             open_file(h_wnd);
 
             break;
+
+        case BN_CLICKED:
+            if (h_wnd == h_render_settings_wnd && h_render_output_wnd == nullptr)
+            {
+                h_render_output_wnd = create_render_output_wnd(GetModuleHandleA(nullptr));
+                ShowWindow(h_render_output_wnd, SW_SHOW);
+            }
+
+            r->render_offline(render_width, render_height, pixels);
+            InvalidateRect(h_render_output_wnd, nullptr, TRUE);
+            UpdateWindow(h_render_output_wnd);
+
+            break;
+
         default:
             break;
         }
@@ -251,18 +279,23 @@ static LRESULT CALLBACK WindowProc(HWND h_wnd, UINT msg, WPARAM w_param, LPARAM 
         break;
 
     case WM_PAINT:
+    {
+        PAINTSTRUCT ps = {};
         BeginPaint(h_wnd, &ps);
         s->render(r.get());
         EndPaint(h_wnd, &ps);
-
-        break;
+    }
+    break;
 
     case WM_MOUSEMOVE:
+    {
+        POINT p = {};
         p.x = GET_X_LPARAM(l_param);
         p.y = GET_Y_LPARAM(l_param);
 
         s->handle_mouse_move(p);
-        break;
+    }
+    break;
 
     case WM_KEYDOWN:
         switch (w_param)
@@ -393,6 +426,17 @@ static LRESULT CALLBACK WindowProc(HWND h_wnd, UINT msg, WPARAM w_param, LPARAM 
 
         break;
 
+    case WM_HOTKEY:
+        switch (w_param)
+        {
+        case FILE_OPEN_HOT_KEY:
+            open_file(h_wnd);
+            break;
+
+        default:
+            break;
+        }
+
     default:
         return DefWindowProcA(h_wnd, msg, w_param, l_param);
     }
@@ -427,37 +471,34 @@ int main(int argc, char** argv)
     }
 
     h_ctrl_pnl = create_control_panel(h_instance);
-    h_scene_wnd = create_wnd(h_instance);
+    h_scene_wnd = create_scene_wnd(h_instance);
+    h_render_settings_wnd = create_render_settings_wnd(h_instance);
 
     ShowWindow(h_scene_wnd, SW_SHOW);
     ShowWindow(h_ctrl_pnl, SW_SHOW);
+    ShowWindow(h_render_settings_wnd, SW_SHOW);
 
-    /*
-        WNDCLASSA rc = {
-                .style = CS_HREDRAW | CS_VREDRAW | CS_OWNDC,
-                .lpfnWndProc = RendererWndProc,
-                .hInstance = h_instance,
-                .hCursor = LoadCursorA(h_instance, MAKEINTRESOURCEA(32512)),
-                .lpszClassName = "Renderer",
-            };
+    WNDCLASSA render_output_class = {};
+    render_output_class.style = CS_HREDRAW | CS_VREDRAW | CS_OWNDC;
+    render_output_class.lpfnWndProc = RenderOutputWndProc;
+    render_output_class.hInstance = h_instance;
+    render_output_class.hCursor = LoadCursorA(h_instance, MAKEINTRESOURCEA(32512));
+    render_output_class.lpszClassName = "RenderOutput";
 
-            if (!RegisterClassA(&rc))
-            {
-                DWORD err = GetLastError();
-                std::cout << err << '\n';
-                return err;
-            }
+    if (!RegisterClassA(&render_output_class))
+    {
+        DWORD err = GetLastError();
+        std::cout << err << '\n';
+        return err;
+    }
 
-            h_rndrr_wnd = create_rndrr_wnd(h_instance);
-
-            ShowWindow(h_rndrr_wnd, SW_SHOW);
-    */
-
-    VK_CHECK("volk initialize", volkInitialize());
+    //VK_CHECK("volk initialize", volkInitialize());
     r = std::make_unique<vk_renderer>(h_scene_wnd);
     s = std::make_unique<default_scene>();
 
     UpdateWindow(h_scene_wnd);
+
+    RegisterHotKey(h_scene_wnd, FILE_OPEN_HOT_KEY, MOD_CONTROL, 79);
 
     MSG msg = { 0 };
 

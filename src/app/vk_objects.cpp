@@ -7,22 +7,74 @@
 #include <sstream>
 #include <fstream>
 
+PFN_vkSetDebugUtilsObjectNameEXT func_ptrs::vk_SetDebugUtilsObjectNameEXT = nullptr;
+PFN_vkCreateRayTracingPipelinesKHR func_ptrs::vk_CreateRayTracingPipelinesKHR = nullptr;
+PFN_vkGetAccelerationStructureBuildSizesKHR func_ptrs::vk_GetAccelerationStructureBuildSizesKHR = nullptr;
+PFN_vkCreateAccelerationStructureKHR func_ptrs::vk_CreateAccelerationStructureKHR = nullptr;
+PFN_vkDestroyAccelerationStructureKHR func_ptrs::vk_DestroyAccelerationStructureKHR = nullptr;
+
+VKAPI_ATTR VkResult VKAPI_CALL vkSetDebugUtilsObjectNameEXT(
+    VkDevice                                    device,
+    const VkDebugUtilsObjectNameInfoEXT* pNameInfo)
+{
+    return func_ptrs::vk_SetDebugUtilsObjectNameEXT(device, pNameInfo);
+}
+
+VKAPI_ATTR VkResult VKAPI_CALL vkCreateRayTracingPipelinesKHR(
+    VkDevice                                    device,
+    VkDeferredOperationKHR                      deferredOperation,
+    VkPipelineCache                             pipelineCache,
+    uint32_t                                    createInfoCount,
+    const VkRayTracingPipelineCreateInfoKHR* pCreateInfos,
+    const VkAllocationCallbacks* pAllocator,
+    VkPipeline* pPipelines)
+{
+    return func_ptrs::vk_CreateRayTracingPipelinesKHR(device, deferredOperation, pipelineCache, createInfoCount, pCreateInfos, pAllocator, pPipelines);
+}
+
+VKAPI_ATTR void VKAPI_CALL vkGetAccelerationStructureBuildSizesKHR(
+    VkDevice                                    device,
+    VkAccelerationStructureBuildTypeKHR         buildType,
+    const VkAccelerationStructureBuildGeometryInfoKHR* pBuildInfo,
+    const uint32_t* pMaxPrimitiveCounts,
+    VkAccelerationStructureBuildSizesInfoKHR* pSizeInfo)
+{
+    return func_ptrs::vk_GetAccelerationStructureBuildSizesKHR(device, buildType, pBuildInfo, pMaxPrimitiveCounts, pSizeInfo);
+}
+
+VKAPI_ATTR VkResult VKAPI_CALL vkCreateAccelerationStructureKHR(
+    VkDevice                                    device,
+    const VkAccelerationStructureCreateInfoKHR* pCreateInfo,
+    const VkAllocationCallbacks* pAllocator,
+    VkAccelerationStructureKHR* pAccelerationStructure)
+{
+    return func_ptrs::vk_CreateAccelerationStructureKHR(device, pCreateInfo, pAllocator, pAccelerationStructure);
+}
+
+VKAPI_ATTR void VKAPI_CALL vkDestroyAccelerationStructureKHR(
+    VkDevice                                    device,
+    VkAccelerationStructureKHR                  accelerationStructure,
+    const VkAllocationCallbacks* pAllocator)
+{
+    return func_ptrs::vk_DestroyAccelerationStructureKHR(device, accelerationStructure, pAllocator);
+}
+
 inline static VkDeviceSize ALIGNED_SIZE(VkDeviceSize value, VkDeviceSize alignment)
 {
     return (value + alignment - 1) & ~(alignment - 1);
 }
 
-uint32_t get_memory_type_id(const VkPhysicalDeviceMemoryProperties mem_props, const VkMemoryRequirements mem_reqs, uint32_t mem_prop_types)
+uint32_t get_memory_type_id(const VkPhysicalDeviceMemoryProperties2 mem_props, const VkMemoryRequirements2 mem_reqs, const uint32_t mem_prop_types)
 {
     uint32_t mem_id = UINT32_MAX;
 
-    for (uint32_t mt = 0; mt < mem_props.memoryTypeCount; ++mt)
+    for (uint32_t mt = 0; mt < mem_props.memoryProperties.memoryTypeCount; ++mt)
     {
-        if (mem_reqs.memoryTypeBits & (1 << mt))
+        if (mem_props.memoryProperties.memoryTypes[mt].propertyFlags & mem_prop_types)
         {
-            if (mem_props.memoryTypes[mt].propertyFlags & mem_prop_types)
+            if (mem_reqs.memoryRequirements.memoryTypeBits & (1 << mt))
             {
-                if (mem_props.memoryHeaps[mem_props.memoryTypes[mt].heapIndex].size > mem_reqs.size)
+                if (mem_props.memoryProperties.memoryHeaps[mem_props.memoryProperties.memoryTypes[mt].heapIndex].size > mem_reqs.memoryRequirements.size)
                 {
                     mem_id = mt;
                     break;
@@ -121,12 +173,12 @@ void copy_buffer_to_image(const VkBuffer src_buffer, const VkImage dst_image, co
 VkInstance vk_instance::create()
 {
     std::vector<const char*> req_ext_names = {
-           VK_KHR_SURFACE_EXTENSION_NAME,
-           VK_KHR_WIN32_SURFACE_EXTENSION_NAME,
-           VK_EXT_SURFACE_MAINTENANCE_1_EXTENSION_NAME,
-           VK_KHR_GET_SURFACE_CAPABILITIES_2_EXTENSION_NAME,
+        VK_KHR_SURFACE_EXTENSION_NAME,
+        VK_KHR_WIN32_SURFACE_EXTENSION_NAME,
+        VK_EXT_SURFACE_MAINTENANCE_1_EXTENSION_NAME,
+        VK_KHR_GET_SURFACE_CAPABILITIES_2_EXTENSION_NAME,
 #ifdef DEBUG
-           VK_EXT_DEBUG_UTILS_EXTENSION_NAME,
+        VK_EXT_DEBUG_UTILS_EXTENSION_NAME,
 #endif
     };
 
@@ -138,13 +190,14 @@ VkInstance vk_instance::create()
 
     for (auto const& req_ext_name : req_ext_names)
     {
-        auto it = std::find_if(props.begin(), props.end(), [&](const VkExtensionProperties prop) { return (std::strcmp(prop.extensionName, req_ext_name) == 0); });
+        auto it = std::find_if(props.begin(), props.end(), [&](const VkExtensionProperties prop)
+            { return (std::strcmp(prop.extensionName, req_ext_name) == 0); });
 
         if (it == props.end())
         {
             std::stringstream msg;
             msg << "Extension " << req_ext_name << " not supported by instance.\nExiting...\n";
-#ifdef DEBUG 
+#ifdef DEBUG
             OutputDebugStringA(msg.str().c_str());
 #else
             std::cout << msg.str();
@@ -207,7 +260,7 @@ void vk_surface::destroy(const VkSurfaceKHR surface, VkInstance instance)
     }
 }
 
-vk_phy_dev::data vk_phy_dev::get_phy_dev(const VkInstance instance, vk_surface::data* surface)
+vk_phydev::data vk_phydev::get_phy_dev(const VkInstance instance, vk_surface::data* surface)
 {
     uint32_t phy_dev_count = 0;
     VK_CHECK("enumerate physical devices", vkEnumeratePhysicalDevices(instance, &phy_dev_count, nullptr));
@@ -215,15 +268,19 @@ vk_phy_dev::data vk_phy_dev::get_phy_dev(const VkInstance instance, vk_surface::
     std::vector<VkPhysicalDevice> phy_devs(phy_dev_count);
     VK_CHECK("enumerate physical devices", vkEnumeratePhysicalDevices(instance, &phy_dev_count, phy_devs.data()));
 
-    vk_phy_dev::data d;
+    vk_phydev::data d;
+    d.props.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_PROPERTIES_2;
+    d.mem_props.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_MEMORY_PROPERTIES_2;
 
     for (auto const& phy_dev : phy_devs)
     {
         d.desc_buff_props.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_DESCRIPTOR_BUFFER_PROPERTIES_EXT;
 
-        VkPhysicalDeviceProperties2 props;
+        VkPhysicalDeviceProperties2 props = {};
         props.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_PROPERTIES_2;
+#ifdef DESC_BUFFER
         props.pNext = &d.desc_buff_props,
+#endif
             vkGetPhysicalDeviceProperties2(phy_dev, &props);
 
         if (props.properties.deviceType == VK_PHYSICAL_DEVICE_TYPE_DISCRETE_GPU)
@@ -248,7 +305,7 @@ vk_phy_dev::data vk_phy_dev::get_phy_dev(const VkInstance instance, vk_surface::
                     d.q_fly_idx = q;
                     d.props = props;
 
-                    vkGetPhysicalDeviceMemoryProperties(phy_dev, &d.mem_props);
+                    vkGetPhysicalDeviceMemoryProperties2(phy_dev, &d.mem_props);
 
                     VK_CHECK("get surface caps", vkGetPhysicalDeviceSurfaceCapabilitiesKHR(phy_dev, surface->surface, &surface->surf_caps));
 
@@ -259,7 +316,8 @@ vk_phy_dev::data vk_phy_dev::get_phy_dev(const VkInstance instance, vk_surface::
                         std::vector<VkSurfaceFormatKHR> surf_forms(surf_forms_count);
                         VK_CHECK("get surface formats", vkGetPhysicalDeviceSurfaceFormatsKHR(phy_dev, surface->surface, &surf_forms_count, surf_forms.data()));
 
-                        auto it = std::find_if(surf_forms.begin(), surf_forms.end(), [](const VkSurfaceFormatKHR frm) { return (frm.format == VK_FORMAT_R8G8B8A8_UNORM) && (frm.colorSpace == VK_COLOR_SPACE_SRGB_NONLINEAR_KHR); });
+                        auto it = std::find_if(surf_forms.begin(), surf_forms.end(), [](const VkSurfaceFormatKHR frm)
+                            { return (frm.format == VK_FORMAT_R8G8B8A8_UNORM) && (frm.colorSpace == VK_COLOR_SPACE_SRGB_NONLINEAR_KHR); });
 
                         if (it != surf_forms.end())
                         {
@@ -274,13 +332,65 @@ vk_phy_dev::data vk_phy_dev::get_phy_dev(const VkInstance instance, vk_surface::
                         std::vector<VkPresentModeKHR> present_modes(present_modes_count);
                         VK_CHECK("get surface formats", vkGetPhysicalDeviceSurfacePresentModesKHR(phy_dev, surface->surface, &present_modes_count, present_modes.data()));
 
-                        auto it = std::find_if(present_modes.begin(), present_modes.end(), [](const VkPresentModeKHR mode) { return mode == VK_PRESENT_MODE_MAILBOX_KHR; });
+                        auto it = std::find_if(present_modes.begin(), present_modes.end(), [](const VkPresentModeKHR mode)
+                            { return mode == VK_PRESENT_MODE_MAILBOX_KHR; });
 
                         if (it != present_modes.end())
                         {
                             surface->present_mode = *it;
                         }
                     }
+                }
+            }
+        }
+    }
+
+    return d;
+}
+
+vk_phydev::data vk_phydev::get_phy_dev(const VkInstance instance)
+{
+    data d;
+    d.props.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_PROPERTIES_2;
+    d.mem_props.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_MEMORY_PROPERTIES_2;
+
+    uint32_t phy_dev_count = 0;
+    VK_CHECK("enumerate physical devices", vkEnumeratePhysicalDevices(instance, &phy_dev_count, nullptr));
+
+    std::vector<VkPhysicalDevice> phy_devs(phy_dev_count);
+    VK_CHECK("enumerate physical devices", vkEnumeratePhysicalDevices(instance, &phy_dev_count, phy_devs.data()));
+
+    for (auto const& phy_dev : phy_devs)
+    {
+        d.desc_buff_props.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_DESCRIPTOR_BUFFER_PROPERTIES_EXT;
+
+        VkPhysicalDeviceProperties2 props = {};
+        props.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_PROPERTIES_2;
+#ifdef DESC_BUFFER
+        props.pNext = &d.desc_buff_props;
+
+#endif // DESC_BUFFER
+
+        vkGetPhysicalDeviceProperties2(phy_dev, &props);
+
+        if (props.properties.deviceType == VK_PHYSICAL_DEVICE_TYPE_DISCRETE_GPU)
+        {
+            uint32_t q_fly_count = 0;
+            vkGetPhysicalDeviceQueueFamilyProperties(phy_dev, &q_fly_count, nullptr);
+
+            std::vector<VkQueueFamilyProperties> q_fly_props(q_fly_count);
+            vkGetPhysicalDeviceQueueFamilyProperties(phy_dev, &q_fly_count, q_fly_props.data());
+
+            for (size_t q = 0; q < q_fly_props.size(); ++q)
+            {
+                if (q_fly_props[q].queueFlags & (VK_QUEUE_GRAPHICS_BIT | VK_QUEUE_COMPUTE_BIT))
+                {
+                    d.phy_dev = phy_dev;
+                    vkGetPhysicalDeviceMemoryProperties2(phy_dev, &d.mem_props);
+                    vkGetPhysicalDeviceProperties2(phy_dev, &d.props);
+                    d.q_count = q_fly_props[q].queueCount;
+                    d.q_fly_idx = static_cast<uint32_t>(q);
+                    break;
                 }
             }
         }
@@ -300,6 +410,9 @@ VkDevice vk_device::create(const VkPhysicalDevice phy_dev, const uint32_t q_fly_
         VK_EXT_DESCRIPTOR_BUFFER_EXTENSION_NAME,
 #endif // DESC_BUFFER
         VK_EXT_ROBUSTNESS_2_EXTENSION_NAME,
+        VK_KHR_RAY_TRACING_PIPELINE_EXTENSION_NAME,
+        VK_KHR_ACCELERATION_STRUCTURE_EXTENSION_NAME,
+        VK_KHR_DEFERRED_HOST_OPERATIONS_EXTENSION_NAME,
     };
 
     uint32_t properties_count = 0;
@@ -310,13 +423,14 @@ VkDevice vk_device::create(const VkPhysicalDevice phy_dev, const uint32_t q_fly_
 
     for (auto const& req_ext_name : req_ext_names)
     {
-        auto it = std::find_if(props.begin(), props.end(), [&](const VkExtensionProperties prop) { return (std::strcmp(prop.extensionName, req_ext_name) == 0); });
+        auto it = std::find_if(props.begin(), props.end(), [&](const VkExtensionProperties prop)
+            { return (std::strcmp(prop.extensionName, req_ext_name) == 0); });
 
         if (it == props.end())
         {
             std::stringstream msg;
             msg << "Extension " << req_ext_name << " not supported by physical device.\nExiting...\n";
-#ifdef DEBUG 
+#ifdef DEBUG
             OutputDebugStringA(msg.str().c_str());
 #else
             std::cout << msg.str();
@@ -345,9 +459,17 @@ VkDevice vk_device::create(const VkPhysicalDevice phy_dev, const uint32_t q_fly_
     swapchain_main_1_feats.pNext = &desc_buff_feats;
 #endif // DESC_BUFFER
 
+    VkPhysicalDeviceAccelerationStructureFeaturesKHR acc_str_feats = {};
+    acc_str_feats.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_ACCELERATION_STRUCTURE_FEATURES_KHR;
+    acc_str_feats.pNext = &swapchain_main_1_feats;
+
+    VkPhysicalDeviceRayTracingPipelineFeaturesKHR rt_pipe_feats = {};
+    rt_pipe_feats.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_RAY_TRACING_PIPELINE_FEATURES_KHR;
+    rt_pipe_feats.pNext = &acc_str_feats;
+
     VkPhysicalDeviceRobustness2FeaturesEXT rob2_feats = {};
     rob2_feats.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_ROBUSTNESS_2_FEATURES_EXT;
-    rob2_feats.pNext = &swapchain_main_1_feats;
+    rob2_feats.pNext = &rt_pipe_feats;
 
     VkPhysicalDeviceBufferDeviceAddressFeatures bda_feats = {};
     bda_feats.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_BUFFER_DEVICE_ADDRESS_FEATURES;
@@ -357,13 +479,13 @@ VkDevice vk_device::create(const VkPhysicalDevice phy_dev, const uint32_t q_fly_
     main_4_feats.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_MAINTENANCE_4_FEATURES;
     main_4_feats.pNext = &bda_feats;
 
-    VkPhysicalDeviceExtendedDynamicState3FeaturesEXT ext_dyn_3_feats = {};
-    ext_dyn_3_feats.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_EXTENDED_DYNAMIC_STATE_3_FEATURES_EXT;
-    ext_dyn_3_feats.pNext = &main_4_feats;
+    //VkPhysicalDeviceExtendedDynamicState3FeaturesEXT ext_dyn_3_feats = {};
+    //ext_dyn_3_feats.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_EXTENDED_DYNAMIC_STATE_3_FEATURES_EXT;
+    //ext_dyn_3_feats.pNext = &main_4_feats;
 
     VkPhysicalDeviceMeshShaderFeaturesEXT mesh_shader_feats = {};
     mesh_shader_feats.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_MESH_SHADER_FEATURES_EXT;
-    mesh_shader_feats.pNext = &ext_dyn_3_feats;
+    mesh_shader_feats.pNext = &main_4_feats;
 
     VkPhysicalDeviceDynamicRenderingFeatures dyn_rend_feats = {};
     dyn_rend_feats.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_DYNAMIC_RENDERING_FEATURES;
@@ -385,6 +507,10 @@ VkDevice vk_device::create(const VkPhysicalDevice phy_dev, const uint32_t q_fly_
 
     mesh_shader_feats.multiviewMeshShader = VK_FALSE;
     mesh_shader_feats.primitiveFragmentShadingRateMeshShader = VK_FALSE;
+    rt_pipe_feats.rayTracingPipelineShaderGroupHandleCaptureReplay = VK_FALSE;
+    rt_pipe_feats.rayTracingPipelineShaderGroupHandleCaptureReplayMixed = VK_FALSE;
+    rt_pipe_feats.rayTracingPipelineTraceRaysIndirect = VK_FALSE;
+    acc_str_feats.accelerationStructureCaptureReplay = VK_FALSE;
 
     VkDeviceCreateInfo create_info = {};
     create_info.sType = VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO;
@@ -397,6 +523,12 @@ VkDevice vk_device::create(const VkPhysicalDevice phy_dev, const uint32_t q_fly_
     VkDevice device = VK_NULL_HANDLE;
     VK_CHECK("create device", vkCreateDevice(phy_dev, &create_info, nullptr, &device));
 
+    func_ptrs::vk_SetDebugUtilsObjectNameEXT = reinterpret_cast<PFN_vkSetDebugUtilsObjectNameEXT>(vkGetDeviceProcAddr(device, "vkSetDebugUtilsObjectNameEXT"));
+    func_ptrs::vk_CreateRayTracingPipelinesKHR = reinterpret_cast<PFN_vkCreateRayTracingPipelinesKHR>(vkGetDeviceProcAddr(device, "vkCreateRayTracingPipelinesKHR"));
+    func_ptrs::vk_GetAccelerationStructureBuildSizesKHR = reinterpret_cast<PFN_vkGetAccelerationStructureBuildSizesKHR>(vkGetDeviceProcAddr(device, "vkGetAccelerationStructureBuildSizesKHR"));
+    func_ptrs::vk_CreateAccelerationStructureKHR = reinterpret_cast<PFN_vkCreateAccelerationStructureKHR>(vkGetDeviceProcAddr(device, "vkCreateAccelerationStructureKHR"));
+    func_ptrs::vk_DestroyAccelerationStructureKHR = reinterpret_cast<PFN_vkDestroyAccelerationStructureKHR>(vkGetDeviceProcAddr(device, "vkDestroyAccelerationStructureKHR"));
+
     return device;
 }
 
@@ -408,7 +540,7 @@ void vk_device::destroy(const VkDevice device)
     }
 }
 
-vk_swapchain::data vk_swapchain::create(const VkDevice device, const vk_surface::data& surface, const vk_phy_dev::data& phy_dev, const std::string& name)
+vk_swapchain::data vk_swapchain::create(const VkDevice device, const vk_surface::data& surface, const vk_phydev::data& phy_dev, const std::string& name)
 {
     VkSwapchainCreateInfoKHR create_info = {};
     create_info.sType = VK_STRUCTURE_TYPE_SWAPCHAIN_CREATE_INFO_KHR;
@@ -582,29 +714,29 @@ void vk_semaphore::destroy(const VkSemaphore semaphore, const VkDevice device)
     }
 }
 
-//vk_fence::vk_fence(const VkDevice device, const VkBool32 signalled_state)
+// vk_fence::vk_fence(const VkDevice device, const VkBool32 signalled_state)
 //{
-//    const VkFenceCreateInfo create_info = {
-//        .sType = VK_STRUCTURE_TYPE_FENCE_CREATE_INFO,
-//        .flags = signalled_state,
-//    };
+//     const VkFenceCreateInfo create_info = {
+//         .sType = VK_STRUCTURE_TYPE_FENCE_CREATE_INFO,
+//         .flags = signalled_state,
+//     };
 //
-//    VK_CHECK("create fence", vkCreateFence(device, &create_info, nullptr, &fence));
-//}
+//     VK_CHECK("create fence", vkCreateFence(device, &create_info, nullptr, &fence));
+// }
 //
-//vk_fence::~vk_fence()
+// vk_fence::~vk_fence()
 //{
-//    if (fence != VK_NULL_HANDLE && device != VK_NULL_HANDLE)
-//    {
-//        vkDestroyFence(device, fence, nullptr);
-//    }
-//}
+//     if (fence != VK_NULL_HANDLE && device != VK_NULL_HANDLE)
+//     {
+//         vkDestroyFence(device, fence, nullptr);
+//     }
+// }
 
 vk_command_pool::data vk_command_pool::create(const VkDevice device, const uint32_t q_fly_idx, const uint32_t cmd_buffs_count, const std::string& name)
 {
     VkCommandPoolCreateInfo cmd_pool_ci = {};
     cmd_pool_ci.sType = VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO;
-    cmd_pool_ci.flags = VK_COMMAND_POOL_CREATE_TRANSIENT_BIT | VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT;
+    cmd_pool_ci.flags = VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT;
     cmd_pool_ci.queueFamilyIndex = q_fly_idx;
 
     vk_command_pool::data d;
@@ -629,16 +761,33 @@ vk_command_pool::data vk_command_pool::create(const VkDevice device, const uint3
     name_info.pObjectName = name.c_str();
 
     VK_CHECK("setting command pool name", vkSetDebugUtilsObjectNameEXT(device, &name_info));
+
+    for (size_t cb = 0; cb < d.cmd_buffs.size(); ++cb)
+    {
+        char itoa[2] = {};
+        char c_name[1024];
+        std::strcpy(c_name, name.c_str());
+        std::strcat(c_name, " commmad buffer ");
+        std::strcat(c_name, _itoa(static_cast<int>(cb), itoa, 10));
+
+        VkDebugUtilsObjectNameInfoEXT name_info = {};
+        name_info.sType = VK_STRUCTURE_TYPE_DEBUG_UTILS_OBJECT_NAME_INFO_EXT;
+        name_info.objectType = VK_OBJECT_TYPE_COMMAND_BUFFER;
+        name_info.objectHandle = reinterpret_cast<uint64_t>(d.cmd_buffs[cb]);
+        name_info.pObjectName = c_name;
+
+        VK_CHECK("setting command pool name", vkSetDebugUtilsObjectNameEXT(device, &name_info));
+    }
 #endif // DEBUG
 
     return d;
 }
 
-void vk_command_pool::destroy(const VkCommandPool cmd_pool, const VkDevice device)
+void vk_command_pool::destroy(vk_command_pool::data cmd_pool, const VkDevice device)
 {
-    if (cmd_pool != VK_NULL_HANDLE && device != VK_NULL_HANDLE)
+    if (cmd_pool.cmd_pool != VK_NULL_HANDLE && device != VK_NULL_HANDLE)
     {
-        vkDestroyCommandPool(device, cmd_pool, nullptr);
+        vkDestroyCommandPool(device, cmd_pool.cmd_pool, nullptr);
     }
 }
 
@@ -751,7 +900,7 @@ void vk_device_memory::free(const VkDeviceMemory memory, const VkDevice device)
     }
 }
 
-host_buffer_memory::data host_buffer_memory::create(const VkDevice device, const VkPhysicalDeviceMemoryProperties& mem_props, const VkDeviceSize size, const VkBufferUsageFlags usage, const std::string& name)
+host_buffer_memory::data host_buffer_memory::create(const VkDevice device, const VkPhysicalDeviceMemoryProperties2& mem_props, const VkDeviceSize size, const VkBufferUsageFlags usage, const std::string& name)
 {
     host_buffer_memory::data d;
 
@@ -772,10 +921,11 @@ host_buffer_memory::data host_buffer_memory::create(const VkDevice device, const
         flags_info.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_FLAGS_INFO;
         flags_info.flags = VK_MEMORY_ALLOCATE_DEVICE_ADDRESS_BIT;
 
-        d.memory = vk_device_memory::allocate(device, mem_reqs.memoryRequirements.size, get_memory_type_id(mem_props, mem_reqs.memoryRequirements, mem_types), flags_info, name + " memory");
+        d.memory = vk_device_memory::allocate(device, mem_reqs.memoryRequirements.size, get_memory_type_id(mem_props, mem_reqs, mem_types), flags_info, name + " memory");
     }
-    else {
-        d.memory = vk_device_memory::allocate(device, mem_reqs.memoryRequirements.size, get_memory_type_id(mem_props, mem_reqs.memoryRequirements, mem_types), name + " memory");
+    else
+    {
+        d.memory = vk_device_memory::allocate(device, mem_reqs.memoryRequirements.size, get_memory_type_id(mem_props, mem_reqs, mem_types), name + " memory");
     }
 
     VK_CHECK("bind device buffer to memory", vkBindBufferMemory(device, d.buffer, d.memory, 0));
@@ -795,7 +945,7 @@ host_buffer_memory::data host_buffer_memory::create(const VkDevice device, const
     return d;
 }
 
-host_buffer_memory::data host_buffer_memory::create(const VkDevice device, const VkPhysicalDeviceMemoryProperties& mem_props, const VkDeviceSize offset, const VkBufferUsageFlags usage, const std::vector<uint8_t>& data, const std::string& name)
+host_buffer_memory::data host_buffer_memory::create(const VkDevice device, const VkPhysicalDeviceMemoryProperties2& mem_props, const VkDeviceSize offset, const VkBufferUsageFlags usage, const std::vector<uint8_t>& data, const std::string& name)
 {
     host_buffer_memory::data d;
 
@@ -816,10 +966,11 @@ host_buffer_memory::data host_buffer_memory::create(const VkDevice device, const
         flags_info.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_FLAGS_INFO;
         flags_info.flags = VK_MEMORY_ALLOCATE_DEVICE_ADDRESS_BIT;
 
-        d.memory = vk_device_memory::allocate(device, mem_reqs.memoryRequirements.size, get_memory_type_id(mem_props, mem_reqs.memoryRequirements, mem_types), flags_info, name + " memory");
+        d.memory = vk_device_memory::allocate(device, mem_reqs.memoryRequirements.size, get_memory_type_id(mem_props, mem_reqs, mem_types), flags_info, name + " memory");
     }
-    else {
-        d.memory = vk_device_memory::allocate(device, mem_reqs.memoryRequirements.size, get_memory_type_id(mem_props, mem_reqs.memoryRequirements, mem_types), name + " memory");
+    else
+    {
+        d.memory = vk_device_memory::allocate(device, mem_reqs.memoryRequirements.size, get_memory_type_id(mem_props, mem_reqs, mem_types), name + " memory");
     }
 
     VK_CHECK("bind device buffer to memory", vkBindBufferMemory(device, d.buffer, d.memory, 0));
@@ -853,7 +1004,7 @@ void host_buffer_memory::destroy(const data bm, const VkDevice device)
     vk_device_memory::free(bm.memory, device);
 }
 
-device_buffer_memory::data device_buffer_memory::create(const VkDevice device, const VkPhysicalDeviceMemoryProperties& mem_props, const VkDeviceSize size, const VkBufferUsageFlags usage, const std::string& name)
+device_buffer_memory::data device_buffer_memory::create(const VkDevice device, const VkPhysicalDeviceMemoryProperties2& mem_props, const VkDeviceSize size, const VkBufferUsageFlags usage, const std::string& name)
 {
     device_buffer_memory::data d;
     d.buffer = vk_buffer::create(device, size, usage, name + " buffer");
@@ -873,11 +1024,11 @@ device_buffer_memory::data device_buffer_memory::create(const VkDevice device, c
         flags_info.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_FLAGS_INFO;
         flags_info.flags = VK_MEMORY_ALLOCATE_DEVICE_ADDRESS_BIT;
 
-        d.memory = vk_device_memory::allocate(device, mem_reqs.memoryRequirements.size, get_memory_type_id(mem_props, mem_reqs.memoryRequirements, mem_types), flags_info, name + " memory");
+        d.memory = vk_device_memory::allocate(device, mem_reqs.memoryRequirements.size, get_memory_type_id(mem_props, mem_reqs, mem_types), flags_info, name + " memory");
     }
     else
     {
-        d.memory = vk_device_memory::allocate(device, mem_reqs.memoryRequirements.size, get_memory_type_id(mem_props, mem_reqs.memoryRequirements, mem_types), name + " memory");
+        d.memory = vk_device_memory::allocate(device, mem_reqs.memoryRequirements.size, get_memory_type_id(mem_props, mem_reqs, mem_types), name + " memory");
     }
 
     VK_CHECK("bind device buffer to memory", vkBindBufferMemory(device, d.buffer, d.memory, 0));
@@ -895,7 +1046,7 @@ device_buffer_memory::data device_buffer_memory::create(const VkDevice device, c
     return d;
 }
 
-device_buffer_memory::data device_buffer_memory::create(const VkDevice device, const VkPhysicalDeviceMemoryProperties& mem_props, const VkDeviceSize offset, VkBufferUsageFlags usage, const std::vector<uint8_t>& data, const VkQueue xfer_q, const VkCommandBuffer cmd_buff, const std::string& name)
+device_buffer_memory::data device_buffer_memory::create(const VkDevice device, const VkPhysicalDeviceMemoryProperties2& mem_props, const VkDeviceSize offset, VkBufferUsageFlags usage, const std::vector<uint8_t>& data, const VkQueue xfer_q, const VkCommandBuffer cmd_buff, const std::string& name)
 {
     host_buffer_memory::data host_buff_mem = host_buffer_memory::create(device, mem_props, offset, VK_BUFFER_USAGE_TRANSFER_SRC_BIT, data, name + " host buffer memory");
 
@@ -912,18 +1063,18 @@ device_buffer_memory::data device_buffer_memory::create(const VkDevice device, c
     uint32_t mem_types = VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT;
 
     //// device mem checker
-    //usage |= VK_BUFFER_USAGE_TRANSFER_SRC_BIT;
+    // usage |= VK_BUFFER_USAGE_TRANSFER_SRC_BIT;
     if (usage & VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT)
     {
         VkMemoryAllocateFlagsInfo flags_info = {};
         flags_info.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_FLAGS_INFO;
         flags_info.flags = VK_MEMORY_ALLOCATE_DEVICE_ADDRESS_BIT;
 
-        d.memory = vk_device_memory::allocate(device, mem_reqs.memoryRequirements.size, get_memory_type_id(mem_props, mem_reqs.memoryRequirements, mem_types), flags_info, name + " memory");
+        d.memory = vk_device_memory::allocate(device, mem_reqs.memoryRequirements.size, get_memory_type_id(mem_props, mem_reqs, mem_types), flags_info, name + " memory");
     }
     else
     {
-        d.memory = vk_device_memory::allocate(device, mem_reqs.memoryRequirements.size, get_memory_type_id(mem_props, mem_reqs.memoryRequirements, mem_types), name + " memory");
+        d.memory = vk_device_memory::allocate(device, mem_reqs.memoryRequirements.size, get_memory_type_id(mem_props, mem_reqs, mem_types), name + " memory");
     }
 
     VK_CHECK("bind device buffer to memory", vkBindBufferMemory(device, d.buffer, d.memory, 0));
@@ -948,15 +1099,15 @@ device_buffer_memory::data device_buffer_memory::create(const VkDevice device, c
     return d;
 
     //// device mem checker
-    //host_buffer_memory checker = host_buffer_memory(device, mem_props, data.size(), VK_BUFFER_USAGE_TRANSFER_DST_BIT);
-    //copy_buffer_to_buffer(buffer->buffer, checker.buffer->buffer, regions, cmd_buff, xfer_q);
+    // host_buffer_memory checker = host_buffer_memory(device, mem_props, data.size(), VK_BUFFER_USAGE_TRANSFER_DST_BIT);
+    // copy_buffer_to_buffer(buffer->buffer, checker.buffer->buffer, regions, cmd_buff, xfer_q);
 
-    //std::vector<uint8_t> checker_data(data.size());
-    //void* map = nullptr;
-    //VK_CHECK("map check memory", vkMapMemory(device, checker.memory->memory, offset, data.size(), 0, &map));
-    //std::memcpy(checker_data.data(), map, data.size());
+    // std::vector<uint8_t> checker_data(data.size());
+    // void* map = nullptr;
+    // VK_CHECK("map check memory", vkMapMemory(device, checker.memory->memory, offset, data.size(), 0, &map));
+    // std::memcpy(checker_data.data(), map, data.size());
 
-    //vkUnmapMemory(device, checker.memory->memory);
+    // vkUnmapMemory(device, checker.memory->memory);
 }
 
 void device_buffer_memory::destroy(const data bm, const VkDevice device)
@@ -965,87 +1116,87 @@ void device_buffer_memory::destroy(const data bm, const VkDevice device)
     vk_device_memory::free(bm.memory, device);
 }
 
-//vk_descriptor_set_layout::vk_descriptor_set_layout(const VkDevice device, const SpvReflectDescriptorSet* spv_dsl, const VkShaderStageFlags stage, const VkDeviceSize alignment)
+// vk_descriptor_set_layout::vk_descriptor_set_layout(const VkDevice device, const SpvReflectDescriptorSet* spv_dsl, const VkShaderStageFlags stage, const VkDeviceSize alignment)
 //{
-//    std::vector<VkDescriptorSetLayoutBinding> bindings(spv_dsl->binding_count);
-//    const VkDescriptorSetLayoutCreateInfo dsl_ci = {
-//        .sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO,
-//        .flags = VK_DESCRIPTOR_SET_LAYOUT_CREATE_DESCRIPTOR_BUFFER_BIT_EXT,
-//        .bindingCount = spv_dsl->binding_count,
-//        .pBindings = bindings.data(),
-//    };
+//     std::vector<VkDescriptorSetLayoutBinding> bindings(spv_dsl->binding_count);
+//     const VkDescriptorSetLayoutCreateInfo dsl_ci = {
+//         .sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO,
+//         .flags = VK_DESCRIPTOR_SET_LAYOUT_CREATE_DESCRIPTOR_BUFFER_BIT_EXT,
+//         .bindingCount = spv_dsl->binding_count,
+//         .pBindings = bindings.data(),
+//     };
 //
-//    for (uint32_t b = 0; b < spv_dsl->binding_count; ++b)
-//    {
-//        bindings[b] = {
-//            .binding = spv_dsl->bindings[b]->binding,
-//            .descriptorType = static_cast<VkDescriptorType>(spv_dsl->bindings[b]->descriptor_type),
-//            .descriptorCount = spv_dsl->bindings[b]->count,
-//            .stageFlags = stage,
-//        };
-//    }
+//     for (uint32_t b = 0; b < spv_dsl->binding_count; ++b)
+//     {
+//         bindings[b] = {
+//             .binding = spv_dsl->bindings[b]->binding,
+//             .descriptorType = static_cast<VkDescriptorType>(spv_dsl->bindings[b]->descriptor_type),
+//             .descriptorCount = spv_dsl->bindings[b]->count,
+//             .stageFlags = stage,
+//         };
+//     }
 //
-//    VK_CHECK("create descriptor set layout", vkCreateDescriptorSetLayout(device, &dsl_ci, nullptr, &dsl));
+//     VK_CHECK("create descriptor set layout", vkCreateDescriptorSetLayout(device, &dsl_ci, nullptr, &dsl));
 //
-//    this->device = device;
+//     this->device = device;
 //
-//    vkGetDescriptorSetLayoutSizeEXT(device, dsl, &size);
-//    size = ALIGNED_SIZE(size, alignment);
+//     vkGetDescriptorSetLayoutSizeEXT(device, dsl, &size);
+//     size = ALIGNED_SIZE(size, alignment);
 //
-//    this->bindings.resize(spv_dsl->binding_count);
+//     this->bindings.resize(spv_dsl->binding_count);
 //
-//    uint32_t b = 0;
-//    for (auto& binding : this->bindings)
-//    {
-//        vkGetDescriptorSetLayoutBindingOffsetEXT(device, dsl, b, &binding.offset);
-//        ++b;
-//    }
-//}
+//     uint32_t b = 0;
+//     for (auto& binding : this->bindings)
+//     {
+//         vkGetDescriptorSetLayoutBindingOffsetEXT(device, dsl, b, &binding.offset);
+//         ++b;
+//     }
+// }
 
-//vk_descriptor_set_layout::vk_descriptor_set_layout(vk_descriptor_set_layout&& other)
+// vk_descriptor_set_layout::vk_descriptor_set_layout(vk_descriptor_set_layout&& other)
 //{
-//    dsl = other.dsl;
-//    device = other.device;
-//    bindings = std::move(other.bindings);
-//    size = other.size;
+//     dsl = other.dsl;
+//     device = other.device;
+//     bindings = std::move(other.bindings);
+//     size = other.size;
 //
-//    other.dsl = VK_NULL_HANDLE;
-//    other.device = VK_NULL_HANDLE;
-//    other.bindings.clear();
-//    other.size = 0;
-//}
+//     other.dsl = VK_NULL_HANDLE;
+//     other.device = VK_NULL_HANDLE;
+//     other.bindings.clear();
+//     other.size = 0;
+// }
 //
-//vk_descriptor_set_layout& vk_descriptor_set_layout::operator=(vk_descriptor_set_layout&& other)
+// vk_descriptor_set_layout& vk_descriptor_set_layout::operator=(vk_descriptor_set_layout&& other)
 //{
-//    if (dsl != VK_NULL_HANDLE && device != VK_NULL_HANDLE)
-//    {
-//        vkDestroyDescriptorSetLayout(device, dsl, nullptr);
-//    }
+//     if (dsl != VK_NULL_HANDLE && device != VK_NULL_HANDLE)
+//     {
+//         vkDestroyDescriptorSetLayout(device, dsl, nullptr);
+//     }
 //
-//    dsl = other.dsl;
-//    device = other.device;
-//    bindings = other.bindings;
-//    size = other.size;
+//     dsl = other.dsl;
+//     device = other.device;
+//     bindings = other.bindings;
+//     size = other.size;
 //
-//    other.dsl = VK_NULL_HANDLE;
-//    other.device = VK_NULL_HANDLE;
-//    other.bindings.clear();
-//    other.size = 0;
+//     other.dsl = VK_NULL_HANDLE;
+//     other.device = VK_NULL_HANDLE;
+//     other.bindings.clear();
+//     other.size = 0;
 //
-//    return *this;
-//}
+//     return *this;
+// }
 //
-//vk_descriptor_set_layout::~vk_descriptor_set_layout()
+// vk_descriptor_set_layout::~vk_descriptor_set_layout()
 //{
-//    if (dsl != VK_NULL_HANDLE && device != VK_NULL_HANDLE)
-//    {
-//        vkDestroyDescriptorSetLayout(device, dsl, nullptr);
-//    }
-//}
+//     if (dsl != VK_NULL_HANDLE && device != VK_NULL_HANDLE)
+//     {
+//         vkDestroyDescriptorSetLayout(device, dsl, nullptr);
+//     }
+// }
 
-vk_graphics_pipeline::data vk_graphics_pipeline::create(const VkDevice device, const std::string& path, const CHI_PIPELINE_TYPE& p_type, VkFormat format, const VkPhysicalDeviceDescriptorBufferPropertiesEXT& desc_buff_props, const std::string& name)
+vk_raster_pipeline::data vk_raster_pipeline::create(const VkDevice device, const std::string& path, const CHI_PIPELINE_TYPE& p_type, VkFormat format, const VkPhysicalDeviceDescriptorBufferPropertiesEXT& desc_buff_props, const std::string& name)
 {
-    vk_graphics_pipeline::data d;
+    vk_raster_pipeline::data d;
 
     std::vector<VkPipelineShaderStageCreateInfo> stages;
     std::vector<VkVertexInputBindingDescription> in_attr_bind_descs;
@@ -1063,7 +1214,8 @@ vk_graphics_pipeline::data vk_graphics_pipeline::create(const VkDevice device, c
         std::exit(GetLastError());
     }
 
-    do {
+    do
+    {
         std::vector<char> file_data(find_data.nFileSizeLow);
         std::ifstream spv_file((path + (find_data.cFileName)).c_str(), std::ifstream::binary);
         spv_file.read(file_data.data(), file_data.size());
@@ -1141,7 +1293,7 @@ vk_graphics_pipeline::data vk_graphics_pipeline::create(const VkDevice device, c
 
         VkPipelineShaderStageCreateInfo ss_ci = {};
         ss_ci.sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
-        ss_ci.stage = static_cast<VkShaderStageFlagBits> (spv_module.shader_stage);
+        ss_ci.stage = static_cast<VkShaderStageFlagBits>(spv_module.shader_stage);
         ss_ci.module = shader_module;
         ss_ci.pName = "main";
 
@@ -1156,7 +1308,7 @@ vk_graphics_pipeline::data vk_graphics_pipeline::create(const VkDevice device, c
     for (size_t dsl_ci_idx = 0; dsl_ci_idx < dsl_cis.size(); ++dsl_ci_idx)
     {
         dsl_cis[dsl_ci_idx].sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO;
-#ifdef  DESC_BUFFER
+#ifdef DESC_BUFFER
         dsl_cis[dsl_ci_idx].flags = VK_DESCRIPTOR_SET_LAYOUT_CREATE_DESCRIPTOR_BUFFER_BIT_EXT;
 #endif //  DESC_BUFFER
         dsl_cis[dsl_ci_idx].bindingCount = static_cast<uint32_t>(dsl_cis_bindings[dsl_ci_idx].size());
@@ -1170,7 +1322,6 @@ vk_graphics_pipeline::data vk_graphics_pipeline::create(const VkDevice device, c
 #endif // DESC_BUFFER
 
         d.dsl_infos[dsl_ci_idx].aligned_size = ALIGNED_SIZE(set_size, desc_buff_props.descriptorBufferOffsetAlignment);
-
         d.dsl_infos[dsl_ci_idx].binding_infos.resize(dsl_cis_bindings[dsl_ci_idx].size());
 
         for (uint32_t b_idx = 0; b_idx < dsl_cis_bindings[dsl_ci_idx].size(); ++b_idx)
@@ -1190,7 +1341,7 @@ vk_graphics_pipeline::data vk_graphics_pipeline::create(const VkDevice device, c
     VK_CHECK("create pipeline layout", vkCreatePipelineLayout(device, &pl_ci, nullptr, &d.pipeline_layout));
 
     const VkViewport viewports[] = {
-        {}
+        {},
     };
 
     const VkRect2D scissors[] = {
@@ -1225,26 +1376,29 @@ vk_graphics_pipeline::data vk_graphics_pipeline::create(const VkDevice device, c
     ms_ci.sType = VK_STRUCTURE_TYPE_PIPELINE_MULTISAMPLE_STATE_CREATE_INFO;
     ms_ci.rasterizationSamples = VK_SAMPLE_COUNT_1_BIT;
 
-    std::vector<VkPipelineColorBlendAttachmentState> cbas(1);
-    cbas[0].blendEnable = VK_TRUE;
-    cbas[0].srcColorBlendFactor = VK_BLEND_FACTOR_SRC_ALPHA;
-    cbas[0].dstColorBlendFactor = VK_BLEND_FACTOR_ONE_MINUS_SRC_ALPHA;
-    cbas[0].colorBlendOp = VK_BLEND_OP_ADD;
-    cbas[0].srcAlphaBlendFactor = VK_BLEND_FACTOR_ONE;
-    cbas[0].dstAlphaBlendFactor = VK_BLEND_FACTOR_ZERO;
-    cbas[0].alphaBlendOp = VK_BLEND_OP_ADD;
-    cbas[0].colorWriteMask = VK_COLOR_COMPONENT_R_BIT | VK_COLOR_COMPONENT_G_BIT | VK_COLOR_COMPONENT_B_BIT | VK_COLOR_COMPONENT_A_BIT;
+    VkPipelineColorBlendAttachmentState cba = {};
+    cba.blendEnable = VK_TRUE;
+    cba.srcColorBlendFactor = VK_BLEND_FACTOR_SRC_ALPHA;
+    cba.dstColorBlendFactor = VK_BLEND_FACTOR_ONE_MINUS_SRC_ALPHA;
+    cba.colorBlendOp = VK_BLEND_OP_ADD;
+    cba.srcAlphaBlendFactor = VK_BLEND_FACTOR_ONE;
+    cba.dstAlphaBlendFactor = VK_BLEND_FACTOR_ZERO;
+    cba.alphaBlendOp = VK_BLEND_OP_ADD;
+    cba.colorWriteMask = VK_COLOR_COMPONENT_R_BIT | VK_COLOR_COMPONENT_G_BIT | VK_COLOR_COMPONENT_B_BIT | VK_COLOR_COMPONENT_A_BIT;
+
+    const VkPipelineColorBlendAttachmentState cbas[] = {
+        cba,
+    };
 
     VkPipelineColorBlendStateCreateInfo cbs_ci = {};
     cbs_ci.sType = VK_STRUCTURE_TYPE_PIPELINE_COLOR_BLEND_STATE_CREATE_INFO;
-    cbs_ci.attachmentCount = static_cast<uint32_t>(cbas.size());
-    cbs_ci.pAttachments = cbas.data();
+    cbs_ci.attachmentCount = _countof(cbas);
+    cbs_ci.pAttachments = cbas;
 
     std::vector<VkDynamicState> ds = {
         VK_DYNAMIC_STATE_VIEWPORT,
         VK_DYNAMIC_STATE_SCISSOR,
         VK_DYNAMIC_STATE_LINE_WIDTH,
-        VK_DYNAMIC_STATE_POLYGON_MODE_EXT,
     };
 
     if (p_type == CHI_PIPELINE_TYPE::VERTEX)
@@ -1265,13 +1419,14 @@ vk_graphics_pipeline::data vk_graphics_pipeline::create(const VkDevice device, c
     dss_ci.minDepthBounds = 0;
     dss_ci.maxDepthBounds = 1;
 
-    std::vector<VkFormat>col_attch_forms(1);
-    col_attch_forms[0] = format;
+    const VkFormat col_attach_forms[] = {
+        format,
+    };
 
     VkPipelineRenderingCreateInfo rend_info = {};
     rend_info.sType = VK_STRUCTURE_TYPE_PIPELINE_RENDERING_CREATE_INFO;
-    rend_info.colorAttachmentCount = static_cast<uint32_t>(col_attch_forms.size());
-    rend_info.pColorAttachmentFormats = col_attch_forms.data();
+    rend_info.colorAttachmentCount = _countof(col_attach_forms);
+    rend_info.pColorAttachmentFormats = col_attach_forms;
     rend_info.depthAttachmentFormat = VK_FORMAT_D32_SFLOAT;
 
     VkGraphicsPipelineCreateInfo p_ci = {};
@@ -1279,8 +1434,11 @@ vk_graphics_pipeline::data vk_graphics_pipeline::create(const VkDevice device, c
     p_ci.pNext = &rend_info;
     p_ci.stageCount = static_cast<uint32_t>(stages.size());
     p_ci.pStages = stages.data();
-    p_ci.pVertexInputState = &vis_ci;
-    p_ci.pInputAssemblyState = &pias_ci;
+    if (p_type == CHI_PIPELINE_TYPE::VERTEX)
+    {
+        p_ci.pVertexInputState = &vis_ci;
+        p_ci.pInputAssemblyState = &pias_ci;
+    }
     p_ci.pViewportState = &vs_ci;
     p_ci.pRasterizationState = &rs_ci;
     p_ci.pMultisampleState = &ms_ci;
@@ -1333,7 +1491,7 @@ vk_graphics_pipeline::data vk_graphics_pipeline::create(const VkDevice device, c
     return d;
 }
 
-void vk_graphics_pipeline::destroy(const data d, const VkDevice device)
+void vk_raster_pipeline::destroy(const data d, const VkDevice device)
 {
     if (d.pipeline != VK_NULL_HANDLE && device != VK_NULL_HANDLE && d.pipeline_layout != VK_NULL_HANDLE)
     {
@@ -1432,7 +1590,7 @@ VkImage vk_image::create(const VkDevice device, const VkExtent3D& extent, const 
     VkImage image = VK_NULL_HANDLE;
     VK_CHECK("create image", vkCreateImage(device, &create_info, nullptr, &image));
 
-#ifdef  DEBUG
+#ifdef DEBUG
     VkDebugUtilsObjectNameInfoEXT name_info = {};
     name_info.sType = VK_STRUCTURE_TYPE_DEBUG_UTILS_OBJECT_NAME_INFO_EXT;
     name_info.objectType = VK_OBJECT_TYPE_IMAGE;
@@ -1472,7 +1630,7 @@ VkImageView vk_image_view::create(const VkDevice device, const VkImage image, co
 
     VK_CHECK("create image view", vkCreateImageView(device, &create_info, nullptr, &iv));
 
-#ifdef  DEBUG
+#ifdef DEBUG
     VkDebugUtilsObjectNameInfoEXT name_info = {};
     name_info.sType = VK_STRUCTURE_TYPE_DEBUG_UTILS_OBJECT_NAME_INFO_EXT;
     name_info.objectType = VK_OBJECT_TYPE_IMAGE_VIEW;
@@ -1610,5 +1768,36 @@ void vk_desc_img_info::destroy(const vk_desc_img_info::data image_info, const Vk
         vk_image::destroy(image_info.image, device);
         vk_image_view::destroy(image_info.desc.imageView, device);
         vk_sampler::destroy(image_info.desc.sampler, device);
+    }
+}
+
+VkFence vk_fence::create(const VkDevice device, const VkFenceCreateFlags flags, const std::string& name)
+{
+    VkFenceCreateInfo create_info = {};
+    create_info.sType = VK_STRUCTURE_TYPE_FENCE_CREATE_INFO;
+    create_info.flags = flags;
+
+    VkFence fence = VK_NULL_HANDLE;
+
+    VK_CHECK("create fence", vkCreateFence(device, &create_info, nullptr, &fence));
+
+#ifdef DEBUG
+    VkDebugUtilsObjectNameInfoEXT name_info = {};
+    name_info.sType = VK_STRUCTURE_TYPE_DEBUG_UTILS_OBJECT_NAME_INFO_EXT;
+    name_info.objectType = VK_OBJECT_TYPE_FENCE;
+    name_info.objectHandle = reinterpret_cast<uint64_t>(fence);
+    name_info.pObjectName = name.c_str();
+
+    VK_CHECK("setting sampler name", vkSetDebugUtilsObjectNameEXT(device, &name_info));
+#endif // DEBUG
+
+    return fence;
+}
+
+void vk_fence::destroy(const VkFence fence, const VkDevice device)
+{
+    if (fence != VK_NULL_HANDLE && device != VK_NULL_HANDLE)
+    {
+        vkDestroyFence(device, fence, nullptr);
     }
 }
