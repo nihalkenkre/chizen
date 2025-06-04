@@ -12,7 +12,7 @@
 
 #include <SPIRV-Reflect/spirv_reflect.h>
 
-#include <cgltf.h>
+#include <cgltf/cgltf.h>
 
 //#define DESC_BUFFER
 

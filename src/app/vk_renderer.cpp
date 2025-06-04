@@ -1,7 +1,6 @@
 #include "vk_renderer.hpp"
 
 #include <iostream>
-#include <meshoptimizer/src/meshoptimizer.h>
 #define CGLM_FORCE_ZERO_TO_ONE
 #include <cglm/include/cglm/cglm.h>
 
@@ -351,9 +350,9 @@ void vk_renderer::render_offline(const uint32_t render_width, const uint32_t ren
     VkAccelerationStructureBuildGeometryInfoKHR build_geom_info = {};
     build_geom_info.sType = VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_BUILD_GEOMETRY_INFO_KHR;
     build_geom_info.type = VK_ACCELERATION_STRUCTURE_TYPE_BOTTOM_LEVEL_KHR;
-    build_geom_info.geometryCount = acc_str_geoms.size();
+    build_geom_info.geometryCount = static_cast<uint32_t>(acc_str_geoms.size());
     build_geom_info.pGeometries = acc_str_geoms.data();
-    
+
     VkAccelerationStructureBuildSizesInfoKHR acc_str_build_sizes_info = {};
     acc_str_build_sizes_info.sType = VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_BUILD_SIZES_INFO_KHR;
 
@@ -883,6 +882,9 @@ void scene_data::destroy(const data d, const VkDevice device)
         vk_image::destroy(mi.mat_dscs.mtl_rgh_dscs.base_color_image, device);
         vk_image_view::destroy(mi.mat_dscs.mtl_rgh_dscs.base_color_desc.imageView, device);
     }
+    vk_image::destroy(d.depth_texture, device);
+    vk_image_view::destroy(d.depth_texture_view, device);
+    vk_device_memory::free(d.depth_texture_memory, device);
     vk_device_memory::free(d.images_memory, device);
     host_buffer_memory::destroy(d.uni_buff_mem, device);
     host_buffer_memory::destroy(d.desc_buff_mem, device);

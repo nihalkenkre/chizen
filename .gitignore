@@ -1,5 +1,5 @@
 # Build
-x64/*
+x64*
 *.obj
 *.pdb
 *.exp
@@ -23,9 +23,6 @@ x64/*
 
 # Config Files
 *.conf*
-
-# Projects
-*projects
 
 # Blender Addon
 *blender

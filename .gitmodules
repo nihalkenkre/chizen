@@ -1,9 +1,6 @@
 [submodule "cgltf"]
 	path = cgltf
 	url = git@github.com:jkuhlmann/cgltf.git
-[submodule "meshoptimizer"]
-	path = meshoptimizer
-	url = git@github.com:zeux/meshoptimizer.git
 [submodule "cglm"]
 	path = cglm
 	url = git@github.com:recp/cglm.git
