@@ -37,6 +37,14 @@ static uint32_t render_height = 1080;
 HBITMAP h_bitmap = NULL;
 uint8_t* pixels = NULL;
 
+#include "scene.h"
+#include "default_scene.h"
+#include "renderer.h"
+#include "vk_renderer.h"
+
+scene* s = NULL;
+renderer* r = NULL;
+
 static LRESULT CALLBACK RenderOutputWndProc(HWND h_wnd, UINT msg, WPARAM w_param, LPARAM l_param)
 {
     HINSTANCE h_instance = GetModuleHandleA(NULL);
@@ -240,16 +248,35 @@ static LRESULT CALLBACK WindowProc(HWND h_wnd, UINT msg, WPARAM w_param, LPARAM 
                 ShowWindow(h_render_output_wnd, SW_SHOW);
             }
 
+            r->render_offline(render_width, render_height, pixels);
+            InvalidateRect(h_render_output_wnd, NULL, TRUE);
+            UpdateWindow(h_render_output_wnd);
+
+            break;
+
         default:
             break;
         }
         break;
 
     case WM_PAINT:
-        break;
+    {
+        PAINTSTRUCT ps = { 0 };
+        BeginPaint(h_wnd, &ps);
+        s->render(r);
+        EndPaint(h_wnd, &ps);
+    }
+    break;
 
     case WM_MOUSEMOVE:
-        break;
+    {
+        POINT p = {};
+        p.x = GET_X_LPARAM(l_param);
+        p.y = GET_Y_LPARAM(l_param);
+
+        s->handle_mouse_move(p);
+    }
+    break;
 
     case WM_KEYUP:
         break;
@@ -257,10 +284,20 @@ static LRESULT CALLBACK WindowProc(HWND h_wnd, UINT msg, WPARAM w_param, LPARAM 
     case WM_LBUTTONDOWN:
         break;
 
-    case WM_TIMER:
+    case WM_SIZE:
+        if (r != NULL)
+        {
+            r->resize(GET_X_LPARAM(l_param), GET_Y_LPARAM(l_param));
+        }
         break;
 
-    case WM_SIZE:
+    case WM_TIMER:
+        switch (w_param)
+        {
+        case RENDER_TIMER_ID:
+            InvalidateRect(h_wnd, NULL, FALSE);
+            break;
+        }
         break;
 
     case WM_HOTKEY:
@@ -318,6 +355,12 @@ int main(int argc, char** argv)
     ShowWindow(h_ctrl_pnl, SW_SHOW);
     ShowWindow(h_render_settings_wnd, SW_SHOW);
 
+    s = malloc(sizeof(scene));
+    r = malloc(sizeof(renderer));
+
+    default_scene_init(s);
+    vk_renderer_init(r, h_scene_wnd);
+
     UpdateWindow(h_scene_wnd);
     UpdateWindow(h_render_settings_wnd);
     UpdateWindow(h_ctrl_pnl);
@@ -348,6 +391,12 @@ int main(int argc, char** argv)
 
     CoUninitialize();
     KillTimer(h_scene_wnd, t);
+
+    s->shutdown();
+    r->shutdown();
+
+    free(r);
+    free(s);
 
     return 0;
 }

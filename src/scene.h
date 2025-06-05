@@ -1,6 +1,8 @@
 #pragma once
 
-#include <windef.h>
+#include <windows.h>
+
+#include "renderer.h"
 
 
 typedef struct scene
@@ -27,5 +29,6 @@ typedef struct scene
     void (*handle_e_up)();
     void (*process_input_state)();
     void (*update)();
-    //void (*render)(renderer* r);
+    void (*render)(renderer* r);
+    void (*shutdown)();
 } scene;
