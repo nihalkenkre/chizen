@@ -1,7 +1,7 @@
-#include <cuda_runtime.h>
 #include <optix.h>
 #include <optix_device.h>
 #include <vector_functions.h>
+#include <cuda_runtime.h>
 #include <curand_kernel.h>
 
 struct Params
@@ -17,6 +17,8 @@ struct RayGenData
     float3 pixel_delta;
     float3 pixel_00_loc;
     float3 cam_eye;
+    unsigned int num_aa_samples;
+    curandState* rand_states;
 };
 
 struct MissData
@@ -49,27 +51,26 @@ extern "C"
             rtData->pixel_00_loc.y + (launch_index.y * rtData->pixel_delta.y),
             rtData->pixel_00_loc.z);
 
-        unsigned int p0 = 0; //(unsigned int)(128);
-        unsigned int p1 = 0; //(unsigned int)(128);
-        unsigned int p2 = 0; //(unsigned int)(128);
+        unsigned int p0 = 0;
+        unsigned int p1 = 0;
+        unsigned int p2 = 0;
 
-        //curandState state;
-        //curand_init(1234, launch_index.x, 0, &state);
+        curand_init(launch_index.x + launch_index.y, launch_index.x + launch_index.y, 0, &rtData->rand_states[threadIdx.x + blockIdx.x * blockDim.x]);
 
-
-        for (uint8_t r = 0; r < 4; ++r)
+        for (uint8_t r = 0; r < rtData->num_aa_samples; ++r)
         {
             unsigned int pr0 = 0;
             unsigned int pr1 = 0;
             unsigned int pr2 = 0;
 
-            float3 ray_dir = {
-                pixel_center.x - rtData->cam_eye.x,
-                pixel_center.y - rtData->cam_eye.y,
-                pixel_center.z - rtData->cam_eye.z };
+            float offset_x = curand_uniform(&rtData->rand_states[threadIdx.x + blockIdx.x * blockDim.x]) * rtData->pixel_delta.x;
+            float offset_y = curand_uniform(&rtData->rand_states[threadIdx.x + blockIdx.x * blockDim.x]) * rtData->pixel_delta.y;
 
-            //float offset_x = curand_uniform(&state);
-            //float offset_y = curand_uniform(&state);
+            float3 ray_dir = {
+                pixel_center.x + offset_x - rtData->cam_eye.x,
+                pixel_center.y + offset_y - rtData->cam_eye.y,
+                pixel_center.z - rtData->cam_eye.z,
+            };
 
             float3_normalize(&ray_dir);
             optixTrace(params.handle, pixel_center, ray_dir, 0.01, 1e16f, 0, 0xFF, 0, 0, 0, 0, pr0, pr1, pr2);
@@ -79,9 +80,9 @@ extern "C"
             p2 += pr2;
         }
 
-        p0 /= 4;
-        p1 /= 4;
-        p2 /= 4;
+        p0 /= rtData->num_aa_samples;
+        p1 /= rtData->num_aa_samples;
+        p2 /= rtData->num_aa_samples;
 
         params.image[launch_index.y * params.image_width + launch_index.x] = make_uchar4(
             p0,

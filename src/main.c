@@ -39,8 +39,8 @@ HWND h_ctrl_pnl = NULL;
 HWND h_render_settings_wnd = NULL;
 HWND h_render_output_wnd = NULL;
 
-static float render_aspect_ratio = 1.7778f;
-static uint32_t render_height = 720;
+static float render_aspect_ratio = 16.f / 9.f;
+static uint32_t render_height = 480;
 
 HBITMAP h_bitmap = NULL;
 uint8_t* pixels = NULL;

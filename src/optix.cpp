@@ -8,6 +8,7 @@
 #include <optix.h>
 #include <optix_stubs.h>
 #include <cuda_runtime.h>
+#include <curand_kernel.h>
 
 #include "utils.h"
 
@@ -24,6 +25,8 @@
 #include <optix_function_table_definition.h>
 #include <optix_micromap.h>
 
+constexpr uint8_t NUM_AA_SAMPLES = 24;
+
 struct Params
 {
     uchar4 *image;
@@ -37,6 +40,8 @@ struct RaygenData
     float3 pixel_delta;
     float3 pixel_00_loc;
     float3 cam_eye;
+    unsigned int num_aa_samples;
+    curandState* rand_states;
 };
 
 struct MissData
@@ -201,7 +206,7 @@ void optix_render(const uint32_t render_width, const uint32_t render_height, uin
     accel_options.operation = OPTIX_BUILD_OPERATION_BUILD;
 
     float3 sphere_vertex = make_float3(0, 0, 0);
-    float sphere_radius = 3.f;
+    float sphere_radius = 7.f;
 
     CUdeviceptr d_vertex_buffer;
     CU_CHECK("allocate vertex buffer", cudaMalloc(reinterpret_cast<void **>(&d_vertex_buffer), sizeof(float3)));
@@ -211,7 +216,7 @@ void optix_render(const uint32_t render_width, const uint32_t render_height, uin
     CU_CHECK("allocate radius buffer", cudaMalloc(reinterpret_cast<void **>(&d_radius_buffer), sizeof(float3)));
     CU_CHECK("copy radius data", cudaMemcpy(reinterpret_cast<void *>(d_radius_buffer), &sphere_radius, sizeof(float3), cudaMemcpyHostToDevice));
 
-    OptixBuildInput sphere_input = {0};
+    OptixBuildInput sphere_input = {};
     sphere_input.type = OPTIX_BUILD_INPUT_TYPE_SPHERES;
     sphere_input.sphereArray.vertexBuffers = &d_vertex_buffer;
     sphere_input.sphereArray.numVertices = 1;
@@ -302,6 +307,8 @@ void optix_render(const uint32_t render_width, const uint32_t render_height, uin
     std::memcpy(&rg_sbt.data.cam_eye, &cam_eye, sizeof(float3));
     std::memcpy(&rg_sbt.data.pixel_00_loc, &pixel_00_loc, sizeof(float3));
     std::memcpy(&rg_sbt.data.pixel_delta, &pixel_delta, sizeof(float3));
+    std::memcpy(&rg_sbt.data.num_aa_samples, &NUM_AA_SAMPLES, sizeof(uint8_t));
+    CU_CHECK("allocate curand states", cudaMalloc(reinterpret_cast<void**>(&rg_sbt.data.rand_states), sizeof(curandState) * render_width * render_height));
     CU_CHECK("copy raygen sbt record to device", cudaMemcpy(reinterpret_cast<void *>(rg_record_ptr), &rg_sbt, sizeof(rg_sbt_record), cudaMemcpyHostToDevice));
 
     CU_CHECK("allocate miss sbt record", cudaMalloc(reinterpret_cast<void **>(&ms_record_ptr), sizeof(ms_sbt_record)));
@@ -342,6 +349,7 @@ void optix_render(const uint32_t render_width, const uint32_t render_height, uin
     CU_CHECK("output buffer to pixels", cudaMemcpy(reinterpret_cast<void *>(pixels), reinterpret_cast<void *>(output_buffer), render_width * render_height * sizeof(uchar4), cudaMemcpyDeviceToHost));
 
 shutdown:
+    CU_CHECK("free curand states", cudaFree(reinterpret_cast<void*>(rg_sbt.data.rand_states)));
     CU_CHECK("free d params", cudaFree(reinterpret_cast<void *>(d_params)));
     CU_CHECK("free output buffer", cudaFree(output_buffer));
     CU_CHECK("free raygen sbt record", cudaFree(reinterpret_cast<void *>(sbt.raygenRecord)));
