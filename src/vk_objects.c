@@ -74,7 +74,13 @@ uint32_t get_memory_type_id(const VkPhysicalDeviceMemoryProperties2 mem_props, c
     return mem_id;
 }
 
-void copy_buffer_to_buffer(const VkBuffer src_buffer, const VkBuffer dst_buffer, const VkBufferCopy2* regions, const uint32_t regions_count, const VkCommandBuffer cmd_buff, const VkQueue xfer_q)
+void copy_buffer_to_buffer(
+    const VkBuffer          src_buffer,
+    const VkBuffer          dst_buffer,
+    const VkBufferCopy2* regions,
+    const uint32_t          regions_count,
+    const VkCommandBuffer   cmd_buff,
+    const VkQueue           xfer_q)
 {
     const VkCommandBufferBeginInfo begin_info = {
         .sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO,
@@ -106,7 +112,14 @@ void copy_buffer_to_buffer(const VkBuffer src_buffer, const VkBuffer dst_buffer,
     VK_CHECK("reset buffer copy cmd buff", vkResetCommandBuffer(cmd_buff, VK_COMMAND_BUFFER_RESET_RELEASE_RESOURCES_BIT));
 }
 
-void copy_buffer_to_image(const VkBuffer src_buffer, const VkImage dst_image, const VkImageLayout dst_image_layout, const VkBufferImageCopy2* regions, const uint32_t regions_count, const VkCommandBuffer cmd_buff, const VkQueue xfer_q)
+void copy_buffer_to_image(
+    const VkBuffer              src_buffer,
+    const VkImage               dst_image,
+    const VkImageLayout         dst_image_layout,
+    const VkBufferImageCopy2* regions,
+    const uint32_t              regions_count,
+    const VkCommandBuffer       cmd_buff,
+    const VkQueue               xfer_q)
 {
     const VkCommandBufferBeginInfo begin_info = {
         .sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO,
@@ -826,3 +839,191 @@ void vk_semaphore_destroy(VkSemaphore semaphore, const VkDevice device)
         semaphore = VK_NULL_HANDLE;
     }
 }
+
+VkBuffer vk_buffer_create(const VkDevice device, const VkDeviceSize size, const VkBufferUsageFlags usage, const char* name)
+{
+    const VkBufferCreateInfo create_info = {
+        .sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO,
+        .size = size,
+        .usage = usage,
+    };
+
+    VkBuffer buffer = VK_NULL_HANDLE;
+    VK_CHECK("create buffer", vkCreateBuffer(device, &create_info, NULL, &buffer));
+
+#ifdef DEBUG
+    const VkDebugUtilsObjectNameInfoEXT name_info = {
+        .sType = VK_STRUCTURE_TYPE_DEBUG_UTILS_OBJECT_NAME_INFO_EXT,
+        .objectType = VK_OBJECT_TYPE_BUFFER,
+        .objectHandle = (uint64_t)(buffer),
+        .pObjectName = name,
+    };
+
+    VK_CHECK("setting buffer name", vkSetDebugUtilsObjectNameEXT(device, &name_info));
+#endif // DEBUG
+
+    return buffer;
+}
+
+void vk_buffer_destroy(VkBuffer buffer, const VkDevice device)
+{
+    if (buffer != VK_NULL_HANDLE && device != VK_NULL_HANDLE)
+    {
+        vkDestroyBuffer(device, buffer, NULL);
+        buffer = VK_NULL_HANDLE;
+    }
+}
+
+VkDeviceMemory vk_device_memory_allocate(const VkDevice device, const VkDeviceSize size, const uint32_t type_id, const VkMemoryAllocateFlagsInfo flags_info, const char* name)
+{
+    const VkMemoryAllocateInfo alloc_info = {
+        .sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO,
+        .pNext = &flags_info,
+        .allocationSize = size,
+        .memoryTypeIndex = type_id,
+    };
+
+    VkDeviceMemory memory = VK_NULL_HANDLE;
+    VK_CHECK("allocate memory", vkAllocateMemory(device, &alloc_info, NULL, &memory));
+
+#ifdef DEBUG
+    const VkDebugUtilsObjectNameInfoEXT name_info = {
+        .sType = VK_STRUCTURE_TYPE_DEBUG_UTILS_OBJECT_NAME_INFO_EXT,
+        .objectType = VK_OBJECT_TYPE_DEVICE_MEMORY,
+        .objectHandle = (uint64_t)(memory),
+        .pObjectName = name,
+    };
+
+    VK_CHECK("setting device memory name", vkSetDebugUtilsObjectNameEXT(device, &name_info));
+#endif // DEBUG
+
+    return memory;
+}
+
+void vk_device_memory_free(VkDeviceMemory memory, const VkDevice device)
+{
+    if (memory != VK_NULL_HANDLE && device != VK_NULL_HANDLE)
+    {
+        vkFreeMemory(device, memory, NULL);
+        memory = VK_NULL_HANDLE;
+    }
+}
+
+VkImage vk_image_create(const VkDevice device, const VkExtent3D extent, const VkFormat format, const VkImageUsageFlags usage, const char* name)
+{
+    const VkImageCreateInfo create_info = {
+        .sType = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO,
+        .imageType = VK_IMAGE_TYPE_2D,
+        .format = format,
+        .extent = extent,
+        .mipLevels = 1,
+        .arrayLayers = 1,
+        .samples = VK_SAMPLE_COUNT_1_BIT,
+        .tiling = VK_IMAGE_TILING_OPTIMAL,
+        .usage = usage,
+    };
+
+    VkImage image = VK_NULL_HANDLE;
+    VK_CHECK("create image", vkCreateImage(device, &create_info, NULL, &image));
+
+#ifdef DEBUG
+    const VkDebugUtilsObjectNameInfoEXT name_info = {
+        .sType = VK_STRUCTURE_TYPE_DEBUG_UTILS_OBJECT_NAME_INFO_EXT,
+        .objectType = VK_OBJECT_TYPE_IMAGE,
+        .objectHandle = (uint64_t)(image),
+        .pObjectName = name,
+    };
+
+    VK_CHECK("setting image name", vkSetDebugUtilsObjectNameEXT(device, &name_info));
+#endif //  DEBUG
+
+    return image;
+}
+
+void vk_image_destroy(VkImage image, const VkDevice device)
+{
+    if (image != VK_NULL_HANDLE && device != VK_NULL_HANDLE)
+    {
+        vkDestroyImage(device, image, NULL);
+        image = VK_NULL_HANDLE;
+    }
+}
+
+VkImageView vk_image_view_create(const VkDevice device, const VkImage image, const VkImageViewType view_type, const VkFormat format, const VkImageAspectFlags aspect_mask, const char* name)
+{
+    const VkImageViewCreateInfo create_info = {
+        .sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO,
+        .image = image,
+        .viewType = view_type,
+        .format = format,
+        .components.r = VK_COMPONENT_SWIZZLE_R,
+        .components.g = VK_COMPONENT_SWIZZLE_G,
+        .components.b = VK_COMPONENT_SWIZZLE_B,
+        .components.a = VK_COMPONENT_SWIZZLE_A,
+        .subresourceRange.aspectMask = aspect_mask,
+        .subresourceRange.levelCount = 1,
+        .subresourceRange.layerCount = 1,
+    };
+
+    VkImageView iv = VK_NULL_HANDLE;
+
+    VK_CHECK("create image view", vkCreateImageView(device, &create_info, NULL, &iv));
+
+#ifdef DEBUG
+    const VkDebugUtilsObjectNameInfoEXT name_info = {
+        .sType = VK_STRUCTURE_TYPE_DEBUG_UTILS_OBJECT_NAME_INFO_EXT,
+        .objectType = VK_OBJECT_TYPE_IMAGE_VIEW,
+        .objectHandle = (uint64_t)(iv),
+        .pObjectName = name,
+    };
+
+    VK_CHECK("setting image view name", vkSetDebugUtilsObjectNameEXT(device, &name_info));
+#endif //  DEBUG
+
+    return iv;
+}
+
+void vk_image_view_destroy(VkImageView image_view, const VkDevice device)
+{
+    if (image_view != VK_NULL_HANDLE && device != VK_NULL_HANDLE)
+    {
+        vkDestroyImageView(device, image_view, NULL);
+        image_view = VK_NULL_HANDLE;
+    }
+}
+
+vk_pipeline_data vk_raster_pipeline_create(const VkDevice device, const char* path, const VkFormat format, const char* name)
+{
+    vk_pipeline_data d = { 0 };
+
+    WIN32_FIND_DATAA find_data = { 0 };
+    char file_path[MAX_PATH];
+    strcpy(file_path, path);
+    strcat(file_path, "*.spv");
+
+    HANDLE h_find = FindFirstFileA(file_path, &find_data);
+    if (h_find == INVALID_HANDLE_VALUE)
+    {
+        DWORD err = GetLastError();
+        printf("Could not find shaders... %d\n", err);
+        exit(err);
+    }
+
+    return d;
+}
+
+void vk_raster_pipeline_destroy(vk_pipeline_data d, const VkDevice device)
+{
+}
+
+vk_pipeline_data vk_rt_pipeline_create(const VkDevice device, const char* path, const VkFormat format, const char* name)
+{
+    vk_pipeline_data d = { 0 };
+
+    return d;
+}
+
+void vk_rt_pipeline_destroy(vk_pipeline_data d, const VkDevice device)
+{
+}
+

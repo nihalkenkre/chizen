@@ -1,12 +1,6 @@
 #include "default_scene.h"
 
-typedef struct input_state
-{
-    POINT curr_mouse_pos;
-    POINT last_mouse_pos;
-} input_state;
-
-input_state i = {0};
+input_state ds_is = { 0 };
 
 void default_scene_init(scene* s)
 {
@@ -38,7 +32,7 @@ void default_scene_init(scene* s)
 
 void default_scene_handle_mouse_move(const POINT mouse_pos)
 {
-    i.curr_mouse_pos = mouse_pos;
+    ds_is.curr_mouse_pos = mouse_pos;
 }
 
 void default_scene_handle_mouse_l_btn_down(void)
@@ -129,9 +123,9 @@ void default_scene_render(renderer* r)
 {
     r->begin_frame();
     float color[] = {
-        (float)i.curr_mouse_pos.x / (r->wnd_rect.right - r->wnd_rect.left),
+        (float)ds_is.curr_mouse_pos.x / (r->wnd_rect.right - r->wnd_rect.left),
         0.0,
-        (float)i.curr_mouse_pos.y / (r->wnd_rect.bottom - r->wnd_rect.top),
+        (float)ds_is.curr_mouse_pos.y / (r->wnd_rect.bottom - r->wnd_rect.top),
         1.0,
     };
     r->clear_frame(color);

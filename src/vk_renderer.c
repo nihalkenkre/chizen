@@ -1,24 +1,25 @@
 #include "vk_renderer.h"
 #include "vk_objects.h"
+#include <Shlwapi.h>
 
-VkInstance instance = VK_NULL_HANDLE;
-surface_data surface = { 0 };
-phy_dev_data phy_dev = { 0 };
-VkDevice device = VK_NULL_HANDLE;
-vk_swapchain_data swapchain = { 0 };
-vk_cmd_pool_data xfer_cmd_pool = { 0 };
-vk_semaphore_data acq_sig_sem = { 0 };
-vk_semaphore_data acq_wait_sem = { 0 };
-
-uint64_t acq_wait_sem_val = 0;
-
-RECT wnd_rect = { 0 };
-VkViewport viewport = { 0 };
-
-VkQueue gfx_q = VK_NULL_HANDLE;
-VkQueue xfer_q = VK_NULL_HANDLE;
-
-uint32_t img_idx = 0;
+static VkInstance instance = VK_NULL_HANDLE;
+static surface_data surface = { 0 };
+static phy_dev_data phy_dev = { 0 };
+static VkDevice device = VK_NULL_HANDLE;
+static vk_swapchain_data swapchain = { 0 };
+static vk_cmd_pool_data xfer_cmd_pool = { 0 };
+static vk_semaphore_data acq_sig_sem = { 0 };
+static vk_semaphore_data acq_wait_sem = { 0 };
+static uint64_t acq_wait_sem_val = 0;
+static RECT wnd_rect = { 0 };
+static VkViewport viewport = { 0 };
+static VkQueue gfx_q = VK_NULL_HANDLE;
+static VkQueue xfer_q = VK_NULL_HANDLE;
+static uint32_t img_idx = 0;
+static VkImage depth_image = VK_NULL_HANDLE;
+static VkDeviceMemory depth_image_memory = VK_NULL_HANDLE;
+static VkImageView depth_image_view = VK_NULL_HANDLE;
+static vk_pipeline_data rt_pipe_data = { 0 };
 
 inline static VkViewport RECT_TO_VIEWPORT(const RECT rect)
 {
@@ -91,6 +92,36 @@ void vk_renderer_init(renderer* r, const HWND h_wnd)
     queue_info.queueIndex = 1;
     vkGetDeviceQueue2(device, &queue_info, &xfer_q);
 
+    // depth texture
+    const VkExtent3D depth_extent = {
+        .width = surface.surf_caps.currentExtent.width,
+        .height = surface.surf_caps.currentExtent.height,
+        .depth = 1,
+    };
+    depth_image = vk_image_create(device, depth_extent, VK_FORMAT_D32_SFLOAT, VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT, "depth texture");
+    const VkImageMemoryRequirementsInfo2 depth_image_mem_reqs = {
+        .sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_REQUIREMENTS_INFO_2,
+        .image = depth_image,
+    };
+
+    VkMemoryRequirements2 mem_reqs = {
+        .sType = VK_STRUCTURE_TYPE_MEMORY_REQUIREMENTS_2,
+    };
+    vkGetImageMemoryRequirements2(device, &depth_image_mem_reqs, &mem_reqs);
+    const VkMemoryAllocateFlagsInfo flags = {
+        .sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_FLAGS_INFO,
+    };
+    depth_image_memory = vk_device_memory_allocate(device, mem_reqs.memoryRequirements.size, get_memory_type_id(phy_dev.mem_props, mem_reqs, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT), flags, "depth image memory");
+    const VkBindImageMemoryInfo bind_infos[] = {
+        {
+            .sType = VK_STRUCTURE_TYPE_BIND_IMAGE_MEMORY_INFO,
+            .image = depth_image,
+            .memory = depth_image_memory,
+        },
+    };
+    VK_CHECK("bind depth image", vkBindImageMemory2(device, _countof(bind_infos), bind_infos));
+    depth_image_view = vk_image_view_create(device, depth_image, VK_IMAGE_VIEW_TYPE_2D, VK_FORMAT_D32_SFLOAT, VK_IMAGE_ASPECT_DEPTH_BIT, "depth image view");
+
     r->import_scene_data = vk_renderer_import_scene_data;
     r->resize = vk_renderer_resize;
     r->begin_frame = vk_renderer_begin_frame;
@@ -102,8 +133,17 @@ void vk_renderer_init(renderer* r, const HWND h_wnd)
     r->shutdown = vk_renderer_shutdown;
 }
 
-void vk_renderer_import_scene_data(const char* file_path)
+void vk_renderer_import_scene_data(const cgltf_data* data)
 {
+    char curr_dir[MAX_PATH];
+    GetModuleFileNameA(GetModuleHandleA(NULL), curr_dir, MAX_PATH);
+    PathRemoveFileSpecA(curr_dir);
+
+    char rt_pipe_path[MAX_PATH];
+    strcpy(rt_pipe_path, curr_dir);
+    strcat(rt_pipe_path, "\\shaders\\pbr\\raytrace\\");
+
+    rt_pipe_data = vk_rt_pipeline_create(device, rt_pipe_path, surface.format.format, "rt pipeline");
 }
 
 void vk_renderer_resize(const uint32_t width, const uint32_t height)
@@ -181,14 +221,14 @@ void vk_renderer_clear_frame(const float color[])
             },
         },
     };
-    //VkRenderingAttachmentInfo depth_attachment_info = {};
-    //depth_attachment_info.sType = VK_STRUCTURE_TYPE_RENDERING_ATTACHMENT_INFO;
-    //depth_attachment_info.imageView = sd.depth_texture_view;
-    //depth_attachment_info.imageLayout = VK_IMAGE_LAYOUT_DEPTH_ATTACHMENT_OPTIMAL;
-    //depth_attachment_info.loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR;
-    //depth_attachment_info.storeOp = VK_ATTACHMENT_STORE_OP_STORE;
-    //depth_attachment_info.clearValue.depthStencil.depth = 1.f;
-    //depth_attachment_info.clearValue.depthStencil.stencil = 0;
+    VkRenderingAttachmentInfo depth_attachment_info = {};
+    depth_attachment_info.sType = VK_STRUCTURE_TYPE_RENDERING_ATTACHMENT_INFO;
+    depth_attachment_info.imageView = depth_image_view;
+    depth_attachment_info.imageLayout = VK_IMAGE_LAYOUT_DEPTH_ATTACHMENT_OPTIMAL;
+    depth_attachment_info.loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR;
+    depth_attachment_info.storeOp = VK_ATTACHMENT_STORE_OP_STORE;
+    depth_attachment_info.clearValue.depthStencil.depth = 1.f;
+    depth_attachment_info.clearValue.depthStencil.stencil = 0;
 
     const VkRenderingInfoKHR rendering_info = {
         .sType = VK_STRUCTURE_TYPE_RENDERING_INFO,
@@ -196,7 +236,7 @@ void vk_renderer_clear_frame(const float color[])
         .layerCount = 1,
         .colorAttachmentCount = _countof(color_attachment_infos),
         .pColorAttachments = color_attachment_infos,
-        //rendering_info.pDepthAttachment = &depth_attachment_info;
+        .pDepthAttachment = &depth_attachment_info,
     };
 
     vkCmdBeginRendering(swapchain.cmd_buffs[img_idx], &rendering_info);
@@ -204,6 +244,7 @@ void vk_renderer_clear_frame(const float color[])
 
 void vk_renderer_render_world(const mat4 cam_xform)
 {
+    printf("%s\n", __FUNCTION__);
 }
 
 void vk_renderer_end_frame(void)
@@ -299,10 +340,17 @@ void vk_renderer_end_frame(void)
 
 void vk_renderer_clear_scene_data(void)
 {
+    printf("%s\n", __FUNCTION__);
 }
 
 void vk_renderer_render_offline(const uint32_t render_width, const uint32_t render_height, uint8_t* pixels)
 {
+    for (size_t i = 0; i < render_width * render_height * 4; i += 4)
+    {
+        pixels[i] = rand() % 255;
+        pixels[i + 1] = rand() % 255;
+        pixels[i + 2] = rand() % 255;
+    }
 }
 
 void vk_renderer_shutdown(void)
@@ -310,6 +358,10 @@ void vk_renderer_shutdown(void)
     VK_CHECK("wait for present fence", vkWaitForFences(device, 1, &swapchain.present_fences[img_idx], VK_TRUE, UINT64_MAX));
     VK_CHECK("reset present fence", vkResetFences(device, 1, &swapchain.present_fences[img_idx]));
 
+    vk_rt_pipeline_destroy(rt_pipe_data, device);
+    vk_image_view_destroy(depth_image_view, device);
+    vk_device_memory_free(depth_image_memory, device);
+    vk_image_destroy(depth_image, device);
     vk_semaphore_destroy(acq_sig_sem.semaphore, device);
     vk_semaphore_destroy(acq_wait_sem.semaphore, device);
     vk_command_pool_destroy(xfer_cmd_pool, device);

@@ -6,6 +6,8 @@
 #include <vulkan/vulkan_win32.h>
 #include <SPIRV-Reflect/spirv_reflect.h>
 
+#include "utils.h"
+
 #include <stdio.h>
 #include <stdlib.h>
 
@@ -103,3 +105,30 @@ typedef struct vk_semaphore_data
 
 vk_semaphore_data vk_semaphore_create(const VkDevice device, const VkSemaphoreType semaphore_type, const char* name);
 void vk_semaphore_destroy(VkSemaphore semaphore, const VkDevice device);
+
+VkBuffer vk_buffer_create(const VkDevice device, const VkDeviceSize size, const VkBufferUsageFlags usage, const char* name);
+void vk_buffer_destroy(VkBuffer buffer, const VkDevice device);
+
+VkDeviceMemory vk_device_memory_allocate(const VkDevice device, const VkDeviceSize size, const uint32_t type_id, const VkMemoryAllocateFlagsInfo flags_info, const char* name);
+void vk_device_memory_free(VkDeviceMemory memory, const VkDevice device);
+
+VkImage vk_image_create(const VkDevice device, const VkExtent3D extent, const VkFormat format, const VkImageUsageFlags usage, const char* name);
+void vk_image_destroy(VkImage image, const VkDevice device);
+
+VkImageView vk_image_view_create(const VkDevice device, const VkImage image, const VkImageViewType view_type, const VkFormat format, const VkImageAspectFlags aspect_mask, const char* name);
+void vk_image_view_destroy(VkImageView image_view, const VkDevice device);
+
+typedef struct vk_pipeline_data
+{
+    VkPipeline pipeline;
+    VkPipelineLayout pipeline_layout;
+
+    VkDescriptorSetLayout* dsls;
+    uint32_t dsls_count;
+} vk_pipeline_data;
+
+vk_pipeline_data vk_raster_pipeline_create(const VkDevice device, const char* path, const VkFormat format, const char* name);
+void vk_raster_pipeline_destroy(vk_pipeline_data d, const VkDevice device);
+
+vk_pipeline_data vk_rt_pipeline_create(const VkDevice device, const char* path, const VkFormat format, const char* name);
+void vk_rt_pipeline_destroy(vk_pipeline_data d, const VkDevice device);

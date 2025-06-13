@@ -5,6 +5,14 @@
 
 // this is the 'one' source for the implementation to be defined in
 
+#include "optix.hpp"
+#include "scene.h"
+#include "default_scene.h"
+#include "world_scene.h"
+
+#include "renderer.h"
+#include "vk_renderer.h"
+
 #define CGLTF_IMPLEMENTATION
 #include <cgltf/cgltf.h>
 
@@ -31,16 +39,11 @@ HWND h_ctrl_pnl = NULL;
 HWND h_render_settings_wnd = NULL;
 HWND h_render_output_wnd = NULL;
 
-static uint32_t render_width = 1920;
-static uint32_t render_height = 1080;
+static float render_aspect_ratio = 1.7778f;
+static uint32_t render_height = 720;
 
 HBITMAP h_bitmap = NULL;
 uint8_t* pixels = NULL;
-
-#include "scene.h"
-#include "default_scene.h"
-#include "renderer.h"
-#include "vk_renderer.h"
 
 scene* s = NULL;
 renderer* r = NULL;
@@ -61,7 +64,7 @@ static LRESULT CALLBACK RenderOutputWndProc(HWND h_wnd, UINT msg, WPARAM w_param
     {
         BITMAPINFO bmi = {
             .bmiHeader.biSize = sizeof(BITMAPINFOHEADER),
-            .bmiHeader.biWidth = (LONG)(render_width),
+            .bmiHeader.biWidth = (LONG)(render_height * render_aspect_ratio),
             .bmiHeader.biHeight = -(LONG)(render_height),
             .bmiHeader.biPlanes = 1,
             .bmiHeader.biBitCount = 32,
@@ -192,8 +195,9 @@ static void open_file(const HWND h_wnd)
                     char fp[MAX_PATH];
                     wcstombs(fp, wfile_path, MAX_PATH);
 
-                    //s.reset(nullptr);
-                    //s = std::make_unique<world_scene>(file_path, r.get());
+                    s->shutdown();
+                    s = malloc(sizeof(scene));
+                    world_scene_init(fp, s, r);
                 }
                 else
                 {
@@ -248,7 +252,8 @@ static LRESULT CALLBACK WindowProc(HWND h_wnd, UINT msg, WPARAM w_param, LPARAM 
                 ShowWindow(h_render_output_wnd, SW_SHOW);
             }
 
-            r->render_offline(render_width, render_height, pixels);
+            optix_render((uint32_t)(render_height * render_aspect_ratio), render_height, pixels);
+            //r->render_offline(render_width, render_height, pixels);
             InvalidateRect(h_render_output_wnd, NULL, TRUE);
             UpdateWindow(h_render_output_wnd);
 

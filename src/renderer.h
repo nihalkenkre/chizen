@@ -2,13 +2,13 @@
 
 #include <Windows.h>
 #include <stdint.h>
-
+#include <cgltf/cgltf.h>
 #define CGLM_FORCE_ZERO_TO_ONE
 #include <cglm/include/cglm/cglm.h>
 
 typedef struct renderer
 {
-    void (*import_scene_data)(const char* file_path);
+    void (*import_scene_data)(const cgltf_data* data);
     void (*resize)(const uint32_t width, const uint32_t height);
     void (*begin_frame)();
     void (*clear_frame)(const float color[]);

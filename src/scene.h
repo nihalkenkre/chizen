@@ -1,9 +1,26 @@
 #pragma once
 
 #include <windows.h>
+#include <stdbool.h>
 
 #include "renderer.h"
 
+typedef struct input_state
+{
+    POINT curr_mouse_pos;
+    POINT last_mouse_pos;
+
+    bool l_btn_down;
+    bool m_btn_down;
+    bool r_btn_down;
+
+    bool w_down;
+    bool a_down;
+    bool s_down;
+    bool d_down;
+    bool q_down;
+    bool e_down;
+} input_state;
 
 typedef struct scene
 {
