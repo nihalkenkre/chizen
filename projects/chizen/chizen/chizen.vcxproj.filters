@@ -72,4 +72,9 @@
       <Filter>cuda</Filter>
     </ClInclude>
   </ItemGroup>
+  <ItemGroup>
+    <Image Include="test.png">
+      <Filter>Source Files\Resource Files</Filter>
+    </Image>
+  </ItemGroup>
 </Project>

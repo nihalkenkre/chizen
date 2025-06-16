@@ -18,7 +18,9 @@
 
 #define STB_IMPLEMENTATION
 #define STBI_NO_FAILURE_STRINGS
+#define STB_IMAGE_WRITE_IMPLEMENTATION
 #include <stb/stb_image.h>
+#include <stb/stb_image_write.h>
 
 #define CGLM_IMPLEMENTATION
 #define CGLM_FORCE_ZERO_TO_ONE
@@ -41,6 +43,8 @@ HWND h_render_output_wnd = NULL;
 
 static float render_aspect_ratio = 16.f / 9.f;
 static uint32_t render_height = 480;
+
+static float render_output_image_scale = 1;
 
 HBITMAP h_bitmap = NULL;
 uint8_t* pixels = NULL;
@@ -85,12 +89,19 @@ static LRESULT CALLBACK RenderOutputWndProc(HWND h_wnd, UINT msg, WPARAM w_param
 
         HDC mem_dc = CreateCompatibleDC(hdc);
         SelectObject(mem_dc, h_bitmap);
-        BitBlt(hdc, ps.rcPaint.left, ps.rcPaint.top, ps.rcPaint.right, ps.rcPaint.bottom, mem_dc, 0, 0, SRCCOPY);
+        StretchBlt(hdc, ps.rcPaint.left, ps.rcPaint.top, ps.rcPaint.right * render_output_image_scale, ps.rcPaint.bottom * render_output_image_scale, mem_dc, ps.rcPaint.left, ps.rcPaint.top, ps.rcPaint.right, ps.rcPaint.bottom, SRCCOPY);
         DeleteDC(mem_dc);
 
         EndPaint(h_wnd, &ps);
     }
     break;
+
+    case WM_MOUSEWHEEL:
+        float wheel_delta = (float)GET_WHEEL_DELTA_WPARAM(w_param);
+        render_output_image_scale += wheel_delta / 120.f / 10.f;
+        InvalidateRect(h_wnd, NULL, true);
+        UpdateWindow(h_wnd);
+        break;
 
     default:
         return DefWindowProcA(h_wnd, msg, w_param, l_param);
@@ -246,16 +257,30 @@ static LRESULT CALLBACK WindowProc(HWND h_wnd, UINT msg, WPARAM w_param, LPARAM 
             break;
 
         case BN_CLICKED:
-            if (h_wnd == h_render_settings_wnd && h_render_output_wnd == NULL)
-            {
-                h_render_output_wnd = create_render_output_wnd(GetModuleHandleA(NULL));
-                ShowWindow(h_render_output_wnd, SW_SHOW);
-            }
+            //if (h_wnd == h_render_settings_wnd && h_render_output_wnd == NULL)
+            //{
+                //h_render_output_wnd = create_render_output_wnd(GetModuleHandleA(NULL));
+                //ShowWindow(h_render_output_wnd, SW_SHOW);
+            //}
 
-            optix_render((uint32_t)(render_height * render_aspect_ratio), render_height, pixels);
+            uint8_t* output_pixels = malloc(sizeof(uint8_t) * render_height * render_aspect_ratio * render_height * 4);
+
+            optix_render((uint32_t)(render_height * render_aspect_ratio), render_height, output_pixels);
+
+            //for (size_t i = 0; i < render_height * render_aspect_ratio * render_height * 4; i += 4)
+            //{
+            //    uint8_t tmp = output_pixels[i];
+            //    output_pixels[i] = output_pixels[i + 2];
+            //    output_pixels[i + 2] = tmp;
+            //}
+
+            stbi_write_png("test.png", render_height * render_aspect_ratio, render_height, 4, output_pixels, 0);
+
+            free(output_pixels);
+
             //r->render_offline(render_width, render_height, pixels);
-            InvalidateRect(h_render_output_wnd, NULL, TRUE);
-            UpdateWindow(h_render_output_wnd);
+            //InvalidateRect(h_render_output_wnd, NULL, TRUE);
+            //UpdateWindow(h_render_output_wnd);
 
             break;
 

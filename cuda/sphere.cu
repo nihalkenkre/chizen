@@ -54,6 +54,7 @@ extern "C"
         unsigned int p0 = 0;
         unsigned int p1 = 0;
         unsigned int p2 = 0;
+        unsigned int p3 = 0;
 
         curand_init(launch_index.x + launch_index.y, launch_index.x + launch_index.y, 0, &rtData->rand_states[threadIdx.x + blockIdx.x * blockDim.x]);
 
@@ -62,6 +63,7 @@ extern "C"
             unsigned int pr0 = 0;
             unsigned int pr1 = 0;
             unsigned int pr2 = 0;
+            unsigned int pr3 = 0;
 
             float offset_x = curand_uniform(&rtData->rand_states[threadIdx.x + blockIdx.x * blockDim.x]) * rtData->pixel_delta.x;
             float offset_y = curand_uniform(&rtData->rand_states[threadIdx.x + blockIdx.x * blockDim.x]) * rtData->pixel_delta.y;
@@ -73,30 +75,39 @@ extern "C"
             };
 
             float3_normalize(&ray_dir);
-            optixTrace(params.handle, pixel_center, ray_dir, 0.01, 1e16f, 0, 0xFF, 0, 0, 0, 0, pr0, pr1, pr2);
+            optixTrace(params.handle, pixel_center, ray_dir, 0.01, 1e16f, 0, 0xFF, 0, 0, 0, 0, pr0, pr1, pr2, pr3);
 
             p0 += pr0;
             p1 += pr1;
             p2 += pr2;
+            p3 += pr3;
         }
 
         p0 /= rtData->num_aa_samples;
         p1 /= rtData->num_aa_samples;
         p2 /= rtData->num_aa_samples;
+        p3 /= rtData->num_aa_samples;
 
         params.image[launch_index.y * params.image_width + launch_index.x] = make_uchar4(
             p0,
             p1,
             p2,
-            255);
+            p3);
     }
 
     __global__ void __miss__ms()
     {
         MissData* rt_data = reinterpret_cast<MissData*>(optixGetSbtDataPointer());
-        optixSetPayload_0(64);
-        optixSetPayload_1(64);
-        optixSetPayload_2(64);
+
+        float3 ray_dir = optixGetWorldRayDirection();
+        float3_normalize(&ray_dir);
+        ray_dir.y += 1;
+        ray_dir.y *= 0.5;
+        ray_dir.y = 1 - ray_dir.y;
+        optixSetPayload_0(0);
+        optixSetPayload_1(ray_dir.y * 255);
+        optixSetPayload_2(0);
+        optixSetPayload_3(255);
     }
 
     __global__ void __closesthit__ch()
@@ -120,8 +131,9 @@ extern "C"
         float3 normal = { ray_hit.x - q.x, ray_hit.y - q.y, ray_hit.z - q.z };
         float3_normalize(&normal);
 
-        optixSetPayload_0(normal.z * 255);
+        optixSetPayload_0(normal.x * 255);
         optixSetPayload_1(normal.y * 255);
-        optixSetPayload_2(normal.x * 255);
+        optixSetPayload_2(normal.z * 255);
+        optixSetPayload_3(255);
     }
 }

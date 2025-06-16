@@ -24,3 +24,6 @@ x64*
 # Config Files
 *.conf*
 *cu.optixir
+
+# Test files
+*test*

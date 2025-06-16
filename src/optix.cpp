@@ -25,7 +25,7 @@
 #include <optix_function_table_definition.h>
 #include <optix_micromap.h>
 
-constexpr uint8_t NUM_AA_SAMPLES = 24;
+constexpr uint8_t NUM_AA_SAMPLES = 4;
 
 struct Params
 {
@@ -244,7 +244,7 @@ void optix_render(const uint32_t render_width, const uint32_t render_height, uin
 
     pipeline_compile_options.usesPrimitiveTypeFlags = OPTIX_PRIMITIVE_TYPE_FLAGS_SPHERE;
     pipeline_compile_options.traversableGraphFlags = OPTIX_TRAVERSABLE_GRAPH_FLAG_ALLOW_SINGLE_GAS;
-    pipeline_compile_options.numPayloadValues = 3;
+    pipeline_compile_options.numPayloadValues = 4;
     pipeline_compile_options.numAttributeValues = 2;
     pipeline_compile_options.exceptionFlags = OPTIX_EXCEPTION_FLAG_STACK_OVERFLOW | OPTIX_EXCEPTION_FLAG_TRACE_DEPTH;
     pipeline_compile_options.pipelineLaunchParamsVariableName = "params";
