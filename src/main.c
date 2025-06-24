@@ -2,6 +2,7 @@
 #include <Windowsx.h>
 #include <ShObjIdl.h>
 #include <strsafe.h>
+#include <Shlwapi.h>
 
 // this is the 'one' source for the implementation to be defined in
 
@@ -274,7 +275,12 @@ static LRESULT CALLBACK WindowProc(HWND h_wnd, UINT msg, WPARAM w_param, LPARAM 
             //    output_pixels[i + 2] = tmp;
             //}
 
-            stbi_write_png("test.png", render_height * render_aspect_ratio, render_height, 4, output_pixels, 0);
+            char file_name[MAX_PATH];
+            GetModuleFileNameA(GetModuleHandleA(NULL), file_name, MAX_PATH);
+            PathRemoveFileSpecA(file_name);
+            strcat(file_name, "\\test.png");
+
+            stbi_write_png(file_name, render_height * render_aspect_ratio, render_height, 4, output_pixels, 0);
 
             free(output_pixels);
 
