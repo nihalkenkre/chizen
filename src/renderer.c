@@ -3,6 +3,13 @@
 #include "color.h"
 #include "bbox.h"
 
+typedef struct triangle_hit_data
+{
+    bool is_hit;
+    float t;
+    vec3 bary_coords;
+} triangle_hit_data;
+
 static float hit_sphere(vec3 center, const float radius, ray ray)
 {
     vec3 oc = { 0 };
@@ -54,6 +61,82 @@ static bool hit_bbox(bbox box, ray ray)
     return true;
 }
 
+static triangle_hit_data hit_triangle(vec3 vtxs[], ray ray)
+{
+    triangle_hit_data hit_data = { 0 };
+
+    vec3 e1 = { 0 }; vec3 e2 = { 0 };
+    glm_vec3_sub(vtxs[1], vtxs[0], e1);
+    glm_vec3_sub(vtxs[2], vtxs[0], e2);
+
+    vec3 ray_cross_e2 = { 0 };
+    glm_vec3_cross(ray.dir, e2, ray_cross_e2);
+
+    float det = glm_vec3_dot(e1, ray_cross_e2);
+
+    if (det > -0.00001 && det < 0.00001)
+        return hit_data;
+
+    float inv_det = 1.f / det;
+    vec3 s = { 0 };
+    glm_vec3_sub(ray.org, vtxs[0], s);
+    float u = inv_det * glm_vec3_dot(s, ray_cross_e2);
+
+    if (u < 0.f || u > 1.f)
+        return hit_data;
+
+    vec3 s_cross_e1 = { 0 };
+    glm_vec3_cross(s, e1, s_cross_e1);
+    float v = inv_det * glm_vec3_dot(ray.dir, s_cross_e1);
+
+    if (v < 0.f || u + v > 1.f)
+        return hit_data;
+
+    float t = inv_det * glm_vec3_dot(e2, s_cross_e1);
+
+    if (t > 0.00001)
+    {
+        hit_data.is_hit = true;
+        hit_data.t = t;
+
+        hit_data.bary_coords[0] = u;
+        hit_data.bary_coords[1] = v;
+        hit_data.bary_coords[2] = 1 - u - v;
+
+        return hit_data;
+    }
+    else
+    {
+        return hit_data;
+    }
+}
+
+static ray generate_ray(float x, float y, vec3 pixel_00_loc, vec3 pixel_delta_u, vec3 pixel_delta_v, vec3 org)
+{
+    vec3 offset = { (float)rand() / RAND_MAX, (float)rand() / RAND_MAX, (float)rand() / RAND_MAX };
+    vec3 pixel_center = { 0 };
+    vec3 pixel_delta_u_x = { 0 }; vec3 pixel_delta_v_y = { 0 };
+    glm_vec3_scale(pixel_delta_u, x, pixel_delta_u_x);
+    glm_vec3_scale(pixel_delta_v, y, pixel_delta_v_y);
+
+    vec3 pixel_delta_u_offset = { 0 }; vec3 pixel_delta_v_offset = { 0 };
+    glm_vec3_scale(pixel_delta_u, offset[0], pixel_delta_u_offset);
+    glm_vec3_scale(pixel_delta_v, offset[1], pixel_delta_v_offset);
+
+    glm_vec3_add(pixel_00_loc, pixel_delta_u_x, pixel_center);
+    glm_vec3_add(pixel_center, pixel_delta_v_y, pixel_center);
+    glm_vec3_add(pixel_center, pixel_delta_u_offset, pixel_center);
+    glm_vec3_add(pixel_center, pixel_delta_v_offset, pixel_center);
+
+    vec3 dir = { 0 };
+    glm_vec3_sub(pixel_center, org, dir);
+    glm_vec3_normalize(dir);
+
+    ray r = ray_create(org, dir);
+
+    return r;
+}
+
 void renderer_render(const float render_width, const float render_height, const uint8_t num_samples, scene scene, uint8_t* pixels)
 {
     float focal_length = 2.f;
@@ -99,32 +182,12 @@ void renderer_render(const float render_width, const float render_height, const 
             {
                 vec4 sample_color = { 0 };
 
-                vec3 offset = { (float)rand() / RAND_MAX, (float)rand() / RAND_MAX, (float)rand() / RAND_MAX };
-
-                vec3 pixel_center = { 0 };
-                vec3 pixel_delta_u_x = { 0 }; vec3 pixel_delta_v_y = { 0 };
-                glm_vec3_scale(pixel_delta_u, (float)x, pixel_delta_u_x);
-                glm_vec3_scale(pixel_delta_v, (float)y, pixel_delta_v_y);
-
-                vec3 pixel_delta_u_offset = { 0 }; vec3 pixel_delta_v_offset = { 0 };
-                glm_vec3_scale(pixel_delta_u, offset[0], pixel_delta_u_offset);
-                glm_vec3_scale(pixel_delta_v, offset[1], pixel_delta_v_offset);
-
-                glm_vec3_add(pixel_00_loc, pixel_delta_u_x, pixel_center);
-                glm_vec3_add(pixel_center, pixel_delta_v_y, pixel_center);
-                glm_vec3_add(pixel_center, pixel_delta_u_offset, pixel_center);
-                glm_vec3_add(pixel_center, pixel_delta_v_offset, pixel_center);
-
-                vec3 ray_direction = { 0 };
-                glm_vec3_sub(pixel_center, scene.camera.pos, ray_direction);
-                glm_vec3_normalize(ray_direction);
-
-                ray r = ray_create(scene.camera.pos, ray_direction);
+                ray cam_ray = generate_ray((float)x, (float)y, pixel_00_loc, pixel_delta_u, pixel_delta_v, scene.camera.pos);
 
                 bool hit = false;
 
                 vec3 center = { 0.f, 2.f, 0.f };
-                float t = hit_sphere(center, 0.5f, r);
+                float t = hit_sphere(center, 0.5f, cam_ray);
                 if (t > 0.f)
                 {
                     vec4 c = { 0.f, 1.f, 0.f, 0.3f };
@@ -133,16 +196,29 @@ void renderer_render(const float render_width, const float render_height, const 
                 }
 
                 bbox box = {
-                    .bounds =
-                    {
+                    .bounds = {
                         {-1.0, -1.0, -1.0},
                         {1.0, 1.0, 1.0},
                     },
                 };
 
-                if (hit_bbox(box, r))
+                if (hit_bbox(box, cam_ray))
                 {
                     vec4 c = { 1.f, 0.f, 0.f, 0.3f };
+                    color_blend(c, sample_color, sample_color);
+                    hit = true;
+                }
+
+                vec3 vtxs[] = {
+                    {-0.5f, -0.5f, 0 },
+                    {0.5f, -0.5f, 0 },
+                    {0.5f, 0.5f, 0 },
+                };
+
+                triangle_hit_data hit_data = hit_triangle(vtxs, cam_ray);
+                if (hit_data.is_hit)
+                {
+                    vec4 c = { hit_data.bary_coords[0], hit_data.bary_coords[1], hit_data.bary_coords[2], 0.5f };
                     color_blend(c, sample_color, sample_color);
                     hit = true;
                 }

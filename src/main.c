@@ -13,7 +13,7 @@
 #define STB_IMAGE_WRITE_IMPLEMENTATION
 #include <stb/stb_image_write.h>
 
-const float RENDER_HEIGHT = 100.f;
+const float RENDER_HEIGHT = 720.f;
 const float ASPECT_RATIO = 16.f / 9.f;
 const uint8_t NUM_SAMPLES = 4;
 
