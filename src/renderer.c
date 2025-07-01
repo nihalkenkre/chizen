@@ -137,26 +137,19 @@ static ray generate_ray(float x, float y, vec3 pixel_00_loc, vec3 pixel_delta_u,
     return r;
 }
 
-void renderer_render(const float render_width, const float render_height, const uint8_t num_samples, scene scene, uint8_t* pixels)
+static void find_pixel_vecs(camera cam, float viewport_width, float viewport_height, float render_width, float render_height, float focal_length, vec3 pixel_00_loc, vec3 pixel_delta_u, vec3 pixel_delta_v)
 {
-    float focal_length = 2.f;
-    float theta = scene.camera.fov;
-    float h = tanf(theta / 2.f);
-    float viewport_height = 2.f * h * focal_length;
-    float viewport_width = viewport_height * (render_width / render_height);
-
     vec3 viewport_u = { 0 }; vec3 viewport_v = { 0 };
-    glm_vec3_scale(scene.camera.u, viewport_width, viewport_u);
-    glm_vec3_scale(scene.camera.v, -viewport_height, viewport_v);
+    glm_vec3_scale(cam.u, viewport_width, viewport_u);
+    glm_vec3_scale(cam.v, -viewport_height, viewport_v);
 
-    vec3 pixel_delta_u = { 0 }; vec3 pixel_delta_v = { 0 };
     glm_vec3_scale(viewport_u, 1.f / render_width, pixel_delta_u);
     glm_vec3_scale(viewport_v, 1.f / render_height, pixel_delta_v);
 
     vec3 image_plane_offset = { 0 };
-    glm_vec3_scale(scene.camera.w, focal_length, image_plane_offset);
+    glm_vec3_scale(cam.w, focal_length, image_plane_offset);
     vec3 viewport_upper_left = { 0 };
-    glm_vec3_sub(scene.camera.pos, image_plane_offset, viewport_upper_left);
+    glm_vec3_sub(cam.pos, image_plane_offset, viewport_upper_left);
 
     vec3 viewport_u_by_2 = { 0 }; vec3 viewport_v_by_2 = { 0 };
     glm_vec3_scale(viewport_u, 0.5f, viewport_u_by_2);
@@ -169,8 +162,19 @@ void renderer_render(const float render_width, const float render_height, const 
     glm_vec3_add(pixel_delta_u, pixel_delta_v, pixel_delta_offset);
     glm_vec3_scale(pixel_delta_offset, 0.5f, pixel_delta_offset);
 
-    vec3 pixel_00_loc = { 0 };
     glm_vec3_add(viewport_upper_left, pixel_delta_offset, pixel_00_loc);
+}
+
+void renderer_render(const float render_width, const float render_height, const uint8_t num_samples, scene scene, uint8_t* pixels)
+{
+    float focal_length = 2.f;
+    float theta = scene.camera.fov;
+    float h = tanf(theta / 2.f);
+    float viewport_height = 2.f * h * focal_length;
+    float viewport_width = viewport_height * (render_width / render_height);
+
+    vec3 pixel_00_loc = { 0 }; vec3 pixel_delta_u = { 0 }; vec3 pixel_delta_v = { 0 };
+    find_pixel_vecs(scene.camera, viewport_width, viewport_height, render_width, render_height, focal_length, pixel_00_loc, pixel_delta_u, pixel_delta_v);
 
     for (size_t y = 0; y < (size_t)render_height; ++y)
     {
@@ -186,41 +190,58 @@ void renderer_render(const float render_width, const float render_height, const 
 
                 bool hit = false;
 
-                vec3 center = { 0.f, 2.f, 0.f };
-                float t = hit_sphere(center, 0.5f, cam_ray);
-                if (t > 0.f)
+                //vec3 center = { 0.f, 2.f, 0.f };
+                //float t = hit_sphere(center, 0.5f, cam_ray);
+                //if (t > 0.f)
+                //{
+                //    vec4 c = { 0.f, 1.f, 0.f, 0.3f };
+                //    color_blend(c, sample_color, sample_color);
+                //    hit = true;
+                //}
+
+                //bbox box = {
+                //    .bounds = {
+                //        {-1.0, -1.0, -1.0},
+                //        {1.0, 1.0, 1.0},
+                //    },
+                //};
+
+                //if (hit_bbox(box, cam_ray))
+                //{
+                //    vec4 c = { 1.f, 0.f, 0.f, 0.3f };
+                //    color_blend(c, sample_color, sample_color);
+                //    hit = true;
+                //}
+
+                //vec3 vtxs[] = {
+                //    {-0.5f, -0.5f, 0 },
+                //    {0.5f, -0.5f, 0 },
+                //    {0.5f, 0.5f, 0 },
+                //};
+
+                //triangle_hit_data hit_data = hit_triangle(vtxs, cam_ray);
+                //if (hit_data.is_hit)
+                //{
+                //    vec4 c = { hit_data.bary_coords[0], hit_data.bary_coords[1], hit_data.bary_coords[2], 0.5f };
+                //    color_blend(c, sample_color, sample_color);
+                //    hit = true;
+                //}
+
+                for (size_t m = 0; m < scene.meshes_count; ++m)
                 {
-                    vec4 c = { 0.f, 1.f, 0.f, 0.3f };
-                    color_blend(c, sample_color, sample_color);
-                    hit = true;
-                }
+                    mesh curr_mesh = scene.meshes[m];
 
-                bbox box = {
-                    .bounds = {
-                        {-1.0, -1.0, -1.0},
-                        {1.0, 1.0, 1.0},
-                    },
-                };
+                    for (size_t p = 0; p < curr_mesh.prims_count; ++p)
+                    {
+                        primitive curr_prim = curr_mesh.prims[p];
 
-                if (hit_bbox(box, cam_ray))
-                {
-                    vec4 c = { 1.f, 0.f, 0.f, 0.3f };
-                    color_blend(c, sample_color, sample_color);
-                    hit = true;
-                }
-
-                vec3 vtxs[] = {
-                    {-0.5f, -0.5f, 0 },
-                    {0.5f, -0.5f, 0 },
-                    {0.5f, 0.5f, 0 },
-                };
-
-                triangle_hit_data hit_data = hit_triangle(vtxs, cam_ray);
-                if (hit_data.is_hit)
-                {
-                    vec4 c = { hit_data.bary_coords[0], hit_data.bary_coords[1], hit_data.bary_coords[2], 0.5f };
-                    color_blend(c, sample_color, sample_color);
-                    hit = true;
+                        if (hit_bbox(curr_prim.bbox, cam_ray))
+                        {
+                            vec4 c = { 1.f, 0.f, 0.f, 0.3f };
+                            color_blend(c, sample_color, sample_color);
+                            hit = true;
+                        }
+                    }
                 }
 
                 if (!hit)

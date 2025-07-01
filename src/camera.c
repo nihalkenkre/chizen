@@ -32,5 +32,8 @@ camera camera_create(vec3 pos, vec4 rot, const float fov, const float znear, con
 void camera_destroy(camera c)
 {
     if (c.name != NULL)
+    {
         free(c.name);
+        c.name = NULL;
+    }
 }
