@@ -1,11 +1,11 @@
 #pragma once
 
 #include <cglm/include/cglm/cglm.h>
+#include <cgltf/cgltf.h>
 
 typedef struct camera
 {
     vec3 pos;
-    vec4 rot;
     float fov;
     float znear;
     float zfar;
@@ -13,9 +13,7 @@ typedef struct camera
     vec3 w;
     vec3 v;
     vec3 u;
-
-    char* name;
 } camera;
 
-camera camera_create(vec3 pos, vec4 rot, const float fov, const float znear, const float zfar, const float aspect_ratio, const char* name);
+camera camera_create(cgltf_node* camera_node);
 void camera_destroy(camera c);

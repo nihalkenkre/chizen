@@ -1,0 +1,21 @@
+#pragma once
+
+#include "bbox.h"
+#include <cgltf/cgltf.h>
+
+typedef struct primitive
+{
+    vec3* positions;
+    size_t positions_count;
+
+    vec3* normals;
+    size_t normals_count;
+
+    vec2* uvs;
+    size_t uvs_count;
+
+    bbox bbox;
+} primitive;
+
+primitive primitive_create(const cgltf_primitive* primitive, mat4 node_xform);
+void primitive_destroy(primitive p);

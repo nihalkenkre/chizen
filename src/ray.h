@@ -6,8 +6,8 @@ typedef struct ray
 {
     vec3 org;
     vec3 dir;
-    ivec3 sign;
     vec3 inv_dir;
+    uint8_t sign[3];
 } ray;
 
 ray ray_create(vec3 org, vec3 dir);

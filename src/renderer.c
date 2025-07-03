@@ -165,6 +165,46 @@ static void find_pixel_vecs(camera cam, float viewport_width, float viewport_hei
     glm_vec3_add(viewport_upper_left, pixel_delta_offset, pixel_00_loc);
 }
 
+void test_render(ray cam_ray, vec4 sample_color, bool* hit)
+{
+    vec3 center = { 0.f, 2.f, 0.f };
+    float t = hit_sphere(center, 0.5f, cam_ray);
+    if (t > 0.f)
+    {
+        vec4 c = { 0.f, 1.f, 0.f, 0.3f };
+        color_blend(c, sample_color, sample_color);
+        *hit = true;
+    }
+
+    bbox box = {
+        .bounds = {
+            {-1.0, -1.0, -1.0},
+            {1.0, 1.0, 1.0},
+        },
+    };
+
+    if (hit_bbox(box, cam_ray))
+    {
+        vec4 c = { 1.f, 0.f, 0.f, 0.3f };
+        color_blend(c, sample_color, sample_color);
+        *hit = true;
+    }
+
+    vec3 vtxs[] = {
+        {-0.5f, -0.5f, 0 },
+        {0.5f, -0.5f, 0 },
+        {0.5f, 0.5f, 0 },
+    };
+
+    triangle_hit_data hit_data = hit_triangle(vtxs, cam_ray);
+    if (hit_data.is_hit)
+    {
+        vec4 c = { hit_data.bary_coords[0], hit_data.bary_coords[1], hit_data.bary_coords[2], 0.5f };
+        color_blend(c, sample_color, sample_color);
+        *hit = true;
+    }
+}
+
 void renderer_render(const float render_width, const float render_height, const uint8_t num_samples, scene scene, uint8_t* pixels)
 {
     float focal_length = 2.f;
@@ -180,7 +220,7 @@ void renderer_render(const float render_width, const float render_height, const 
     {
         for (size_t x = 0; x < (size_t)render_width; ++x)
         {
-            vec4 color = { 0.2f, 0.2f, 0.2f, 0.f };
+            vec4 pixel_color = { 0.0f, 0.0f, 0.0f, 0.0f };
 
             for (uint8_t n = 0; n < num_samples; ++n)
             {
@@ -189,43 +229,6 @@ void renderer_render(const float render_width, const float render_height, const 
                 ray cam_ray = generate_ray((float)x, (float)y, pixel_00_loc, pixel_delta_u, pixel_delta_v, scene.camera.pos);
 
                 bool hit = false;
-
-                //vec3 center = { 0.f, 2.f, 0.f };
-                //float t = hit_sphere(center, 0.5f, cam_ray);
-                //if (t > 0.f)
-                //{
-                //    vec4 c = { 0.f, 1.f, 0.f, 0.3f };
-                //    color_blend(c, sample_color, sample_color);
-                //    hit = true;
-                //}
-
-                //bbox box = {
-                //    .bounds = {
-                //        {-1.0, -1.0, -1.0},
-                //        {1.0, 1.0, 1.0},
-                //    },
-                //};
-
-                //if (hit_bbox(box, cam_ray))
-                //{
-                //    vec4 c = { 1.f, 0.f, 0.f, 0.3f };
-                //    color_blend(c, sample_color, sample_color);
-                //    hit = true;
-                //}
-
-                //vec3 vtxs[] = {
-                //    {-0.5f, -0.5f, 0 },
-                //    {0.5f, -0.5f, 0 },
-                //    {0.5f, 0.5f, 0 },
-                //};
-
-                //triangle_hit_data hit_data = hit_triangle(vtxs, cam_ray);
-                //if (hit_data.is_hit)
-                //{
-                //    vec4 c = { hit_data.bary_coords[0], hit_data.bary_coords[1], hit_data.bary_coords[2], 0.5f };
-                //    color_blend(c, sample_color, sample_color);
-                //    hit = true;
-                //}
 
                 for (size_t m = 0; m < scene.meshes_count; ++m)
                 {
@@ -237,7 +240,7 @@ void renderer_render(const float render_width, const float render_height, const 
 
                         if (hit_bbox(curr_prim.bbox, cam_ray))
                         {
-                            vec4 c = { 1.f, 0.f, 0.f, 0.3f };
+                            vec4 c = { 1.f, 0.f, 0.f, 0.5f };
                             color_blend(c, sample_color, sample_color);
                             hit = true;
                         }
@@ -250,16 +253,16 @@ void renderer_render(const float render_width, const float render_height, const 
                     color_blend(c, sample_color, sample_color);
                 }
 
-                glm_vec4_add(sample_color, color, color);
+                glm_vec4_add(sample_color, pixel_color, pixel_color);
             }
 
-            glm_vec4_scale(color, 1.f / num_samples, color);
-            glm_vec4_clamp(color, 0.f, 1.f);
+            glm_vec4_scale(pixel_color, 1.f / num_samples, pixel_color);
+            glm_vec4_clamp(pixel_color, 0.f, 1.f);
 
-            pixels[(y * (size_t)render_width * 4) + (x * 4)] = (uint8_t)(color[0] * 255);
-            pixels[(y * (size_t)render_width * 4) + (x * 4) + 1] = (uint8_t)(color[1] * 255);
-            pixels[(y * (size_t)render_width * 4) + (x * 4) + 2] = (uint8_t)(color[2] * 255);
-            pixels[(y * (size_t)render_width * 4) + (x * 4) + 3] = (uint8_t)(color[3] * 255);
+            pixels[(y * (size_t)render_width * 4) + (x * 4)] = (uint8_t)(pixel_color[0] * 255);
+            pixels[(y * (size_t)render_width * 4) + (x * 4) + 1] = (uint8_t)(pixel_color[1] * 255);
+            pixels[(y * (size_t)render_width * 4) + (x * 4) + 2] = (uint8_t)(pixel_color[2] * 255);
+            pixels[(y * (size_t)render_width * 4) + (x * 4) + 3] = (uint8_t)(pixel_color[3] * 255);
         }
     }
 }
