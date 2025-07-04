@@ -4,8 +4,25 @@
 
 primitive primitive_create(const cgltf_primitive* curr_prim, mat4 node_xform)
 {
-    primitive prim = { 0 };
-    prim.bbox = bbox_create();
+    primitive prim = {
+        .bbox = bbox_create(),
+        .indices_count = curr_prim->indices->count,
+        .indices = malloc(curr_prim->indices->count * sizeof(uint32_t)),
+    };
+
+    if (curr_prim->indices->component_type == cgltf_component_type_r_32u)
+    {
+        memcpy(prim.indices, (void*)((size_t)curr_prim->indices->buffer_view->buffer->data + curr_prim->indices->buffer_view->offset + curr_prim->indices->offset), prim.indices_count * sizeof(uint32_t));
+    }
+    else if (curr_prim->indices->component_type == cgltf_component_type_r_16u)
+    {
+        uint16_t* idxs = (uint16_t*)((size_t)curr_prim->indices->buffer_view->buffer->data + curr_prim->indices->buffer_view->offset + curr_prim->indices->offset);
+
+        for (size_t i = 0; i < prim.indices_count; ++i)
+        {
+            prim.indices[i] = idxs[i];
+        }
+    }
 
     for (size_t a = 0; a < curr_prim->attributes_count; ++a)
     {
@@ -75,5 +92,12 @@ void primitive_destroy(primitive p)
         free(p.uvs);
         p.uvs = NULL;
         p.uvs_count = 0;
+    }
+
+    if (p.indices != NULL)
+    {
+        free(p.indices);
+        p.indices = NULL;
+        p.indices_count = 0;
     }
 }

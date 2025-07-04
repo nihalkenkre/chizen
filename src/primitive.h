@@ -14,6 +14,9 @@ typedef struct primitive
     vec2* uvs;
     size_t uvs_count;
 
+    uint32_t* indices;
+    size_t indices_count;
+
     bbox bbox;
 } primitive;
 

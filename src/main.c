@@ -1,5 +1,6 @@
 #include <stdio.h>
 #include <Shlwapi.h>
+#include <time.h>
 
 #include "renderer.h"
 
@@ -13,9 +14,9 @@
 #define STB_IMAGE_WRITE_IMPLEMENTATION
 #include <stb/stb_image_write.h>
 
-const float RENDER_HEIGHT = 720.f;
+const float RENDER_HEIGHT = 100.f;
 const float ASPECT_RATIO = 16.f / 9.f;
-const uint8_t NUM_SAMPLES = 4;
+const uint8_t NUM_SAMPLES = 24;
 
 
 int main(int argc, char** argv)
@@ -44,7 +45,11 @@ int main(int argc, char** argv)
     const float RENDER_WIDTH = RENDER_HEIGHT * ASPECT_RATIO;
     pixels = malloc((size_t)(RENDER_WIDTH * RENDER_HEIGHT) * 4);
 
+    clock_t start = clock();
     renderer_render(RENDER_WIDTH, RENDER_HEIGHT, NUM_SAMPLES, scene, pixels);
+    clock_t end = clock();
+
+    printf("clock taken: %d\n", end - start);
 
     char img_path[MAX_PATH];
     GetModuleFileNameA(GetModuleHandleA(NULL), img_path, MAX_PATH);

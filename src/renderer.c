@@ -216,6 +216,8 @@ void renderer_render(const float render_width, const float render_height, const 
     vec3 pixel_00_loc = { 0 }; vec3 pixel_delta_u = { 0 }; vec3 pixel_delta_v = { 0 };
     find_pixel_vecs(scene.camera, viewport_width, viewport_height, render_width, render_height, focal_length, pixel_00_loc, pixel_delta_u, pixel_delta_v);
 
+    size_t curr_progress = 0;
+
     for (size_t y = 0; y < (size_t)render_height; ++y)
     {
         for (size_t x = 0; x < (size_t)render_width; ++x)
@@ -229,6 +231,7 @@ void renderer_render(const float render_width, const float render_height, const 
                 ray cam_ray = generate_ray((float)x, (float)y, pixel_00_loc, pixel_delta_u, pixel_delta_v, scene.camera.pos);
 
                 bool hit = false;
+                float t_min = FLT_MAX;
 
                 for (size_t m = 0; m < scene.meshes_count; ++m)
                 {
@@ -240,9 +243,27 @@ void renderer_render(const float render_width, const float render_height, const 
 
                         if (hit_bbox(curr_prim.bbox, cam_ray))
                         {
-                            vec4 c = { 1.f, 0.f, 0.f, 0.5f };
-                            color_blend(c, sample_color, sample_color);
-                            hit = true;
+                            for (size_t i = 0; i < curr_prim.indices_count; i += 3)
+                            {
+                                vec3 tri[] =
+                                {
+                                    {curr_prim.positions[curr_prim.indices[i]][0],curr_prim.positions[curr_prim.indices[i]][1],curr_prim.positions[curr_prim.indices[i]][2]},
+                                    {curr_prim.positions[curr_prim.indices[i + 1]][0],curr_prim.positions[curr_prim.indices[i + 1]][1],curr_prim.positions[curr_prim.indices[i + 1]][2]},
+                                    {curr_prim.positions[curr_prim.indices[i + 2]][0],curr_prim.positions[curr_prim.indices[i + 2]][1],curr_prim.positions[curr_prim.indices[i + 2]][2]},
+                                };
+
+                                triangle_hit_data thd = hit_triangle(tri, cam_ray);
+
+                                if (thd.is_hit && thd.t < t_min)
+                                {
+                                    t_min = thd.t;
+                                    vec4 bary_color = { thd.bary_coords[0], thd.bary_coords[1], thd.bary_coords[2], 0.75f };
+                                    vec4 nrm_color = { curr_prim.normals[curr_prim.indices[i]][0], curr_prim.normals[curr_prim.indices[i]][1], curr_prim.normals[curr_prim.indices[i]][2], 0.5f };
+                                    color_blend(bary_color, sample_color, sample_color);
+                                    color_blend(nrm_color, sample_color, sample_color);
+                                    hit = true;
+                                }
+                            }
                         }
                     }
                 }
@@ -264,5 +285,8 @@ void renderer_render(const float render_width, const float render_height, const 
             pixels[(y * (size_t)render_width * 4) + (x * 4) + 2] = (uint8_t)(pixel_color[2] * 255);
             pixels[(y * (size_t)render_width * 4) + (x * 4) + 3] = (uint8_t)(pixel_color[3] * 255);
         }
+
+        printf("\rProgress: %lld / %lld...", y, (size_t)render_height);
     }
+    printf("\n");
 }
