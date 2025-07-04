@@ -46,7 +46,6 @@ scene scene_parse_gltf(const char* gltf_path)
         }
     }
 
-
 shutdown:
     cgltf_free(gltf_data);
 
