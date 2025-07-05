@@ -3,12 +3,37 @@
 #include "color.h"
 #include "bbox.h"
 
+#include <Windows.h>
+
+#define NUM_WIDTH_CUTS 10
+#define NUM_HEIGHT_CUTS 10 
+
 typedef struct triangle_hit_data
 {
     bool is_hit;
     float t;
     vec3 bary_coords;
 } triangle_hit_data;
+
+typedef struct bucket_params
+{
+    size_t x_start;
+    size_t y_start;
+    size_t x_end;
+    size_t y_end;
+    size_t render_width;
+    size_t render_height;
+    size_t num_samples;
+    uint8_t* pixels;
+    vec3 pixel_00_loc;
+    vec3 pixel_delta_u;
+    vec3 pixel_delta_v;
+} bucket_params;
+
+static bucket_params bps[NUM_WIDTH_CUTS * NUM_HEIGHT_CUTS];
+static PTP_WORK works[NUM_WIDTH_CUTS * NUM_HEIGHT_CUTS];
+static scene s = { 0 };
+static size_t buckets_done = 0;
 
 static float hit_sphere(vec3 center, const float radius, ray ray)
 {
@@ -137,14 +162,20 @@ static ray generate_ray(float x, float y, vec3 pixel_00_loc, vec3 pixel_delta_u,
     return r;
 }
 
-static void find_pixel_vecs(camera cam, float viewport_width, float viewport_height, float render_width, float render_height, float focal_length, vec3 pixel_00_loc, vec3 pixel_delta_u, vec3 pixel_delta_v)
+static void find_pixel_vecs(camera cam, float fov, float render_width, float render_height, vec3 out_pixel_00_loc, vec3 out_pixel_delta_u, vec3 out_pixel_delta_v)
 {
+    float focal_length = 2.f;
+    float theta = fov;
+    float h = tanf(theta / 2.f);
+    float viewport_height = 2.f * h * focal_length;
+    float viewport_width = viewport_height * (render_width / render_height);
+
     vec3 viewport_u = { 0 }; vec3 viewport_v = { 0 };
     glm_vec3_scale(cam.u, viewport_width, viewport_u);
     glm_vec3_scale(cam.v, -viewport_height, viewport_v);
 
-    glm_vec3_scale(viewport_u, 1.f / render_width, pixel_delta_u);
-    glm_vec3_scale(viewport_v, 1.f / render_height, pixel_delta_v);
+    glm_vec3_scale(viewport_u, 1.f / render_width, out_pixel_delta_u);
+    glm_vec3_scale(viewport_v, 1.f / render_height, out_pixel_delta_v);
 
     vec3 image_plane_offset = { 0 };
     glm_vec3_scale(cam.w, focal_length, image_plane_offset);
@@ -159,13 +190,13 @@ static void find_pixel_vecs(camera cam, float viewport_width, float viewport_hei
     glm_vec3_sub(viewport_upper_left, viewport_v_by_2, viewport_upper_left);
 
     vec3 pixel_delta_offset = { 0 };
-    glm_vec3_add(pixel_delta_u, pixel_delta_v, pixel_delta_offset);
+    glm_vec3_add(out_pixel_delta_u, out_pixel_delta_v, pixel_delta_offset);
     glm_vec3_scale(pixel_delta_offset, 0.5f, pixel_delta_offset);
 
-    glm_vec3_add(viewport_upper_left, pixel_delta_offset, pixel_00_loc);
+    glm_vec3_add(viewport_upper_left, pixel_delta_offset, out_pixel_00_loc);
 }
 
-void test_render(ray cam_ray, vec4 sample_color, bool* hit)
+static void test_render(ray cam_ray, vec4 sample_color, bool* hit)
 {
     vec3 center = { 0.f, 2.f, 0.f };
     float t = hit_sphere(center, 0.5f, cam_ray);
@@ -205,88 +236,156 @@ void test_render(ray cam_ray, vec4 sample_color, bool* hit)
     }
 }
 
-void renderer_render(const float render_width, const float render_height, const uint8_t num_samples, scene scene, uint8_t* pixels)
+static void ray_cast(const ray r, vec4 out_color)
 {
-    float focal_length = 2.f;
-    float theta = scene.camera.fov;
-    float h = tanf(theta / 2.f);
-    float viewport_height = 2.f * h * focal_length;
-    float viewport_width = viewport_height * (render_width / render_height);
+    bool hit = false;
+    float t_min = FLT_MAX;
 
-    vec3 pixel_00_loc = { 0 }; vec3 pixel_delta_u = { 0 }; vec3 pixel_delta_v = { 0 };
-    find_pixel_vecs(scene.camera, viewport_width, viewport_height, render_width, render_height, focal_length, pixel_00_loc, pixel_delta_u, pixel_delta_v);
-
-    size_t curr_progress = 0;
-
-    for (size_t y = 0; y < (size_t)render_height; ++y)
+    for (size_t m = 0; m < s.meshes_count; ++m)
     {
-        for (size_t x = 0; x < (size_t)render_width; ++x)
+        mesh curr_mesh = s.meshes[m];
+
+        for (size_t p = 0; p < curr_mesh.prims_count; ++p)
+        {
+            primitive curr_prim = curr_mesh.prims[p];
+
+            if (hit_bbox(curr_prim.bbox, r))
+            {
+                for (size_t i = 0; i < curr_prim.indices_count; i += 3)
+                {
+                    vec3 tri[] =
+                    {
+                        {curr_prim.positions[curr_prim.indices[i]][0],curr_prim.positions[curr_prim.indices[i]][1],curr_prim.positions[curr_prim.indices[i]][2]},
+                        {curr_prim.positions[curr_prim.indices[i + 1]][0],curr_prim.positions[curr_prim.indices[i + 1]][1],curr_prim.positions[curr_prim.indices[i + 1]][2]},
+                        {curr_prim.positions[curr_prim.indices[i + 2]][0],curr_prim.positions[curr_prim.indices[i + 2]][1],curr_prim.positions[curr_prim.indices[i + 2]][2]},
+                    };
+
+                    triangle_hit_data thd = hit_triangle(tri, r);
+
+                    if (thd.is_hit && thd.t < t_min)
+                    {
+                        t_min = thd.t;
+                        vec4 nrm_color = { curr_prim.normals[curr_prim.indices[i]][0], curr_prim.normals[curr_prim.indices[i]][1], curr_prim.normals[curr_prim.indices[i]][2], 1.f };
+                        color_blend(nrm_color, out_color, out_color);
+                        hit = true;
+                    }
+                }
+            }
+        }
+    }
+
+    if (!hit)
+    {
+        vec4 c = { 0.2f, 0.2f, 0.2f, 1.f };
+        color_blend(c, out_color, out_color);
+    }
+}
+
+static void CALLBACK render_bucket(PTP_CALLBACK_INSTANCE Instance, PVOID Parameter, PTP_WORK Work)
+{
+    (Instance);    (Work);
+
+    if (Parameter == NULL)
+        return;
+
+    bucket_params bp = *(bucket_params*)Parameter;
+
+    for (size_t y = bp.y_start; y < bp.y_end; ++y)
+    {
+        for (size_t x = bp.x_start; x < bp.x_end; ++x)
         {
             vec4 pixel_color = { 0.0f, 0.0f, 0.0f, 0.0f };
 
-            for (uint8_t n = 0; n < num_samples; ++n)
+            for (uint8_t n = 0; n < bp.num_samples; ++n)
             {
                 vec4 sample_color = { 0 };
 
-                ray cam_ray = generate_ray((float)x, (float)y, pixel_00_loc, pixel_delta_u, pixel_delta_v, scene.camera.pos);
-
-                bool hit = false;
-                float t_min = FLT_MAX;
-
-                for (size_t m = 0; m < scene.meshes_count; ++m)
-                {
-                    mesh curr_mesh = scene.meshes[m];
-
-                    for (size_t p = 0; p < curr_mesh.prims_count; ++p)
-                    {
-                        primitive curr_prim = curr_mesh.prims[p];
-
-                        if (hit_bbox(curr_prim.bbox, cam_ray))
-                        {
-                            for (size_t i = 0; i < curr_prim.indices_count; i += 3)
-                            {
-                                vec3 tri[] =
-                                {
-                                    {curr_prim.positions[curr_prim.indices[i]][0],curr_prim.positions[curr_prim.indices[i]][1],curr_prim.positions[curr_prim.indices[i]][2]},
-                                    {curr_prim.positions[curr_prim.indices[i + 1]][0],curr_prim.positions[curr_prim.indices[i + 1]][1],curr_prim.positions[curr_prim.indices[i + 1]][2]},
-                                    {curr_prim.positions[curr_prim.indices[i + 2]][0],curr_prim.positions[curr_prim.indices[i + 2]][1],curr_prim.positions[curr_prim.indices[i + 2]][2]},
-                                };
-
-                                triangle_hit_data thd = hit_triangle(tri, cam_ray);
-
-                                if (thd.is_hit && thd.t < t_min)
-                                {
-                                    t_min = thd.t;
-                                    vec4 bary_color = { thd.bary_coords[0], thd.bary_coords[1], thd.bary_coords[2], 0.75f };
-                                    vec4 nrm_color = { curr_prim.normals[curr_prim.indices[i]][0], curr_prim.normals[curr_prim.indices[i]][1], curr_prim.normals[curr_prim.indices[i]][2], 0.5f };
-                                    color_blend(bary_color, sample_color, sample_color);
-                                    color_blend(nrm_color, sample_color, sample_color);
-                                    hit = true;
-                                }
-                            }
-                        }
-                    }
-                }
-
-                if (!hit)
-                {
-                    vec4 c = { 0.2f, 0.2f, 0.2f, 1.f };
-                    color_blend(c, sample_color, sample_color);
-                }
+                ray cam_ray = generate_ray((float)x, (float)y, bp.pixel_00_loc, bp.pixel_delta_u, bp.pixel_delta_v, s.camera.pos);
+                ray_cast(cam_ray, sample_color);
 
                 glm_vec4_add(sample_color, pixel_color, pixel_color);
             }
 
-            glm_vec4_scale(pixel_color, 1.f / num_samples, pixel_color);
+            glm_vec4_scale(pixel_color, 1.f / bp.num_samples, pixel_color);
             glm_vec4_clamp(pixel_color, 0.f, 1.f);
 
-            pixels[(y * (size_t)render_width * 4) + (x * 4)] = (uint8_t)(pixel_color[0] * 255);
-            pixels[(y * (size_t)render_width * 4) + (x * 4) + 1] = (uint8_t)(pixel_color[1] * 255);
-            pixels[(y * (size_t)render_width * 4) + (x * 4) + 2] = (uint8_t)(pixel_color[2] * 255);
-            pixels[(y * (size_t)render_width * 4) + (x * 4) + 3] = (uint8_t)(pixel_color[3] * 255);
+            bp.pixels[(y * (size_t)bp.render_width * 4) + (x * 4)] = (uint8_t)(pixel_color[0] * 255);
+            bp.pixels[(y * (size_t)bp.render_width * 4) + (x * 4) + 1] = (uint8_t)(pixel_color[1] * 255);
+            bp.pixels[(y * (size_t)bp.render_width * 4) + (x * 4) + 2] = (uint8_t)(pixel_color[2] * 255);
+            bp.pixels[(y * (size_t)bp.render_width * 4) + (x * 4) + 3] = (uint8_t)(pixel_color[3] * 255);
         }
+    } 
 
-        printf("\rProgress: %lld / %lld...", y, (size_t)render_height);
+    printf("\rBuckets done: %lld / %d", InterlockedIncrement64(&buckets_done), NUM_WIDTH_CUTS * NUM_HEIGHT_CUTS);
+}
+
+void renderer_render(const float render_width, const float render_height, const uint8_t num_samples, scene scene, uint8_t* pixels)
+{
+    vec3 pixel_00_loc = { 0 }; vec3 pixel_delta_u = { 0 }; vec3 pixel_delta_v = { 0 };
+    find_pixel_vecs(scene.camera, scene.camera.fov, render_width, render_height, pixel_00_loc, pixel_delta_u, pixel_delta_v);
+
+    memcpy(&s, &scene, sizeof(scene));
+
+    size_t bucket_width = (size_t)render_width / NUM_WIDTH_CUTS;
+    size_t bucket_height = (size_t)render_height / NUM_HEIGHT_CUTS;
+
+    for (size_t yc = 0; yc < NUM_HEIGHT_CUTS; ++yc)
+    {
+        for (size_t xc = 0; xc < NUM_WIDTH_CUTS; ++xc)
+        {
+            size_t bucket_idx = yc * NUM_WIDTH_CUTS + xc;
+            bps[bucket_idx].x_start = bucket_width * xc;
+            bps[bucket_idx].y_start = bucket_height * yc;
+            bps[bucket_idx].x_end = bps[bucket_idx].x_start + bucket_width;
+            bps[bucket_idx].y_end = bps[bucket_idx].y_start + bucket_height;
+            bps[bucket_idx].render_width = (size_t)render_width;
+            bps[bucket_idx].render_height = (size_t)render_height;
+            bps[bucket_idx].num_samples = num_samples;
+            bps[bucket_idx].pixels = pixels;
+            glm_vec3_copy(pixel_00_loc, bps[bucket_idx].pixel_00_loc);
+            glm_vec3_copy(pixel_delta_u, bps[bucket_idx].pixel_delta_u);
+            glm_vec3_copy(pixel_delta_v, bps[bucket_idx].pixel_delta_v);
+
+            works[bucket_idx] = CreateThreadpoolWork(render_bucket, bps + bucket_idx, NULL);
+            SubmitThreadpoolWork(works[bucket_idx]);
+        }
     }
+
+    for (size_t yc = 0; yc < NUM_HEIGHT_CUTS; ++yc)
+    {
+        for (size_t xc = 0; xc < NUM_WIDTH_CUTS; ++xc)
+        {
+            size_t bucket_idx = yc * NUM_WIDTH_CUTS + xc;
+            
+            WaitForThreadpoolWorkCallbacks(works[bucket_idx], FALSE);
+            CloseThreadpoolWork(works[bucket_idx]);
+        }
+    }
+
     printf("\n");
+
+
+    //for (size_t wt = 0; wt < NUM_RENDER_BUCKETS; ++wt)
+    //{
+    //    bps[wt].x_start = wt * bucket_width;
+    //    bps[wt].y_start = wt * bucket_height;
+    //    bps[wt].x_end = bps[wt].x_start + bucket_width;
+    //    bps[wt].y_end = bps[wt].y_start + bucket_height;
+    //    bps[wt].pixels = pixels;
+    //    bps[wt].render_width = (size_t)render_width;
+    //    bps[wt].render_height = (size_t)render_height;
+    //    bps[wt].num_samples = num_samples;
+    //    glm_vec3_copy(pixel_00_loc, bps[wt].pixel_00_loc);
+    //    glm_vec3_copy(pixel_delta_u, bps[wt].pixel_delta_u);
+    //    glm_vec3_copy(pixel_delta_v, bps[wt].pixel_delta_v);
+
+    //    works[wt] = CreateThreadpoolWork(render_bucket, bps + wt, NULL);
+    //    SubmitThreadpoolWork(works[wt]);
+    //}
+
+    //for (size_t wt = 0; wt < NUM_RENDER_BUCKETS; ++wt)
+    //{
+    //    WaitForThreadpoolWorkCallbacks(works[wt], FALSE);
+    //    CloseThreadpoolWork(works[wt]);
+    //}
 }
