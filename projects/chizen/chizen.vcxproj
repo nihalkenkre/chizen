@@ -27,7 +27,7 @@
     <ClCompile Include="..\..\src\mesh.c" />
     <ClCompile Include="..\..\src\primitive.c" />
     <ClCompile Include="..\..\src\ray.c" />
-    <ClCompile Include="..\..\src\renderer.c" />
+    <ClCompile Include="..\..\src\renderer_cpu.c" />
     <ClCompile Include="..\..\src\scene.c" />
     <ClCompile Include="..\..\src\utils.c" />
   </ItemGroup>
@@ -42,6 +42,9 @@
     <ClInclude Include="..\..\src\renderer.h" />
     <ClInclude Include="..\..\src\scene.h" />
     <ClInclude Include="..\..\src\utils.h" />
+  </ItemGroup>
+  <ItemGroup>
+    <CudaCompile Include="..\..\src\renderer_cuda.cu" />
   </ItemGroup>
   <PropertyGroup Label="Globals">
     <VCProjectVersion>17.0</VCProjectVersion>
@@ -81,6 +84,7 @@
   </PropertyGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.props" />
   <ImportGroup Label="ExtensionSettings">
+    <Import Project="$(VCTargetsPath)\BuildCustomizations\CUDA 12.9.props" />
   </ImportGroup>
   <ImportGroup Label="Shared">
   </ImportGroup>
@@ -140,6 +144,9 @@
       <GenerateDebugInformation>true</GenerateDebugInformation>
       <AdditionalDependencies>$(CoreLibraryDependencies);%(AdditionalDependencies);shlwapi.lib</AdditionalDependencies>
     </Link>
+    <CudaLink>
+      <AdditionalDependencies>cudart.lib</AdditionalDependencies>
+    </CudaLink>
   </ItemDefinitionGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
     <ClCompile>
@@ -160,8 +167,12 @@
       <GenerateDebugInformation>true</GenerateDebugInformation>
       <AdditionalDependencies>$(CoreLibraryDependencies);%(AdditionalDependencies);shlwapi.lib</AdditionalDependencies>
     </Link>
+    <CudaLink>
+      <AdditionalDependencies>cudart.lib</AdditionalDependencies>
+    </CudaLink>
   </ItemDefinitionGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets">
+    <Import Project="$(VCTargetsPath)\BuildCustomizations\CUDA 12.9.targets" />
   </ImportGroup>
 </Project>

@@ -18,7 +18,7 @@
     <ClCompile Include="..\..\src\main.c">
       <Filter>Source Files</Filter>
     </ClCompile>
-    <ClCompile Include="..\..\src\renderer.c">
+    <ClCompile Include="..\..\src\renderer_cpu.c">
       <Filter>Source Files</Filter>
     </ClCompile>
     <ClCompile Include="..\..\src\scene.c">
@@ -80,5 +80,8 @@
     <ClInclude Include="..\..\src\material.h">
       <Filter>Header Files</Filter>
     </ClInclude>
+  </ItemGroup>
+  <ItemGroup>
+    <CudaCompile Include="..\..\src\renderer_cuda.cu" />
   </ItemGroup>
 </Project>

@@ -327,7 +327,7 @@ static void CALLBACK render_bucket(PTP_CALLBACK_INSTANCE Instance, PVOID Paramet
     printf("\rBuckets done: %lld / %d", InterlockedIncrement64(&buckets_done), NUM_WIDTH_CUTS * NUM_HEIGHT_CUTS);
 }
 
-void renderer_render(const float render_width, const float render_height, const uint8_t num_samples, scene scene, uint8_t* pixels)
+void renderer_render_cpu(const float render_width, const float render_height, const uint8_t num_samples, scene scene, uint8_t* pixels)
 {
     vec3 pixel_00_loc = { 0 }; vec3 pixel_delta_u = { 0 }; vec3 pixel_delta_v = { 0 };
     find_pixel_vecs(scene.camera, scene.camera.fov, render_width, render_height, pixel_00_loc, pixel_delta_u, pixel_delta_v);
