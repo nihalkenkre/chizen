@@ -33,7 +33,7 @@ int main(int argc, char** argv)
     char* ext = PathFindExtensionA(file_path);
 
     if (strcmp(ext, ".glb") == 0 || strcmp(ext, ".gltf") == 0) {
-        scene = scene_parse_gltf(file_path);
+        scene = scene_create(file_path);
     }
     else {
         printf("Only GLTF files supported at the moment...\n");

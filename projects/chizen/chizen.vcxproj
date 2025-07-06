@@ -23,6 +23,7 @@
     <ClCompile Include="..\..\src\camera.c" />
     <ClCompile Include="..\..\src\color.c" />
     <ClCompile Include="..\..\src\main.c" />
+    <ClCompile Include="..\..\src\material.c" />
     <ClCompile Include="..\..\src\mesh.c" />
     <ClCompile Include="..\..\src\primitive.c" />
     <ClCompile Include="..\..\src\ray.c" />
@@ -34,6 +35,7 @@
     <ClInclude Include="..\..\src\bbox.h" />
     <ClInclude Include="..\..\src\camera.h" />
     <ClInclude Include="..\..\src\color.h" />
+    <ClInclude Include="..\..\src\material.h" />
     <ClInclude Include="..\..\src\mesh.h" />
     <ClInclude Include="..\..\src\primitive.h" />
     <ClInclude Include="..\..\src\ray.h" />

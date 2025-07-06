@@ -10,6 +10,13 @@ primitive primitive_create(const cgltf_primitive* curr_prim, mat4 node_xform)
         .indices = malloc(curr_prim->indices->count * sizeof(uint32_t)),
     };
 
+    if (curr_prim->material != NULL)
+    {
+        cgltf_material* curr_mat = curr_prim->material;
+
+        prim.material = material_create(curr_mat);
+    }
+
     if (curr_prim->indices->component_type == cgltf_component_type_r_32u)
     {
         memcpy(prim.indices, (void*)((size_t)curr_prim->indices->buffer_view->buffer->data + curr_prim->indices->buffer_view->offset + curr_prim->indices->offset), prim.indices_count * sizeof(uint32_t));
@@ -72,32 +79,34 @@ primitive primitive_create(const cgltf_primitive* curr_prim, mat4 node_xform)
     return prim;
 }
 
-void primitive_destroy(primitive p)
+void primitive_destroy(primitive prim)
 {
-    if (p.positions != NULL) {
-        free(p.positions);
-        p.positions = NULL;
-        p.positions_count = 0;
+    if (prim.positions != NULL) {
+        free(prim.positions);
+        prim.positions = NULL;
+        prim.positions_count = 0;
     }
 
-    if (p.normals != NULL)
+    if (prim.normals != NULL)
     {
-        free(p.normals);
-        p.normals = NULL;
-        p.normals_count = 0;
+        free(prim.normals);
+        prim.normals = NULL;
+        prim.normals_count = 0;
     }
 
-    if (p.uvs != NULL)
+    if (prim.uvs != NULL)
     {
-        free(p.uvs);
-        p.uvs = NULL;
-        p.uvs_count = 0;
+        free(prim.uvs);
+        prim.uvs = NULL;
+        prim.uvs_count = 0;
     }
 
-    if (p.indices != NULL)
+    if (prim.indices != NULL)
     {
-        free(p.indices);
-        p.indices = NULL;
-        p.indices_count = 0;
+        free(prim.indices);
+        prim.indices = NULL;
+        prim.indices_count = 0;
     }
+
+    material_destroy(prim.material);
 }

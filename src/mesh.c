@@ -1,7 +1,7 @@
 #include "mesh.h"
 #include "utils.h"
 
-mesh mesh_create(const cgltf_node* mesh_node)
+mesh mesh_create(cgltf_node* mesh_node)
 {
     mesh m = { 0 };
 

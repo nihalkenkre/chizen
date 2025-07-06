@@ -1,6 +1,6 @@
 #include "utils.h"
 
-void get_xform_matrix_for_node(const cgltf_node* node, mat4 xform)
+void get_xform_matrix_for_node(cgltf_node* node, mat4 xform)
 {
     if (node->has_matrix)
     {

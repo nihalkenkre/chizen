@@ -11,5 +11,5 @@ typedef struct mesh
     size_t prims_count;
 } mesh;
 
-mesh mesh_create(const cgltf_node* node);
+mesh mesh_create(cgltf_node* node);
 void mesh_destroy(mesh m);

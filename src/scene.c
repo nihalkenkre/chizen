@@ -2,7 +2,7 @@
 #include "utils.h"
 #include <string.h>
 
-scene scene_parse_gltf(const char* gltf_path)
+scene scene_create(const char* gltf_path)
 {
     scene s = { 0 };
     cgltf_options gltf_options = { 0 };

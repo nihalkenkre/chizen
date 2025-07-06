@@ -253,20 +253,28 @@ static void ray_cast(const ray r, vec4 out_color)
             {
                 for (size_t i = 0; i < curr_prim.indices_count; i += 3)
                 {
-                    vec3 tri[] =
+                    vec3 vtxs[] =
                     {
                         {curr_prim.positions[curr_prim.indices[i]][0],curr_prim.positions[curr_prim.indices[i]][1],curr_prim.positions[curr_prim.indices[i]][2]},
                         {curr_prim.positions[curr_prim.indices[i + 1]][0],curr_prim.positions[curr_prim.indices[i + 1]][1],curr_prim.positions[curr_prim.indices[i + 1]][2]},
                         {curr_prim.positions[curr_prim.indices[i + 2]][0],curr_prim.positions[curr_prim.indices[i + 2]][1],curr_prim.positions[curr_prim.indices[i + 2]][2]},
                     };
 
-                    triangle_hit_data thd = hit_triangle(tri, r);
+                    vec3 nrms[] =
+                    {
+                        {curr_prim.normals[curr_prim.indices[i]][0],curr_prim.normals[curr_prim.indices[i]][1],curr_prim.normals[curr_prim.indices[i]][2]},
+                        {curr_prim.normals[curr_prim.indices[i + 1]][0],curr_prim.normals[curr_prim.indices[i + 1]][1],curr_prim.normals[curr_prim.indices[i + 1]][2]},
+                        {curr_prim.normals[curr_prim.indices[i + 2]][0],curr_prim.normals[curr_prim.indices[i + 2]][1],curr_prim.normals[curr_prim.indices[i + 2]][2]},
+                    };
+
+                    triangle_hit_data thd = hit_triangle(vtxs, r);
 
                     if (thd.is_hit && thd.t < t_min)
                     {
                         t_min = thd.t;
                         vec4 nrm_color = { curr_prim.normals[curr_prim.indices[i]][0], curr_prim.normals[curr_prim.indices[i]][1], curr_prim.normals[curr_prim.indices[i]][2], 1.f };
                         color_blend(nrm_color, out_color, out_color);
+                        material_get_color(curr_prim.material, r, vtxs, nrms, out_color);
                         hit = true;
                     }
                 }
@@ -314,7 +322,7 @@ static void CALLBACK render_bucket(PTP_CALLBACK_INSTANCE Instance, PVOID Paramet
             bp.pixels[(y * (size_t)bp.render_width * 4) + (x * 4) + 2] = (uint8_t)(pixel_color[2] * 255);
             bp.pixels[(y * (size_t)bp.render_width * 4) + (x * 4) + 3] = (uint8_t)(pixel_color[3] * 255);
         }
-    } 
+    }
 
     printf("\rBuckets done: %lld / %d", InterlockedIncrement64(&buckets_done), NUM_WIDTH_CUTS * NUM_HEIGHT_CUTS);
 }
@@ -356,36 +364,11 @@ void renderer_render(const float render_width, const float render_height, const 
         for (size_t xc = 0; xc < NUM_WIDTH_CUTS; ++xc)
         {
             size_t bucket_idx = yc * NUM_WIDTH_CUTS + xc;
-            
+
             WaitForThreadpoolWorkCallbacks(works[bucket_idx], FALSE);
             CloseThreadpoolWork(works[bucket_idx]);
         }
     }
 
     printf("\n");
-
-
-    //for (size_t wt = 0; wt < NUM_RENDER_BUCKETS; ++wt)
-    //{
-    //    bps[wt].x_start = wt * bucket_width;
-    //    bps[wt].y_start = wt * bucket_height;
-    //    bps[wt].x_end = bps[wt].x_start + bucket_width;
-    //    bps[wt].y_end = bps[wt].y_start + bucket_height;
-    //    bps[wt].pixels = pixels;
-    //    bps[wt].render_width = (size_t)render_width;
-    //    bps[wt].render_height = (size_t)render_height;
-    //    bps[wt].num_samples = num_samples;
-    //    glm_vec3_copy(pixel_00_loc, bps[wt].pixel_00_loc);
-    //    glm_vec3_copy(pixel_delta_u, bps[wt].pixel_delta_u);
-    //    glm_vec3_copy(pixel_delta_v, bps[wt].pixel_delta_v);
-
-    //    works[wt] = CreateThreadpoolWork(render_bucket, bps + wt, NULL);
-    //    SubmitThreadpoolWork(works[wt]);
-    //}
-
-    //for (size_t wt = 0; wt < NUM_RENDER_BUCKETS; ++wt)
-    //{
-    //    WaitForThreadpoolWorkCallbacks(works[wt], FALSE);
-    //    CloseThreadpoolWork(works[wt]);
-    //}
 }
