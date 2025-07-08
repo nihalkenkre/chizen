@@ -37,6 +37,11 @@ int main(int argc, char** argv)
             rm = CUDA;
         }
 
+        if (strcmp(argv[a], "--optix") == 0)
+        {
+            rm = OPTIX;
+        }
+
         char* ext = PathFindExtensionA(argv[a]);
         if (strcmp(ext, ".glb") == 0 || strcmp(ext, ".gltf") == 0)
         {
@@ -46,15 +51,22 @@ int main(int argc, char** argv)
 
     const float RENDER_WIDTH = RENDER_HEIGHT * ASPECT_RATIO;
     pixels = malloc((size_t)(RENDER_WIDTH * RENDER_HEIGHT) * 4);
+    if (pixels == NULL)
+        goto shutdown;
+
+    memset(pixels, 0, (size_t)(RENDER_WIDTH * RENDER_HEIGHT) * 4);
 
     if (rm == CPU)
     {
-        renderer_render_cpu(RENDER_WIDTH, RENDER_HEIGHT, NUM_SAMPLES, scene, pixels);
-
+        renderer_render_cpu((size_t)RENDER_WIDTH, (size_t)RENDER_HEIGHT, NUM_SAMPLES, scene, pixels);
     }
     else if (rm == CUDA)
     {
         renderer_render_cuda((size_t)RENDER_WIDTH, (size_t)RENDER_HEIGHT, NUM_SAMPLES, scene, pixels);
+    }
+    else if (rm == OPTIX)
+    {
+        renderer_render_optix((size_t)RENDER_WIDTH, (size_t)RENDER_HEIGHT, NUM_SAMPLES, scene, pixels);
     }
 
     char img_path[MAX_PATH];

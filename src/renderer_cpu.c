@@ -86,13 +86,13 @@ static bool hit_bbox(bbox box, ray ray)
     return true;
 }
 
-static triangle_hit_data hit_triangle(vec3 vtxs[], ray ray)
+static triangle_hit_data hit_triangle(triangle tri, ray ray)
 {
     triangle_hit_data hit_data = { 0 };
 
     vec3 e1 = { 0 }; vec3 e2 = { 0 };
-    glm_vec3_sub(vtxs[1], vtxs[0], e1);
-    glm_vec3_sub(vtxs[2], vtxs[0], e2);
+    glm_vec3_sub(tri.positions[1], tri.positions[0], e1);
+    glm_vec3_sub(tri.positions[2], tri.positions[0], e2);
 
     vec3 ray_cross_e2 = { 0 };
     glm_vec3_cross(ray.dir, e2, ray_cross_e2);
@@ -104,7 +104,7 @@ static triangle_hit_data hit_triangle(vec3 vtxs[], ray ray)
 
     float inv_det = 1.f / det;
     vec3 s = { 0 };
-    glm_vec3_sub(ray.org, vtxs[0], s);
+    glm_vec3_sub(ray.org, tri.positions[0], s);
     float u = inv_det * glm_vec3_dot(s, ray_cross_e2);
 
     if (u < 0.f || u > 1.f)
@@ -221,13 +221,15 @@ static void test_render(ray cam_ray, vec4 sample_color, bool* hit)
         *hit = true;
     }
 
-    vec3 vtxs[] = {
-        {-0.5f, -0.5f, 0 },
-        {0.5f, -0.5f, 0 },
-        {0.5f, 0.5f, 0 },
+    triangle tri = {
+        .positions = {
+            {-0.5f, -0.5f, 0 },
+            {0.5f, -0.5f, 0 },
+            {0.5f, 0.5f, 0 },
+        },
     };
 
-    triangle_hit_data hit_data = hit_triangle(vtxs, cam_ray);
+    triangle_hit_data hit_data = hit_triangle(tri, cam_ray);
     if (hit_data.is_hit)
     {
         vec4 c = { hit_data.bary_coords[0], hit_data.bary_coords[1], hit_data.bary_coords[2], 0.5f };
@@ -251,30 +253,47 @@ static void ray_cast(const ray r, vec4 out_color)
 
             if (hit_bbox(curr_prim.bbox, r))
             {
-                for (size_t i = 0; i < curr_prim.indices_count; i += 3)
+                //for (size_t i = 0; i < curr_prim.indices_count; i += 3)
+                //{
+                //    vec3 vtxs[] =
+                //    {
+                //        {curr_prim.positions[curr_prim.indices[i]][0],curr_prim.positions[curr_prim.indices[i]][1],curr_prim.positions[curr_prim.indices[i]][2]},
+                //        {curr_prim.positions[curr_prim.indices[i + 1]][0],curr_prim.positions[curr_prim.indices[i + 1]][1],curr_prim.positions[curr_prim.indices[i + 1]][2]},
+                //        {curr_prim.positions[curr_prim.indices[i + 2]][0],curr_prim.positions[curr_prim.indices[i + 2]][1],curr_prim.positions[curr_prim.indices[i + 2]][2]},
+                //    };
+
+                //    vec3 nrms[] =
+                //    {
+                //        {curr_prim.normals[curr_prim.indices[i]][0],curr_prim.normals[curr_prim.indices[i]][1],curr_prim.normals[curr_prim.indices[i]][2]},
+                //        {curr_prim.normals[curr_prim.indices[i + 1]][0],curr_prim.normals[curr_prim.indices[i + 1]][1],curr_prim.normals[curr_prim.indices[i + 1]][2]},
+                //        {curr_prim.normals[curr_prim.indices[i + 2]][0],curr_prim.normals[curr_prim.indices[i + 2]][1],curr_prim.normals[curr_prim.indices[i + 2]][2]},
+                //    };
+
+                //    triangle_hit_data thd = hit_triangle(vtxs, r);
+
+                //    if (thd.is_hit && thd.t < t_min)
+                //    {
+                //        t_min = thd.t;
+                //        vec4 nrm_color = { curr_prim.normals[curr_prim.indices[i]][0], curr_prim.normals[curr_prim.indices[i]][1], curr_prim.normals[curr_prim.indices[i]][2], 1.f };
+                //        color_blend(nrm_color, out_color, out_color);
+                //        material_get_color(curr_prim.material, r, vtxs, nrms, out_color);
+                //        hit = true;
+                //    }
+                //}
+
+                for (size_t t = 0; t < curr_prim.triangles_count; ++t)
                 {
-                    vec3 vtxs[] =
-                    {
-                        {curr_prim.positions[curr_prim.indices[i]][0],curr_prim.positions[curr_prim.indices[i]][1],curr_prim.positions[curr_prim.indices[i]][2]},
-                        {curr_prim.positions[curr_prim.indices[i + 1]][0],curr_prim.positions[curr_prim.indices[i + 1]][1],curr_prim.positions[curr_prim.indices[i + 1]][2]},
-                        {curr_prim.positions[curr_prim.indices[i + 2]][0],curr_prim.positions[curr_prim.indices[i + 2]][1],curr_prim.positions[curr_prim.indices[i + 2]][2]},
-                    };
+                    triangle curr_tri = curr_prim.triangles[t];
 
-                    vec3 nrms[] =
-                    {
-                        {curr_prim.normals[curr_prim.indices[i]][0],curr_prim.normals[curr_prim.indices[i]][1],curr_prim.normals[curr_prim.indices[i]][2]},
-                        {curr_prim.normals[curr_prim.indices[i + 1]][0],curr_prim.normals[curr_prim.indices[i + 1]][1],curr_prim.normals[curr_prim.indices[i + 1]][2]},
-                        {curr_prim.normals[curr_prim.indices[i + 2]][0],curr_prim.normals[curr_prim.indices[i + 2]][1],curr_prim.normals[curr_prim.indices[i + 2]][2]},
-                    };
-
-                    triangle_hit_data thd = hit_triangle(vtxs, r);
-
+                    triangle_hit_data thd = hit_triangle(curr_tri, r);
                     if (thd.is_hit && thd.t < t_min)
                     {
                         t_min = thd.t;
-                        vec4 nrm_color = { curr_prim.normals[curr_prim.indices[i]][0], curr_prim.normals[curr_prim.indices[i]][1], curr_prim.normals[curr_prim.indices[i]][2], 1.f };
+                        vec4 nrm_color = { 0 };
+                        glm_vec4_one(nrm_color);
+                        glm_vec3_copy(curr_tri.normals[0], nrm_color);
                         color_blend(nrm_color, out_color, out_color);
-                        material_get_color(curr_prim.material, r, vtxs, nrms, out_color);
+                        material_get_color(curr_prim.material, r, curr_tri, out_color);
                         hit = true;
                     }
                 }
@@ -327,15 +346,15 @@ static void CALLBACK render_bucket(PTP_CALLBACK_INSTANCE Instance, PVOID Paramet
     printf("\rBuckets done: %lld / %d", InterlockedIncrement64(&buckets_done), NUM_WIDTH_CUTS * NUM_HEIGHT_CUTS);
 }
 
-void renderer_render_cpu(const float render_width, const float render_height, const uint8_t num_samples, scene scene, uint8_t* pixels)
+void renderer_render_cpu(const size_t render_width, const size_t render_height, const uint8_t num_samples, scene scene, uint8_t* pixels)
 {
     vec3 pixel_00_loc = { 0 }; vec3 pixel_delta_u = { 0 }; vec3 pixel_delta_v = { 0 };
-    find_pixel_vecs(scene.camera, scene.camera.fov, render_width, render_height, pixel_00_loc, pixel_delta_u, pixel_delta_v);
+    find_pixel_vecs(scene.camera, scene.camera.fov, (float)render_width, (float)render_height, pixel_00_loc, pixel_delta_u, pixel_delta_v);
 
     memcpy(&s, &scene, sizeof(scene));
 
-    size_t bucket_width = (size_t)render_width / NUM_WIDTH_CUTS;
-    size_t bucket_height = (size_t)render_height / NUM_HEIGHT_CUTS;
+    size_t bucket_width = render_width / NUM_WIDTH_CUTS;
+    size_t bucket_height = render_height / NUM_HEIGHT_CUTS;
 
     for (size_t yc = 0; yc < NUM_HEIGHT_CUTS; ++yc)
     {
@@ -346,8 +365,8 @@ void renderer_render_cpu(const float render_width, const float render_height, co
             bps[bucket_idx].y_start = bucket_height * yc;
             bps[bucket_idx].x_end = bps[bucket_idx].x_start + bucket_width;
             bps[bucket_idx].y_end = bps[bucket_idx].y_start + bucket_height;
-            bps[bucket_idx].render_width = (size_t)render_width;
-            bps[bucket_idx].render_height = (size_t)render_height;
+            bps[bucket_idx].render_width = render_width;
+            bps[bucket_idx].render_height = render_height;
             bps[bucket_idx].num_samples = num_samples;
             bps[bucket_idx].pixels = pixels;
             glm_vec3_copy(pixel_00_loc, bps[bucket_idx].pixel_00_loc);

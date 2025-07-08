@@ -13,6 +13,9 @@
       <UniqueIdentifier>{67DA6AB6-F800-4c08-8B7A-83BB121AAD01}</UniqueIdentifier>
       <Extensions>rc;ico;cur;bmp;dlg;rc2;rct;bin;rgs;gif;jpg;jpeg;jpe;resx;tiff;tif;png;wav;mfcribbon-ms</Extensions>
     </Filter>
+    <Filter Include="CUDA">
+      <UniqueIdentifier>{8bed5195-069c-4f6d-b4c6-1e60629c2d7e}</UniqueIdentifier>
+    </Filter>
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="..\..\src\main.c">
@@ -48,6 +51,12 @@
     <ClCompile Include="..\..\src\material.c">
       <Filter>Source Files</Filter>
     </ClCompile>
+    <ClCompile Include="..\..\src\renderer_optix.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\src\triangle.c">
+      <Filter>Source Files</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="..\..\src\renderer.h">
@@ -80,8 +89,13 @@
     <ClInclude Include="..\..\src\material.h">
       <Filter>Header Files</Filter>
     </ClInclude>
+    <ClInclude Include="..\..\src\triangle.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
   </ItemGroup>
   <ItemGroup>
-    <CudaCompile Include="..\..\src\renderer_cuda.cu" />
+    <CudaCompile Include="..\..\src\renderer_cuda.cu">
+      <Filter>CUDA</Filter>
+    </CudaCompile>
   </ItemGroup>
 </Project>

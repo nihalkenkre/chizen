@@ -2,6 +2,7 @@
 
 #include "bbox.h"
 #include "material.h"
+#include "triangle.h"
 #include <cgltf/cgltf.h>
 
 typedef struct primitive
@@ -17,6 +18,9 @@ typedef struct primitive
 
     uint32_t* indices;
     size_t indices_count;
+
+    triangle* triangles;
+    size_t triangles_count;
 
     material material;
     bbox bbox;

@@ -76,6 +76,15 @@ primitive primitive_create(const cgltf_primitive* curr_prim, mat4 node_xform)
         }
     }
 
+    prim.triangles_count = prim.indices_count / 3;
+    prim.triangles = malloc(prim.triangles_count * sizeof(triangle));
+
+    size_t triangle_index = 0;
+    for (size_t i = 0; i < prim.indices_count; i += 3)
+    {
+        prim.triangles[triangle_index++] = triangle_create(prim.positions, prim.normals, prim.uvs, prim.indices, i);
+    }
+
     return prim;
 }
 
@@ -106,6 +115,13 @@ void primitive_destroy(primitive prim)
         free(prim.indices);
         prim.indices = NULL;
         prim.indices_count = 0;
+    }
+
+    if (prim.triangles != NULL)
+    {
+        free(prim.triangles);
+        prim.triangles = NULL;
+        prim.triangles_count = 0;
     }
 
     material_destroy(prim.material);

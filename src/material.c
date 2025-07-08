@@ -18,7 +18,7 @@ material material_create(cgltf_material* mat)
     return m;
 }
 
-void material_get_color(material mat, ray r, vec3 vtxs[], vec3 nrms[], vec4 out_color)
+void material_get_color(material mat, ray r, triangle tri, vec4 out_color)
 {
 }
 

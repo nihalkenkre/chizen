@@ -1,6 +1,7 @@
 #pragma once
 
 #include "ray.h"
+#include "triangle.h"
 #include <cgltf/cgltf.h>
 
 typedef struct texture_info
@@ -46,5 +47,5 @@ typedef struct material
 
 material material_create(cgltf_material* mat);
 
-void material_get_color(material mat, ray r, vec3 vtxs[], vec3 nrms[], vec4 out_color);
+void material_get_color(material mat, ray r, triangle tri, vec4 out_color);
 void material_destroy(material m);
