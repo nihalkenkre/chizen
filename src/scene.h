@@ -5,8 +5,11 @@
 
 typedef struct scene
 {
-    mesh* meshes;
-    size_t meshes_count;
+//    mesh* meshes;
+//    size_t meshes_count;
+
+    primitive* prims;
+    size_t prims_count;
 
     camera camera;
 } scene;

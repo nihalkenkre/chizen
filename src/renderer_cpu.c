@@ -5,8 +5,8 @@
 
 #include <Windows.h>
 
-#define NUM_WIDTH_CUTS 10
-#define NUM_HEIGHT_CUTS 10 
+#define NUM_WIDTH_CUTS 20
+#define NUM_HEIGHT_CUTS 20 
 
 typedef struct triangle_hit_data
 {
@@ -243,59 +243,26 @@ static void ray_cast(const ray r, vec4 out_color)
     bool hit = false;
     float t_min = FLT_MAX;
 
-    for (size_t m = 0; m < s.meshes_count; ++m)
+    for (size_t p = 0; p < s.prims_count; ++p)
     {
-        mesh curr_mesh = s.meshes[m];
+        primitive curr_prim = s.prims[p];
 
-        for (size_t p = 0; p < curr_mesh.prims_count; ++p)
+        if (hit_bbox(curr_prim.bbox, r))
         {
-            primitive curr_prim = curr_mesh.prims[p];
-
-            if (hit_bbox(curr_prim.bbox, r))
+            for (size_t t = 0; t < curr_prim.triangles_count; ++t)
             {
-                //for (size_t i = 0; i < curr_prim.indices_count; i += 3)
-                //{
-                //    vec3 vtxs[] =
-                //    {
-                //        {curr_prim.positions[curr_prim.indices[i]][0],curr_prim.positions[curr_prim.indices[i]][1],curr_prim.positions[curr_prim.indices[i]][2]},
-                //        {curr_prim.positions[curr_prim.indices[i + 1]][0],curr_prim.positions[curr_prim.indices[i + 1]][1],curr_prim.positions[curr_prim.indices[i + 1]][2]},
-                //        {curr_prim.positions[curr_prim.indices[i + 2]][0],curr_prim.positions[curr_prim.indices[i + 2]][1],curr_prim.positions[curr_prim.indices[i + 2]][2]},
-                //    };
+                triangle curr_tri = curr_prim.triangles[t];
 
-                //    vec3 nrms[] =
-                //    {
-                //        {curr_prim.normals[curr_prim.indices[i]][0],curr_prim.normals[curr_prim.indices[i]][1],curr_prim.normals[curr_prim.indices[i]][2]},
-                //        {curr_prim.normals[curr_prim.indices[i + 1]][0],curr_prim.normals[curr_prim.indices[i + 1]][1],curr_prim.normals[curr_prim.indices[i + 1]][2]},
-                //        {curr_prim.normals[curr_prim.indices[i + 2]][0],curr_prim.normals[curr_prim.indices[i + 2]][1],curr_prim.normals[curr_prim.indices[i + 2]][2]},
-                //    };
-
-                //    triangle_hit_data thd = hit_triangle(vtxs, r);
-
-                //    if (thd.is_hit && thd.t < t_min)
-                //    {
-                //        t_min = thd.t;
-                //        vec4 nrm_color = { curr_prim.normals[curr_prim.indices[i]][0], curr_prim.normals[curr_prim.indices[i]][1], curr_prim.normals[curr_prim.indices[i]][2], 1.f };
-                //        color_blend(nrm_color, out_color, out_color);
-                //        material_get_color(curr_prim.material, r, vtxs, nrms, out_color);
-                //        hit = true;
-                //    }
-                //}
-
-                for (size_t t = 0; t < curr_prim.triangles_count; ++t)
+                triangle_hit_data thd = hit_triangle(curr_tri, r);
+                if (thd.is_hit && thd.t < t_min)
                 {
-                    triangle curr_tri = curr_prim.triangles[t];
-
-                    triangle_hit_data thd = hit_triangle(curr_tri, r);
-                    if (thd.is_hit && thd.t < t_min)
-                    {
-                        t_min = thd.t;
-                        vec4 nrm_color = { 0 };
-                        glm_vec4_one(nrm_color);
-                        glm_vec3_copy(curr_tri.normals[0], nrm_color);
-                        color_blend(nrm_color, out_color, out_color);
-                        material_get_color(curr_prim.material, r, curr_tri, out_color);
-                        hit = true;
-                    }
+                    t_min = thd.t;
+                    vec4 nrm_color = { 0 };
+                    glm_vec4_one(nrm_color);
+                    glm_vec4(curr_tri.normals[0], nrm_color[3], nrm_color);
+                    color_blend(nrm_color, out_color, out_color);
+                    material_get_color(curr_prim.material, r, curr_tri, out_color);
+                    hit = true;
                 }
             }
         }

@@ -22,15 +22,23 @@ scene scene_create(const char* gltf_path)
 
         if (curr_node->mesh != NULL)
         {
-            if (s.meshes_count == 0)
+            cgltf_mesh* curr_mesh = curr_node->mesh;
+            
+            if (s.prims_count == 0)
             {
-                s.meshes = malloc(sizeof(mesh));
+                s.prims = malloc(sizeof(primitive) * curr_mesh->primitives_count);
             }
             else {
-                s.meshes = realloc(s.meshes, sizeof(mesh) * (s.meshes_count + 1));
+                s.prims = realloc(s.prims, sizeof(primitive) * (s.prims_count + curr_mesh->primitives_count));
             }
 
-            s.meshes[s.meshes_count++] = mesh_create(curr_node);
+            mat4 node_xform = { 0 };
+            get_xform_matrix_for_node(curr_node, node_xform);
+
+            for (size_t p = 0; p < curr_mesh->primitives_count; ++p)
+            {
+                s.prims[s.prims_count++] = primitive_create(curr_mesh->primitives + p, node_xform);
+            }
         }
         else if (curr_node->camera != NULL)
         {
@@ -54,16 +62,16 @@ shutdown:
 
 void scene_destroy(scene s)
 {
-    if (s.meshes != NULL)
+    if (s.prims != NULL)
     {
-        for (size_t m = 0; m < s.meshes_count; ++m)
+        for (size_t m = 0; m < s.prims_count; ++m)
         {
-            mesh_destroy(s.meshes[m]);
+           primitive_destroy(s.prims[m]);
         }
 
-        free(s.meshes);
-        s.meshes = NULL;
-        s.meshes_count = 0;
+        free(s.prims);
+        s.prims = NULL;
+        s.prims_count = 0;
     }
 
     camera_destroy(s.camera);

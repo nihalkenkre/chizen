@@ -1,21 +1,14 @@
 #pragma once
 
 #include <cglm/include/cglm/cglm.h>
+#include "triangle.h"
 
 typedef struct bbox
 {
     vec3 bounds[2];
 } bbox;
 
-#ifdef __cplusplus
-extern "C"
-{
-#endif
-    bbox bbox_create(void);
-    void bbox_expand_to(bbox* b, vec3 pt);
-
-#ifdef __cplusplus
-}
-
-#endif // __cplusplus
+bbox bbox_create(void);
+void bbox_expand_to_vec3(bbox* b, vec3 pt);
+void bbox_expand_to_tri(bbox* b, triangle tri);
 

@@ -30,6 +30,13 @@ int main(int argc, char** argv)
     render_mode rm = CPU;
 
     printf("Hello World\n");
+    
+    if (argc != 2 && argc != 3)
+    {
+        printf("Usage: chizen.exe <//--cuda/--optix> <gltf_path>\n");
+        goto shutdown;
+    }
+
     for (int a = 1; a < argc; ++a)
     {
         if (strcmp(argv[a], "--cuda") == 0)

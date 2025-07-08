@@ -7,17 +7,17 @@
 
 typedef struct primitive
 {
-    vec3* positions;
-    size_t positions_count;
+    //vec3* positions;
+    //size_t positions_count;
 
-    vec3* normals;
-    size_t normals_count;
+    //vec3* normals;
+    //size_t normals_count;
 
-    vec2* uvs;
-    size_t uvs_count;
+    //vec2* uvs;
+    //size_t uvs_count;
 
-    uint32_t* indices;
-    size_t indices_count;
+    //uint32_t* indices;
+    //size_t indices_count;
 
     triangle* triangles;
     size_t triangles_count;

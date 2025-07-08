@@ -9,7 +9,6 @@ material material_create(cgltf_material* mat)
         .double_sided = mat->double_sided,
     };
 
-    printf("%s\n", mat->name);
     if (mat->has_pbr_metallic_roughness)
     {
         cgltf_pbr_metallic_roughness pbr_mr = mat->pbr_metallic_roughness;

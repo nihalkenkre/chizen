@@ -4,7 +4,7 @@
 
 static inline void CU_CHECK(const char* action, const cudaError_t result)
 {
-    if (result > 0)
+    if (result > cudaSuccess)
     {
         printf("CUDA ERR %d: %s\nExiting...\n", result, action);
         exit(result);
@@ -15,9 +15,6 @@ __global__ void static render(const size_t render_width, const size_t render_hei
 {
     size_t x = blockIdx.x * blockDim.x + threadIdx.x;
     size_t y = blockIdx.y * blockDim.y + threadIdx.y;
-
-    if (x >= render_width || y >= render_height)
-        return;
 
     curandState rand_state = { 0 };
 
@@ -34,10 +31,10 @@ extern "C" void renderer_render_cuda(const size_t render_width, const size_t ren
     cudaFree(nullptr);
 
     // max tx * ty = 1024 (max threads per block)
-    size_t tx = 8;
-    size_t ty = 8;
+    size_t tx = 16;
+    size_t ty = 16;
 
-    dim3 blocks(render_width / tx + 1, render_height / ty + 1, 1);
+    dim3 blocks(render_width / tx, render_height / ty, 1);
     dim3 threads(tx, ty, 1);
 
     void* d_pixels = nullptr;

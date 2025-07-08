@@ -20,6 +20,7 @@
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="..\..\src\bbox.c" />
+    <ClCompile Include="..\..\src\bvh.c" />
     <ClCompile Include="..\..\src\camera.c" />
     <ClCompile Include="..\..\src\color.c" />
     <ClCompile Include="..\..\src\main.c" />
@@ -35,6 +36,7 @@
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="..\..\src\bbox.h" />
+    <ClInclude Include="..\..\src\bvh.h" />
     <ClInclude Include="..\..\src\camera.h" />
     <ClInclude Include="..\..\src\color.h" />
     <ClInclude Include="..\..\src\material.h" />
