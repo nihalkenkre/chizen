@@ -28,12 +28,13 @@ scene scene_create(const char* gltf_path)
             {
                 s.prims = malloc(sizeof(primitive) * curr_mesh->primitives_count);
             }
-            else {
+            else 
+            {
                 s.prims = realloc(s.prims, sizeof(primitive) * (s.prims_count + curr_mesh->primitives_count));
             }
 
             mat4 node_xform = { 0 };
-            get_xform_matrix_for_node(curr_node, node_xform);
+            utils_get_xform_matrix_for_node(curr_node, node_xform);
 
             for (size_t p = 0; p < curr_mesh->primitives_count; ++p)
             {
@@ -46,13 +47,10 @@ scene scene_create(const char* gltf_path)
             {
                 s.camera = camera_create(curr_node);
             }
-            else
-            {
-                printf("Only perspective cameras supported at the moment...\n");
-                goto shutdown;
-            }
         }
     }
+
+    s.accel = accel_create(s.prims, s.prims_count);
 
 shutdown:
     cgltf_free(gltf_data);
@@ -75,4 +73,5 @@ void scene_destroy(scene s)
     }
 
     camera_destroy(s.camera);
+    accel_destroy(s.accel);
 }

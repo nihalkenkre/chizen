@@ -16,6 +16,9 @@
     <Filter Include="CUDA">
       <UniqueIdentifier>{8bed5195-069c-4f6d-b4c6-1e60629c2d7e}</UniqueIdentifier>
     </Filter>
+    <Filter Include="Optix">
+      <UniqueIdentifier>{9c96f061-a770-4425-9f31-2cd27434fa0a}</UniqueIdentifier>
+    </Filter>
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="..\..\src\main.c">
@@ -57,7 +60,16 @@
     <ClCompile Include="..\..\src\triangle.c">
       <Filter>Source Files</Filter>
     </ClCompile>
-    <ClCompile Include="..\..\src\bvh.c">
+    <ClCompile Include="..\..\src\accel.c">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\src\mesh_optix.c">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\src\primitive_optix.c">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\src\scene_optix.c">
       <Filter>Source Files</Filter>
     </ClCompile>
   </ItemGroup>
@@ -95,13 +107,30 @@
     <ClInclude Include="..\..\src\triangle.h">
       <Filter>Header Files</Filter>
     </ClInclude>
-    <ClInclude Include="..\..\src\bvh.h">
+    <ClInclude Include="..\..\src\accel.h">
       <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\src\mesh_optix.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\src\primitive_optix.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\src\scene_optix.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\optix\common.h">
+      <Filter>Optix</Filter>
     </ClInclude>
   </ItemGroup>
   <ItemGroup>
     <CudaCompile Include="..\..\src\renderer_cuda.cu">
       <Filter>CUDA</Filter>
     </CudaCompile>
+  </ItemGroup>
+  <ItemGroup>
+    <None Include="..\..\optix\sphere.cu">
+      <Filter>Optix</Filter>
+    </None>
   </ItemGroup>
 </Project>

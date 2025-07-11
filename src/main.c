@@ -15,7 +15,7 @@
 
 const float RENDER_HEIGHT = 720.f;
 const float ASPECT_RATIO = 16.f / 9.f;
-const uint8_t NUM_SAMPLES = 4;
+const uint8_t NUM_SAMPLES = 1;
 
 typedef enum render_mode {
     CPU,
@@ -26,34 +26,40 @@ typedef enum render_mode {
 int main(int argc, char** argv)
 {
     uint8_t* pixels = NULL;
-    scene scene = { 0 };
     render_mode rm = CPU;
 
     printf("Hello World\n");
-    
-    if (argc != 2 && argc != 3)
+
+    char* gltf_path = NULL;
+    if (argc == 2)
+    {
+        gltf_path = argv[1];
+    }
+    else if (argc == 3)
+    {
+        gltf_path = argv[2];
+
+        if (strcmp(argv[1], "--cuda") == 0)
+        {
+            rm = CUDA;
+        }
+
+        if (strcmp(argv[1], "--optix") == 0)
+        {
+            rm = OPTIX;
+        }
+    }
+    else
     {
         printf("Usage: chizen.exe <//--cuda/--optix> <gltf_path>\n");
         goto shutdown;
     }
 
-    for (int a = 1; a < argc; ++a)
+    char* ext = PathFindExtensionA(gltf_path);
+    if (strcmp(ext, ".glb") != 0 && strcmp(ext, ".gltf") != 0)
     {
-        if (strcmp(argv[a], "--cuda") == 0)
-        {
-            rm = CUDA;
-        }
-
-        if (strcmp(argv[a], "--optix") == 0)
-        {
-            rm = OPTIX;
-        }
-
-        char* ext = PathFindExtensionA(argv[a]);
-        if (strcmp(ext, ".glb") == 0 || strcmp(ext, ".gltf") == 0)
-        {
-            scene = scene_create(argv[a]);
-        }
+        printf("Only GLTF files supported... Exiting...");
+        goto shutdown;
     }
 
     const float RENDER_WIDTH = RENDER_HEIGHT * ASPECT_RATIO;
@@ -65,15 +71,15 @@ int main(int argc, char** argv)
 
     if (rm == CPU)
     {
-        renderer_render_cpu((size_t)RENDER_WIDTH, (size_t)RENDER_HEIGHT, NUM_SAMPLES, scene, pixels);
+        renderer_render_cpu((size_t)RENDER_WIDTH, (size_t)RENDER_HEIGHT, NUM_SAMPLES, gltf_path, pixels);
     }
     else if (rm == CUDA)
     {
-        renderer_render_cuda((size_t)RENDER_WIDTH, (size_t)RENDER_HEIGHT, NUM_SAMPLES, scene, pixels);
+        renderer_render_cuda((size_t)RENDER_WIDTH, (size_t)RENDER_HEIGHT, NUM_SAMPLES, gltf_path, pixels);
     }
     else if (rm == OPTIX)
     {
-        renderer_render_optix((size_t)RENDER_WIDTH, (size_t)RENDER_HEIGHT, NUM_SAMPLES, scene, pixels);
+        renderer_render_optix((size_t)RENDER_WIDTH, (size_t)RENDER_HEIGHT, NUM_SAMPLES, gltf_path, pixels);
     }
 
     char img_path[MAX_PATH];
@@ -86,8 +92,6 @@ int main(int argc, char** argv)
 shutdown:
     if (pixels != NULL)
         free(pixels);
-
-    scene_destroy(scene);
 
     printf("Bye World\n");
     return 0;

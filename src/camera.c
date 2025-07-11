@@ -11,7 +11,7 @@ camera camera_create(cgltf_node* camera_node)
     };
 
     mat4 xform = { 0 };
-    get_xform_matrix_for_node(camera_node, xform);
+    utils_get_xform_matrix_for_node(camera_node, xform);
 
     vec4 t = { 0 }; mat4 r = { 0 }; vec3 s = { 0 };
     glm_decompose(xform, t, r, s);
