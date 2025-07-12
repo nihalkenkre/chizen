@@ -1,8 +1,8 @@
 #pragma once
 
 #include "bbox.h"
-#include "material.h"
-#include "triangle.h"
+#include "../common/material.h"
+#include "../common/triangle.h"
 #include <cgltf/cgltf.h>
 
 typedef struct primitive

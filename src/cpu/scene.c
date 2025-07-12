@@ -1,5 +1,5 @@
 #include "scene.h"
-#include "utils.h"
+#include "../common/utils.h"
 #include <string.h>
 
 scene scene_create(const char* gltf_path)

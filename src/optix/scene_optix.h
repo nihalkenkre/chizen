@@ -1,6 +1,6 @@
 #pragma once
 
-#include "camera.h"
+#include "../common/camera.h"
 #include "mesh_optix.h"
 
 typedef struct scene_optix

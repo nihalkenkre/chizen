@@ -1,135 +1,122 @@
 ﻿<?xml version="1.0" encoding="utf-8"?>
 <Project ToolsVersion="4.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
   <ItemGroup>
-    <Filter Include="Source Files">
-      <UniqueIdentifier>{4FC737F1-C7A5-4376-A066-2A32D752A2FF}</UniqueIdentifier>
-      <Extensions>cpp;c;cc;cxx;c++;cppm;ixx;def;odl;idl;hpj;bat;asm;asmx</Extensions>
-    </Filter>
-    <Filter Include="Header Files">
-      <UniqueIdentifier>{93995380-89BD-4b04-88EB-625FBE52EBFB}</UniqueIdentifier>
-      <Extensions>h;hh;hpp;hxx;h++;hm;inl;inc;ipp;xsd</Extensions>
-    </Filter>
-    <Filter Include="Resource Files">
-      <UniqueIdentifier>{67DA6AB6-F800-4c08-8B7A-83BB121AAD01}</UniqueIdentifier>
-      <Extensions>rc;ico;cur;bmp;dlg;rc2;rct;bin;rgs;gif;jpg;jpeg;jpe;resx;tiff;tif;png;wav;mfcribbon-ms</Extensions>
-    </Filter>
-    <Filter Include="CUDA">
-      <UniqueIdentifier>{8bed5195-069c-4f6d-b4c6-1e60629c2d7e}</UniqueIdentifier>
-    </Filter>
     <Filter Include="Optix">
       <UniqueIdentifier>{9c96f061-a770-4425-9f31-2cd27434fa0a}</UniqueIdentifier>
     </Filter>
+    <Filter Include="CPU">
+      <UniqueIdentifier>{0b04be54-6901-4cb0-bf55-56bd718a82ec}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Common">
+      <UniqueIdentifier>{a151024e-9c7e-4cd8-af61-151d896c7722}</UniqueIdentifier>
+    </Filter>
   </ItemGroup>
   <ItemGroup>
-    <ClCompile Include="..\..\src\main.c">
-      <Filter>Source Files</Filter>
+    <ClCompile Include="..\..\src\main.c" />
+    <ClCompile Include="..\..\src\cpu\accel.c">
+      <Filter>CPU</Filter>
     </ClCompile>
-    <ClCompile Include="..\..\src\renderer_cpu.c">
-      <Filter>Source Files</Filter>
+    <ClCompile Include="..\..\src\cpu\color.c">
+      <Filter>CPU</Filter>
     </ClCompile>
-    <ClCompile Include="..\..\src\scene.c">
-      <Filter>Source Files</Filter>
+    <ClCompile Include="..\..\src\cpu\mesh.c">
+      <Filter>CPU</Filter>
     </ClCompile>
-    <ClCompile Include="..\..\src\camera.c">
-      <Filter>Source Files</Filter>
+    <ClCompile Include="..\..\src\cpu\primitive.c">
+      <Filter>CPU</Filter>
     </ClCompile>
-    <ClCompile Include="..\..\src\ray.c">
-      <Filter>Source Files</Filter>
+    <ClCompile Include="..\..\src\cpu\ray.c">
+      <Filter>CPU</Filter>
     </ClCompile>
-    <ClCompile Include="..\..\src\color.c">
-      <Filter>Source Files</Filter>
+    <ClCompile Include="..\..\src\cpu\renderer_cpu.c">
+      <Filter>CPU</Filter>
     </ClCompile>
-    <ClCompile Include="..\..\src\bbox.c">
-      <Filter>Source Files</Filter>
+    <ClCompile Include="..\..\src\cpu\scene.c">
+      <Filter>CPU</Filter>
     </ClCompile>
-    <ClCompile Include="..\..\src\mesh.c">
-      <Filter>Source Files</Filter>
+    <ClCompile Include="..\..\src\optix\mesh_optix.c">
+      <Filter>Optix</Filter>
     </ClCompile>
-    <ClCompile Include="..\..\src\primitive.c">
-      <Filter>Source Files</Filter>
+    <ClCompile Include="..\..\src\optix\primitive_optix.c">
+      <Filter>Optix</Filter>
     </ClCompile>
-    <ClCompile Include="..\..\src\utils.c">
-      <Filter>Source Files</Filter>
+    <ClCompile Include="..\..\src\optix\renderer_optix.cpp">
+      <Filter>Optix</Filter>
     </ClCompile>
-    <ClCompile Include="..\..\src\material.c">
-      <Filter>Source Files</Filter>
+    <ClCompile Include="..\..\src\optix\scene_optix.c">
+      <Filter>Optix</Filter>
     </ClCompile>
-    <ClCompile Include="..\..\src\renderer_optix.cpp">
-      <Filter>Source Files</Filter>
+    <ClCompile Include="..\..\src\common\camera.c">
+      <Filter>Common</Filter>
     </ClCompile>
-    <ClCompile Include="..\..\src\triangle.c">
-      <Filter>Source Files</Filter>
+    <ClCompile Include="..\..\src\common\material.c">
+      <Filter>Common</Filter>
     </ClCompile>
-    <ClCompile Include="..\..\src\accel.c">
-      <Filter>Source Files</Filter>
+    <ClCompile Include="..\..\src\common\triangle.c">
+      <Filter>Common</Filter>
     </ClCompile>
-    <ClCompile Include="..\..\src\mesh_optix.c">
-      <Filter>Source Files</Filter>
+    <ClCompile Include="..\..\src\common\utils.c">
+      <Filter>Common</Filter>
     </ClCompile>
-    <ClCompile Include="..\..\src\primitive_optix.c">
-      <Filter>Source Files</Filter>
-    </ClCompile>
-    <ClCompile Include="..\..\src\scene_optix.c">
-      <Filter>Source Files</Filter>
+    <ClCompile Include="..\..\src\cpu\bbox.c">
+      <Filter>CPU</Filter>
     </ClCompile>
   </ItemGroup>
   <ItemGroup>
-    <ClInclude Include="..\..\src\renderer.h">
-      <Filter>Header Files</Filter>
+    <ClInclude Include="..\..\src\cpu\accel.h">
+      <Filter>CPU</Filter>
     </ClInclude>
-    <ClInclude Include="..\..\src\scene.h">
-      <Filter>Header Files</Filter>
+    <ClInclude Include="..\..\src\cpu\color.h">
+      <Filter>CPU</Filter>
     </ClInclude>
-    <ClInclude Include="..\..\src\camera.h">
-      <Filter>Header Files</Filter>
+    <ClInclude Include="..\..\src\cpu\mesh.h">
+      <Filter>CPU</Filter>
     </ClInclude>
-    <ClInclude Include="..\..\src\ray.h">
-      <Filter>Header Files</Filter>
+    <ClInclude Include="..\..\src\cpu\primitive.h">
+      <Filter>CPU</Filter>
     </ClInclude>
-    <ClInclude Include="..\..\src\color.h">
-      <Filter>Header Files</Filter>
+    <ClInclude Include="..\..\src\cpu\ray.h">
+      <Filter>CPU</Filter>
     </ClInclude>
-    <ClInclude Include="..\..\src\bbox.h">
-      <Filter>Header Files</Filter>
+    <ClInclude Include="..\..\src\cpu\scene.h">
+      <Filter>CPU</Filter>
     </ClInclude>
-    <ClInclude Include="..\..\src\mesh.h">
-      <Filter>Header Files</Filter>
-    </ClInclude>
-    <ClInclude Include="..\..\src\primitive.h">
-      <Filter>Header Files</Filter>
-    </ClInclude>
-    <ClInclude Include="..\..\src\utils.h">
-      <Filter>Header Files</Filter>
-    </ClInclude>
-    <ClInclude Include="..\..\src\material.h">
-      <Filter>Header Files</Filter>
-    </ClInclude>
-    <ClInclude Include="..\..\src\triangle.h">
-      <Filter>Header Files</Filter>
-    </ClInclude>
-    <ClInclude Include="..\..\src\accel.h">
-      <Filter>Header Files</Filter>
-    </ClInclude>
-    <ClInclude Include="..\..\src\mesh_optix.h">
-      <Filter>Header Files</Filter>
-    </ClInclude>
-    <ClInclude Include="..\..\src\primitive_optix.h">
-      <Filter>Header Files</Filter>
-    </ClInclude>
-    <ClInclude Include="..\..\src\scene_optix.h">
-      <Filter>Header Files</Filter>
-    </ClInclude>
-    <ClInclude Include="..\..\optix\common.h">
+    <ClInclude Include="..\..\src\optix\mesh_optix.h">
       <Filter>Optix</Filter>
     </ClInclude>
+    <ClInclude Include="..\..\src\optix\primitive_optix.h">
+      <Filter>Optix</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\src\optix\scene_optix.h">
+      <Filter>Optix</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\src\common\camera.h">
+      <Filter>Common</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\src\common\material.h">
+      <Filter>Common</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\src\common\renderer.h">
+      <Filter>Common</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\src\common\triangle.h">
+      <Filter>Common</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\src\common\utils.h">
+      <Filter>Common</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\src\cpu\bbox.h">
+      <Filter>CPU</Filter>
+    </ClInclude>
   </ItemGroup>
   <ItemGroup>
-    <CudaCompile Include="..\..\src\renderer_cuda.cu">
-      <Filter>CUDA</Filter>
-    </CudaCompile>
-  </ItemGroup>
-  <ItemGroup>
-    <None Include="..\..\optix\sphere.cu">
+    <None Include="..\..\src\optix\build_shaders.bat">
+      <Filter>Optix</Filter>
+    </None>
+    <None Include="..\..\src\optix\pbr.cu">
+      <Filter>Optix</Filter>
+    </None>
+    <None Include="..\..\src\optix\common.cu.h">
       <Filter>Optix</Filter>
     </None>
   </ItemGroup>

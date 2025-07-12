@@ -19,51 +19,54 @@
     </ProjectConfiguration>
   </ItemGroup>
   <ItemGroup>
-    <ClCompile Include="..\..\src\bbox.c" />
-    <ClCompile Include="..\..\src\accel.c" />
-    <ClCompile Include="..\..\src\camera.c" />
-    <ClCompile Include="..\..\src\color.c" />
-    <ClCompile Include="..\..\src\main.c" />
-    <ClCompile Include="..\..\src\material.c" />
-    <ClCompile Include="..\..\src\mesh.c" />
-    <ClCompile Include="..\..\src\mesh_optix.c" />
-    <ClCompile Include="..\..\src\primitive.c" />
-    <ClCompile Include="..\..\src\primitive_optix.c" />
-    <ClCompile Include="..\..\src\ray.c" />
-    <ClCompile Include="..\..\src\renderer_cpu.c" />
-    <ClCompile Include="..\..\src\renderer_optix.cpp" />
-    <ClCompile Include="..\..\src\scene.c" />
-    <ClCompile Include="..\..\src\scene_optix.c" />
-    <ClCompile Include="..\..\src\triangle.c" />
-    <ClCompile Include="..\..\src\utils.c" />
-  </ItemGroup>
-  <ItemGroup>
-    <ClInclude Include="..\..\optix\common.h" />
-    <ClInclude Include="..\..\src\bbox.h" />
-    <ClInclude Include="..\..\src\accel.h" />
-    <ClInclude Include="..\..\src\camera.h" />
-    <ClInclude Include="..\..\src\color.h" />
-    <ClInclude Include="..\..\src\material.h" />
-    <ClInclude Include="..\..\src\mesh.h" />
-    <ClInclude Include="..\..\src\mesh_optix.h" />
-    <ClInclude Include="..\..\src\primitive.h" />
-    <ClInclude Include="..\..\src\primitive_optix.h" />
-    <ClInclude Include="..\..\src\ray.h" />
-    <ClInclude Include="..\..\src\renderer.h" />
-    <ClInclude Include="..\..\src\scene.h" />
-    <ClInclude Include="..\..\src\scene_optix.h" />
-    <ClInclude Include="..\..\src\triangle.h" />
-    <ClInclude Include="..\..\src\utils.h" />
-  </ItemGroup>
-  <ItemGroup>
-    <None Include="..\..\optix\sphere.cu">
-      <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">
-      </ExcludedFromBuild>
+    <None Include="..\..\src\optix\pbr.cu">
+      <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">true</ExcludedFromBuild>
+      <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Release|x64'">true</ExcludedFromBuild>
       <FileType>Document</FileType>
-      <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
-      </ExcludedFromBuild>
     </None>
-    <CudaCompile Include="..\..\src\renderer_cuda.cu" />
+  </ItemGroup>
+  <ItemGroup>
+    <ClCompile Include="..\..\src\common\camera.c" />
+    <ClCompile Include="..\..\src\common\material.c" />
+    <ClCompile Include="..\..\src\common\triangle.c" />
+    <ClCompile Include="..\..\src\common\utils.c" />
+    <ClCompile Include="..\..\src\cpu\accel.c" />
+    <ClCompile Include="..\..\src\cpu\bbox.c" />
+    <ClCompile Include="..\..\src\cpu\color.c" />
+    <ClCompile Include="..\..\src\cpu\mesh.c" />
+    <ClCompile Include="..\..\src\cpu\primitive.c" />
+    <ClCompile Include="..\..\src\cpu\ray.c" />
+    <ClCompile Include="..\..\src\cpu\renderer_cpu.c" />
+    <ClCompile Include="..\..\src\cpu\scene.c" />
+    <ClCompile Include="..\..\src\main.c" />
+    <ClCompile Include="..\..\src\optix\mesh_optix.c" />
+    <ClCompile Include="..\..\src\optix\primitive_optix.c" />
+    <ClCompile Include="..\..\src\optix\renderer_optix.cpp" />
+    <ClCompile Include="..\..\src\optix\scene_optix.c" />
+  </ItemGroup>
+  <ItemGroup>
+    <ClInclude Include="..\..\src\common\camera.h" />
+    <ClInclude Include="..\..\src\common\material.h" />
+    <ClInclude Include="..\..\src\common\renderer.h" />
+    <ClInclude Include="..\..\src\common\triangle.h" />
+    <ClInclude Include="..\..\src\common\utils.h" />
+    <ClInclude Include="..\..\src\cpu\accel.h" />
+    <ClInclude Include="..\..\src\cpu\bbox.h" />
+    <ClInclude Include="..\..\src\cpu\color.h" />
+    <ClInclude Include="..\..\src\cpu\mesh.h" />
+    <ClInclude Include="..\..\src\cpu\primitive.h" />
+    <ClInclude Include="..\..\src\cpu\ray.h" />
+    <ClInclude Include="..\..\src\cpu\scene.h" />
+    <None Include="..\..\src\optix\common.cu.h">
+      <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">true</ExcludedFromBuild>
+      <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Release|x64'">true</ExcludedFromBuild>
+    </None>
+    <ClInclude Include="..\..\src\optix\mesh_optix.h" />
+    <ClInclude Include="..\..\src\optix\primitive_optix.h" />
+    <ClInclude Include="..\..\src\optix\scene_optix.h" />
+  </ItemGroup>
+  <ItemGroup>
+    <None Include="..\..\src\optix\build_shaders.bat" />
   </ItemGroup>
   <PropertyGroup Label="Globals">
     <VCProjectVersion>17.0</VCProjectVersion>
@@ -172,7 +175,7 @@
       <GenerateRelocatableDeviceCode>false</GenerateRelocatableDeviceCode>
     </CudaCompile>
     <PostBuildEvent>
-      <Command>$(SolutionDir)..\..\optix\build.bat $(SolutionDir) $(ConfigurationName) $(TargetDir)</Command>
+      <Command>$(SolutionDir)..\..\src\optix\build_shaders.bat $(SolutionDir) $(ConfigurationName) $(TargetDir)</Command>
     </PostBuildEvent>
   </ItemDefinitionGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
@@ -203,7 +206,7 @@
       <GenerateRelocatableDeviceCode>false</GenerateRelocatableDeviceCode>
     </CudaCompile>
     <PostBuildEvent>
-      <Command>$(SolutionDir)..\..\optix\build.bat $(SolutionDir) $(ConfigurationName) $(TargetDir)</Command>
+      <Command>$(SolutionDir)..\..\src\optix\build_shaders.bat $(SolutionDir) $(ConfigurationName) $(TargetDir)</Command>
     </PostBuildEvent>
   </ItemDefinitionGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />

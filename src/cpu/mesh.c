@@ -1,5 +1,5 @@
 #include "mesh.h"
-#include "utils.h"
+#include "../common/utils.h"
 
 mesh mesh_create(cgltf_node* mesh_node)
 {

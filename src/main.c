@@ -1,7 +1,7 @@
 #include <stdio.h>
 #include <Shlwapi.h>
 
-#include "renderer.h"
+#include "common/renderer.h"
 
 #define CGLTF_IMPLEMENTATION
 #include <cgltf/cgltf.h>
@@ -15,11 +15,10 @@
 
 const float RENDER_HEIGHT = 720.f;
 const float ASPECT_RATIO = 16.f / 9.f;
-const uint8_t NUM_SAMPLES = 1;
+const uint8_t NUM_SAMPLES = 4;
 
 typedef enum render_mode {
     CPU,
-    CUDA,
     OPTIX
 } render_mode;
 
@@ -39,11 +38,6 @@ int main(int argc, char** argv)
     {
         gltf_path = argv[2];
 
-        if (strcmp(argv[1], "--cuda") == 0)
-        {
-            rm = CUDA;
-        }
-
         if (strcmp(argv[1], "--optix") == 0)
         {
             rm = OPTIX;
@@ -51,7 +45,7 @@ int main(int argc, char** argv)
     }
     else
     {
-        printf("Usage: chizen.exe <//--cuda/--optix> <gltf_path>\n");
+        printf("Usage: chizen.exe <//--optix> <gltf_path>\n");
         goto shutdown;
     }
 
@@ -72,10 +66,6 @@ int main(int argc, char** argv)
     if (rm == CPU)
     {
         renderer_render_cpu((size_t)RENDER_WIDTH, (size_t)RENDER_HEIGHT, NUM_SAMPLES, gltf_path, pixels);
-    }
-    else if (rm == CUDA)
-    {
-        renderer_render_cuda((size_t)RENDER_WIDTH, (size_t)RENDER_HEIGHT, NUM_SAMPLES, gltf_path, pixels);
     }
     else if (rm == OPTIX)
     {

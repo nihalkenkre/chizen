@@ -1,6 +1,5 @@
-#include "renderer.h"
-#include "ray.h"
-#include "utils.h"
+#include "../common/renderer.h"
+#include "../common/utils.h"
 
 #include <cuda_runtime.h>
 #include <curand_kernel.h>

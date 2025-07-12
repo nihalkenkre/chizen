@@ -1,8 +1,8 @@
-#include "renderer.h"
+#include "../common/renderer.h"
 #include "ray.h"
 #include "color.h"
 #include "bbox.h"
-#include "utils.h"
+#include "../common/utils.h"
 
 #include <Windows.h>
 
@@ -226,9 +226,9 @@ static void ray_cast(const ray r, vec4 out_color)
 				{
 					t_min = thd.t;
 					vec4 color = { 0.f, r.dir[1] + 1.f * 0.5f, 0.f, 1.f };
-					//glm_vec4_one(color);
+					glm_vec4_one(color);
 					//glm_vec4(curr_tri.normals[0], color[3], color);
-					//glm_vec3_copy(thd.bary_coords, color);
+					glm_vec3_copy(thd.bary_coords, color);
 					color_blend(color, out_color, out_color);
 					//material_get_color(curr_prim.material, r, curr_tri, out_color);
 					hit = true;

@@ -23,9 +23,7 @@ static inline void OPTIX_CHECK(const char* action, const OptixResult result)
 
 primitive_optix primitive_optix_create(cgltf_primitive* curr_prim, mat4 node_xform, const OptixDeviceContext ctx, const cudaStream_t stream)
 {
-    primitive_optix p = {
-        .bbox = bbox_create(),
-    };
+    primitive_optix p = { 0 };
 
     if (curr_prim->material != NULL)
     {
@@ -78,7 +76,6 @@ primitive_optix primitive_optix_create(cgltf_primitive* curr_prim, mat4 node_xfo
     for (size_t i = 0; i < indices_count; i += 3)
     {
         p.tris[triangle_index++] = triangle_create(node_xform, positions, normals, uvs, indices, i);
-        bbox_expand_to_tri(&p.bbox, p.tris[triangle_index - 1]);
     }
 
     free(indices);

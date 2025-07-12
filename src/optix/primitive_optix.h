@@ -1,8 +1,7 @@
 #pragma once
 
-#include "bbox.h"
-#include "material.h"
-#include "triangle.h"
+#include "../common/material.h"
+#include "../common/triangle.h"
 
 #include <optix.h>
 #include <cuda_runtime.h>
@@ -14,7 +13,6 @@ typedef struct primitive_optix
     size_t tris_count;
 
     material material;
-    bbox bbox;
 
     OptixTraversableHandle gas_hnd;
     CUdeviceptr vertex_buffer;

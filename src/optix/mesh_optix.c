@@ -1,5 +1,5 @@
 #include "mesh_optix.h"
-#include "utils.h"
+#include "../common/utils.h"
 
 mesh_optix mesh_optix_create(cgltf_node* curr_node, const OptixDeviceContext ctx, const cudaStream_t stream)
 {

@@ -1,6 +1,6 @@
 #pragma once
 
-#include "camera.h"
+#include "../common/camera.h"
 #include "primitive.h"
 #include "accel.h"
 

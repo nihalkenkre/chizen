@@ -1,6 +1,6 @@
 #pragma once
 
-#include "ray.h"
+#include "../cpu/ray.h"
 #include "triangle.h"
 #include <cgltf/cgltf.h>
 

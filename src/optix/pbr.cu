@@ -1,64 +1,8 @@
-#include <stdint.h>
+#include "common.cu.h"
+#include "../common/triangle.h"
 
-#include <curand_kernel.h>
-#include <cuda_runtime.h>
 
-#include <optix.h>
-#include <optix_stubs.h>
-
-#ifdef min
-#undef min
-#endif
-#ifdef max
-#undef max
-#endif
-#include <optix_stack_size.h>
-#include <optix_function_table_definition.h>
-
-#include "../src/triangle.h"
-
-typedef struct launch_params
-{
-    uint8_t *pixels;
-    size_t render_width;
-    size_t render_height;
-    OptixTraversableHandle handle;
-} launch_params;
-
-typedef struct ray_gen_record_data
-{
-    float3 pixel_00_loc;
-    float3 pixel_delta_u;
-    float3 pixel_delta_v;
-    float3 org;
-} ray_gen_record_data;
-
-typedef struct ray_gen_record
-{
-    __align__(OPTIX_SBT_RECORD_ALIGNMENT)
-        char header[OPTIX_SBT_RECORD_HEADER_SIZE];
-    ray_gen_record_data data;
-} ray_gen_record;
-
-typedef struct miss_record_data
-{
-    float3 DUMMY;
-} miss_record_data;
-
-typedef struct miss_record
-{
-    __align__(OPTIX_SBT_RECORD_ALIGNMENT)
-        char header[OPTIX_SBT_RECORD_HEADER_SIZE];
-    miss_record_data* data;
-} miss_record;
-
-typedef struct ray_cu
-{
-	float3 org;
-	float3 dir;
-	float3 inv_dir;
-	uint3 sign;
-} ray_cu;
+extern "C" __constant__ launch_params lp;
 
 __device__ static ray_cu ray_cu_create(float3 org, float3 dir)
 {
@@ -154,3 +98,25 @@ __device__ ray_cu static generate_ray(curandState rand_state, const size_t x, co
 	return ray_cu_create(org, dir);
 }
 
+
+extern "C"  __global__ void __raygen__rg()
+{
+	uint3 launch_index = optixGetLaunchIndex();
+	ray_gen_record_data* rg_data = (ray_gen_record_data*)optixGetSbtDataPointer();
+
+	curandState rand_state = { 0 };
+	curand_init(1237, launch_index.y * lp.render_width + launch_index.x, 0, &rand_state);
+
+	ray_cu r = generate_ray(rand_state, launch_index.x, launch_index.y, rg_data->pixel_00_loc, rg_data->pixel_delta_u, rg_data->pixel_delta_v, rg_data->org);
+
+	size_t pixel_idx = (launch_index.y * lp.render_width * 4) + (launch_index.x * 4);
+	lp.pixels[pixel_idx] = 0;// (uint8_t)((float)launch_index.x / (float)lp.render_width * 255);
+	lp.pixels[pixel_idx + 1] = (uint8_t)((r.dir.y + 1.f * 0.5f) * 255);// (uint8_t)((float)launch_index.y / (float)lp.render_height * 255);
+	lp.pixels[pixel_idx + 2] = 0;
+	lp.pixels[pixel_idx + 3] = 255;
+}
+
+extern "C" __global__ void __miss__ms()
+{
+	miss_record_data* ms_data = (miss_record_data*)optixGetSbtDataPointer();
+}

@@ -1,7 +1,7 @@
 #pragma once
 
 #include <cglm/include/cglm/cglm.h>
-#include "triangle.h"
+#include "../common/triangle.h"
 
 typedef struct bbox
 {

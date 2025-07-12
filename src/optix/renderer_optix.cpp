@@ -1,6 +1,6 @@
-#include "renderer.h"
-#include "../optix/common.h"
-#include "utils.h"
+#include "../common/renderer.h"
+#include "common.cu.h"
+#include "../common/utils.h"
 
 #include <Shlwapi.h>
 
@@ -68,7 +68,7 @@ void renderer_render_optix(const size_t render_width, const size_t render_height
 	char curr_dir[MAX_PATH];
 	GetModuleFileNameA(GetModuleHandleA(nullptr), curr_dir, MAX_PATH);
 	PathRemoveFileSpecA(curr_dir);
-	strcat(curr_dir, "/optix/sphere.cu.optixir");
+	strcat(curr_dir, "/optix/pbr.cu.optixir");
 
 	OFSTRUCT open_file = { 0 };
 	HANDLE h_file = (HANDLE)OpenFile(curr_dir, &open_file, OF_READ);
@@ -108,6 +108,8 @@ void renderer_render_optix(const size_t render_width, const size_t render_height
 			.entryFunctionName = "__miss__ms",
 		},
 	};
+
+	free(module_data);
 
 	const OptixProgramGroupOptions module_program_group_options = { 0 };
 
