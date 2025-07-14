@@ -9,7 +9,9 @@ typedef struct mesh_optix
     primitive_optix* prims;
     size_t prims_count;
 
-    OptixTraversableHandle ias_hnd;
+    OptixInstance instance;
+    OptixTraversableHandle gas_hnd;
+    CUdeviceptr accel_gas_buffer;
 } mesh_optix;
 
 mesh_optix mesh_optix_create(cgltf_node* curr_node, const OptixDeviceContext ctx, const cudaStream_t stream);

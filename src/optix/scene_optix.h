@@ -10,7 +10,8 @@ typedef struct scene_optix
 
     camera camera;
 
-    OptixTraversableHandle scn_hnd;
+    OptixTraversableHandle ias_hnd;
+    CUdeviceptr d_ias_buffer;
 } scene_optix;
 
 #ifdef __cplusplus

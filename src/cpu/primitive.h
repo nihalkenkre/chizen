@@ -2,7 +2,7 @@
 
 #include "bbox.h"
 #include "../common/material.h"
-#include "../common/triangle.h"
+#include "../cpu/triangle.h"
 #include <cgltf/cgltf.h>
 
 typedef struct primitive

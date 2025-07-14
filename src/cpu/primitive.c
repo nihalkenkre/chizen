@@ -43,6 +43,7 @@ primitive primitive_create(const cgltf_primitive* curr_prim, mat4 node_xform)
         if (strcmp(curr_attr->name, "POSITION") == 0)
         {
             positions = (vec3*)((size_t)curr_attr->data->buffer_view->buffer->data + curr_attr->data->buffer_view->offset + curr_attr->data->offset);
+
         }
         else if (strcmp(curr_attr->name, "NORMAL") == 0)
         {

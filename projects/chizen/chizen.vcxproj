@@ -28,7 +28,6 @@
   <ItemGroup>
     <ClCompile Include="..\..\src\common\camera.c" />
     <ClCompile Include="..\..\src\common\material.c" />
-    <ClCompile Include="..\..\src\common\triangle.c" />
     <ClCompile Include="..\..\src\common\utils.c" />
     <ClCompile Include="..\..\src\cpu\accel.c" />
     <ClCompile Include="..\..\src\cpu\bbox.c" />
@@ -38,6 +37,7 @@
     <ClCompile Include="..\..\src\cpu\ray.c" />
     <ClCompile Include="..\..\src\cpu\renderer_cpu.c" />
     <ClCompile Include="..\..\src\cpu\scene.c" />
+    <ClCompile Include="..\..\src\cpu\triangle.c" />
     <ClCompile Include="..\..\src\main.c" />
     <ClCompile Include="..\..\src\optix\mesh_optix.c" />
     <ClCompile Include="..\..\src\optix\primitive_optix.c" />
@@ -48,7 +48,6 @@
     <ClInclude Include="..\..\src\common\camera.h" />
     <ClInclude Include="..\..\src\common\material.h" />
     <ClInclude Include="..\..\src\common\renderer.h" />
-    <ClInclude Include="..\..\src\common\triangle.h" />
     <ClInclude Include="..\..\src\common\utils.h" />
     <ClInclude Include="..\..\src\cpu\accel.h" />
     <ClInclude Include="..\..\src\cpu\bbox.h" />
@@ -57,6 +56,8 @@
     <ClInclude Include="..\..\src\cpu\primitive.h" />
     <ClInclude Include="..\..\src\cpu\ray.h" />
     <ClInclude Include="..\..\src\cpu\scene.h" />
+    <ClInclude Include="..\..\src\cpu\triangle.h" />
+    <ClInclude Include="..\..\src\optix\utils.h" />
     <None Include="..\..\src\optix\common.cu.h">
       <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">true</ExcludedFromBuild>
       <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Release|x64'">true</ExcludedFromBuild>

@@ -69,6 +69,7 @@ int main(int argc, char** argv)
     }
     else if (rm == OPTIX)
     {
+#define OPTIX
         renderer_render_optix((size_t)RENDER_WIDTH, (size_t)RENDER_HEIGHT, NUM_SAMPLES, gltf_path, pixels);
     }
 

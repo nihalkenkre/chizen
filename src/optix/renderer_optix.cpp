@@ -50,7 +50,7 @@ void renderer_render_optix(const size_t render_width, const size_t render_height
 
 	const OptixPipelineCompileOptions pipeline_compile_options = {
 		.traversableGraphFlags = OPTIX_TRAVERSABLE_GRAPH_FLAG_ALLOW_ANY,
-		.numPayloadValues = 3,
+		.numPayloadValues = 4,
 		.numAttributeValues = 2,
 		.pipelineLaunchParamsVariableName = "lp",
 	};
@@ -109,15 +109,26 @@ void renderer_render_optix(const size_t render_width, const size_t render_height
 		},
 	};
 
+	const OptixProgramGroupDesc closest_program_group_desc = {
+		.kind = OPTIX_PROGRAM_GROUP_KIND_HITGROUP,
+		.hitgroup = {
+			.moduleCH = module,
+			.entryFunctionNameCH = "__closesthit__ch",
+		},
+	};
+
 	free(module_data);
 
 	const OptixProgramGroupOptions module_program_group_options = { 0 };
 
 	OptixProgramGroup ray_gen_program_group = nullptr;
-	OPTIX_CHECK("create program group", optixProgramGroupCreate(ctx, &ray_gen_program_group_desc, 1, &module_program_group_options, nullptr, nullptr, &ray_gen_program_group));
+	OPTIX_CHECK("create ray_gen program group", optixProgramGroupCreate(ctx, &ray_gen_program_group_desc, 1, &module_program_group_options, nullptr, nullptr, &ray_gen_program_group));
+
+	OptixProgramGroup closest_hit_program_group = nullptr;
+	OPTIX_CHECK("create closesthit program group", optixProgramGroupCreate(ctx, &closest_program_group_desc, 1, &module_program_group_options, nullptr, nullptr, &closest_hit_program_group));
 
 	OptixProgramGroup miss_program_group = nullptr;
-	OPTIX_CHECK("create program group", optixProgramGroupCreate(ctx, &miss_program_group_desc, 1, &module_program_group_options, nullptr, nullptr, &miss_program_group));
+	OPTIX_CHECK("create miss program group", optixProgramGroupCreate(ctx, &miss_program_group_desc, 1, &module_program_group_options, nullptr, nullptr, &miss_program_group));
 
 	vec3 pixel_00_loc = { 0 }, pixel_delta_u = { 0 }, pixel_delta_v = { 0 };
 	utils_find_pixel_vecs(s.camera, s.camera.fov, (float)render_width, (float)render_height, pixel_00_loc, pixel_delta_u, pixel_delta_v);
@@ -139,12 +150,19 @@ void renderer_render_optix(const size_t render_width, const size_t render_height
 	};
 	OPTIX_CHECK("pack raygen sbt header", optixSbtRecordPackHeader(ray_gen_program_group, &rg_record.header));
 
+	char closest_hit_record_header[OPTIX_SBT_RECORD_HEADER_SIZE];
+	OPTIX_CHECK("pack raygen sbt header", optixSbtRecordPackHeader(closest_hit_program_group, closest_hit_record_header));
+
 	char miss_record_header[OPTIX_SBT_RECORD_HEADER_SIZE];
 	OPTIX_CHECK("pack raygen sbt header", optixSbtRecordPackHeader(miss_program_group, miss_record_header));
 
 	CUdeviceptr d_ray_gen_record = 0;
 	CU_CHECK("alloc raygen record", cudaMalloc((void**)&d_ray_gen_record, sizeof(ray_gen_record)));
 	CU_CHECK("copy raygen sbt record", cudaMemcpy((void*)d_ray_gen_record, (void*)&rg_record, sizeof(ray_gen_record), cudaMemcpyHostToDevice));
+
+	CUdeviceptr d_closest_hit_record = 0;
+	CU_CHECK("alloc closest_hit record", cudaMalloc((void**)&d_closest_hit_record, sizeof(ray_gen_record)));
+	CU_CHECK("copy closest_hit sbt header", cudaMemcpy((void*)d_closest_hit_record, closest_hit_record_header, OPTIX_SBT_RECORD_HEADER_SIZE, cudaMemcpyHostToDevice));
 
 	CUdeviceptr d_miss_record = 0;
 	CU_CHECK("alloc miss record", cudaMalloc((void**)&d_miss_record, sizeof(ray_gen_record)));
@@ -155,6 +173,9 @@ void renderer_render_optix(const size_t render_width, const size_t render_height
 		.missRecordBase = d_miss_record,
 		.missRecordStrideInBytes = sizeof(miss_record),
 		.missRecordCount = 1,
+		.hitgroupRecordBase = d_closest_hit_record,
+		.hitgroupRecordStrideInBytes = sizeof(closest_hit_record),
+		.hitgroupRecordCount = 1,
 	};
 
 	CUdeviceptr d_pixels = 0;
@@ -164,6 +185,7 @@ void renderer_render_optix(const size_t render_width, const size_t render_height
 		.pixels = (uint8_t*)d_pixels,
 		.render_width = render_width,
 		.render_height = render_height,
+		.handle = s.ias_hnd,
 	};
 
 	CUdeviceptr d_launch_params = 0;
@@ -172,6 +194,7 @@ void renderer_render_optix(const size_t render_width, const size_t render_height
 	const OptixProgramGroup pipeline_program_groups[] = {
 		ray_gen_program_group,
 		miss_program_group,
+		closest_hit_program_group,
 	};
 
 	OptixPipeline pipeline = nullptr;

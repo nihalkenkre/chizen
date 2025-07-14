@@ -1,21 +1,23 @@
 #pragma once
 
-#include "../common/material.h"
-#include "../common/triangle.h"
-
 #include <optix.h>
 #include <cuda_runtime.h>
 #include <cgltf/cgltf.h>
+#include <cglm/include/cglm/cglm.h>
 
 typedef struct primitive_optix
 {
-    triangle* tris;
-    size_t tris_count;
+	vec3* positions;
+	size_t positions_count;
 
-    material material;
+	vec3* normals;
+	size_t normals_count;
 
-    OptixTraversableHandle gas_hnd;
-    CUdeviceptr vertex_buffer;
+	vec2* uvs;
+	size_t uvs_count;
+
+	uint32_t* indices;
+	size_t indices_count;
 } primitive_optix;
 
 primitive_optix primitive_optix_create(cgltf_primitive* curr_prim, mat4 node_xform, const OptixDeviceContext ctx, const cudaStream_t stream);

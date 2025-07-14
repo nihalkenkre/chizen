@@ -52,13 +52,13 @@
     <ClCompile Include="..\..\src\common\material.c">
       <Filter>Common</Filter>
     </ClCompile>
-    <ClCompile Include="..\..\src\common\triangle.c">
-      <Filter>Common</Filter>
-    </ClCompile>
     <ClCompile Include="..\..\src\common\utils.c">
       <Filter>Common</Filter>
     </ClCompile>
     <ClCompile Include="..\..\src\cpu\bbox.c">
+      <Filter>CPU</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\src\cpu\triangle.c">
       <Filter>CPU</Filter>
     </ClCompile>
   </ItemGroup>
@@ -99,13 +99,16 @@
     <ClInclude Include="..\..\src\common\renderer.h">
       <Filter>Common</Filter>
     </ClInclude>
-    <ClInclude Include="..\..\src\common\triangle.h">
-      <Filter>Common</Filter>
-    </ClInclude>
     <ClInclude Include="..\..\src\common\utils.h">
       <Filter>Common</Filter>
     </ClInclude>
     <ClInclude Include="..\..\src\cpu\bbox.h">
+      <Filter>CPU</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\src\optix\utils.h">
+      <Filter>Optix</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\src\cpu\triangle.h">
       <Filter>CPU</Filter>
     </ClInclude>
   </ItemGroup>

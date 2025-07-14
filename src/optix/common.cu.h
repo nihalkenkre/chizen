@@ -38,6 +38,18 @@ typedef struct ray_gen_record
     ray_gen_record_data data;
 } ray_gen_record;
 
+typedef struct closest_hit_record_data
+{
+    float3 DUMMY;
+} closest_hit_record_data;
+
+typedef struct closest_hit_record
+{
+    __align__(OPTIX_SBT_RECORD_ALIGNMENT)
+        char header[OPTIX_SBT_RECORD_HEADER_SIZE];
+    closest_hit_record_data* data;
+} closest_hit_record;
+
 typedef struct miss_record_data
 {
     float3 DUMMY;

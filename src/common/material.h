@@ -1,7 +1,7 @@
 #pragma once
 
 #include "../cpu/ray.h"
-#include "triangle.h"
+#include "../cpu/triangle.h"
 #include <cgltf/cgltf.h>
 
 typedef struct texture_info

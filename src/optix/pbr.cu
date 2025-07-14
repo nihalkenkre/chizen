@@ -1,5 +1,4 @@
 #include "common.cu.h"
-#include "../common/triangle.h"
 
 
 extern "C" __constant__ launch_params lp;
@@ -48,25 +47,6 @@ __device__ static float3 ray_cu_pt_at(ray_cu r, const float t)
 	return float3_add(r.org, pt);
 }
 
-__device__ void static hit_triangle(triangle tri, ray_cu ray)
-{
-
-}
-
-__device__ float static hit_sphere(float3 center, const float radius, ray_cu ray)
-{
-	float3 oc = float3_sub(center, ray.org);
-	float a = float3_dot(ray.dir, ray.dir);
-	float b = -2.f * float3_dot(ray.dir, oc);
-	float c = float3_dot(oc, oc) - radius * radius;
-	float discrim = b * b - 4.f * a * c;
-
-	if (discrim <= 0.f)
-		return discrim;
-	else
-		return (-b - sqrtf(discrim)) / (2.f * a);
-}
-
 __device__ ray_cu static generate_ray(curandState rand_state, const size_t x, const size_t y, float3 pixel_00_loc, float3 pixel_delta_u, float3 pixel_delta_v, float3 org)
 {
 	float3 offset = { curand_uniform(&rand_state), curand_uniform(&rand_state), curand_uniform(&rand_state) };
@@ -109,14 +89,34 @@ extern "C"  __global__ void __raygen__rg()
 
 	ray_cu r = generate_ray(rand_state, launch_index.x, launch_index.y, rg_data->pixel_00_loc, rg_data->pixel_delta_u, rg_data->pixel_delta_v, rg_data->org);
 
+	unsigned p0 = 0, p1 = 0, p2 = 0, p3 = 0;
+
+	optixTrace(lp.handle, r.org, r.dir, 0.f, 1000.f, 0.f, 0xFF, 0, 0, 0, 0, p0, p1, p2, p3);
+
 	size_t pixel_idx = (launch_index.y * lp.render_width * 4) + (launch_index.x * 4);
-	lp.pixels[pixel_idx] = 0;// (uint8_t)((float)launch_index.x / (float)lp.render_width * 255);
-	lp.pixels[pixel_idx + 1] = (uint8_t)((r.dir.y + 1.f * 0.5f) * 255);// (uint8_t)((float)launch_index.y / (float)lp.render_height * 255);
-	lp.pixels[pixel_idx + 2] = 0;
-	lp.pixels[pixel_idx + 3] = 255;
+	lp.pixels[pixel_idx] = p0;// 0;// (uint8_t)((float)launch_index.x / (float)lp.render_width * 255);
+	lp.pixels[pixel_idx + 1] = p1;// (uint8_t)((r.dir.y + 1.f * 0.5f) * 255);// (uint8_t)((float)launch_index.y / (float)lp.render_height * 255);
+	lp.pixels[pixel_idx + 2] = p2;// 0;
+	lp.pixels[pixel_idx + 3] = p3;// 255;
+}
+
+extern "C" __global__ void __closesthit__ch()
+{
+	float2 bary_coords = optixHitObjectGetTriangleBarycentrics();
+	uint3 launch_index = optixGetLaunchIndex();
+
+	optixSetPayload_0(bary_coords.x * 255);
+	optixSetPayload_1(bary_coords.y * 255);
+	optixSetPayload_2((1 - bary_coords.x - bary_coords.y) * 255);
+	optixSetPayload_3(255);
 }
 
 extern "C" __global__ void __miss__ms()
 {
 	miss_record_data* ms_data = (miss_record_data*)optixGetSbtDataPointer();
+
+	optixSetPayload_0(64);
+	optixSetPayload_1(64);
+	optixSetPayload_2(64);
+	optixSetPayload_3(255);
 }
