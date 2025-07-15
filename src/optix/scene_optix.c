@@ -66,6 +66,7 @@ scene_optix scene_optix_create(const char* gltf_path, const OptixDeviceContext c
 
 	const OptixAccelBuildOptions accel_options = {
 		.operation = OPTIX_BUILD_OPERATION_BUILD,
+		.buildFlags = OPTIX_BUILD_FLAG_PREFER_FAST_TRACE | OPTIX_BUILD_FLAG_ALLOW_COMPACTION,
 	};
 
 	OptixAccelBufferSizes buffer_sizes = { 0 };

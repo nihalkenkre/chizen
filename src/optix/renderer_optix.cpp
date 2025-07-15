@@ -53,6 +53,7 @@ void renderer_render_optix(const size_t render_width, const size_t render_height
 		.numPayloadValues = 4,
 		.numAttributeValues = 2,
 		.pipelineLaunchParamsVariableName = "lp",
+		.usesPrimitiveTypeFlags = (unsigned int)OPTIX_PRIMITIVE_TYPE_FLAGS_TRIANGLE,
 	};
 
 	const OptixModuleCompileOptions module_compile_options = {

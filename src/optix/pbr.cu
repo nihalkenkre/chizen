@@ -64,17 +64,6 @@ __device__ ray_cu static generate_ray(curandState rand_state, const size_t x, co
 
 	float3 dir = float3_normalize(float3_sub(pixel_center, org));
 
-	//if ((x == 640 && y == 360) ||
-	//	(x == 0 && y == 0) ||
-	//	(x == 1219 && y == 729)
-	//	)
-	//{
-	//	printf("pixel center: ");
-	//	printf("%f %f %f\n", pixel_center.x, pixel_center.y, pixel_center.z);
-	//	printf("dir: ");
-	//	printf("%f %f %f\n", dir.x, dir.y, dir.z);
-	//}
-
 	return ray_cu_create(org, dir);
 }
 
@@ -94,15 +83,15 @@ extern "C"  __global__ void __raygen__rg()
 	optixTrace(lp.handle, r.org, r.dir, 0.f, 1000.f, 0.f, 0xFF, 0, 0, 0, 0, p0, p1, p2, p3);
 
 	size_t pixel_idx = (launch_index.y * lp.render_width * 4) + (launch_index.x * 4);
-	lp.pixels[pixel_idx] = p0;// 0;// (uint8_t)((float)launch_index.x / (float)lp.render_width * 255);
-	lp.pixels[pixel_idx + 1] = p1;// (uint8_t)((r.dir.y + 1.f * 0.5f) * 255);// (uint8_t)((float)launch_index.y / (float)lp.render_height * 255);
-	lp.pixels[pixel_idx + 2] = p2;// 0;
-	lp.pixels[pixel_idx + 3] = p3;// 255;
+	lp.pixels[pixel_idx] = p0;
+	lp.pixels[pixel_idx + 1] = p1;
+	lp.pixels[pixel_idx + 2] = p2;
+	lp.pixels[pixel_idx + 3] = p3;
 }
 
 extern "C" __global__ void __closesthit__ch()
 {
-	float2 bary_coords = optixHitObjectGetTriangleBarycentrics();
+	float2 bary_coords = optixGetTriangleBarycentrics();
 	uint3 launch_index = optixGetLaunchIndex();
 
 	optixSetPayload_0(bary_coords.x * 255);
@@ -115,8 +104,8 @@ extern "C" __global__ void __miss__ms()
 {
 	miss_record_data* ms_data = (miss_record_data*)optixGetSbtDataPointer();
 
-	optixSetPayload_0(64);
-	optixSetPayload_1(64);
-	optixSetPayload_2(64);
-	optixSetPayload_3(255);
+	optixSetPayload_0(0);
+	optixSetPayload_1(0);
+	optixSetPayload_2(0);
+	optixSetPayload_3(0);
 }
