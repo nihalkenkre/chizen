@@ -29,6 +29,8 @@ typedef struct ray_gen_record_data
     float3 pixel_delta_u;
     float3 pixel_delta_v;
     float3 org;
+    size_t num_samples;
+    curandState* states;
 } ray_gen_record_data;
 
 typedef struct ray_gen_record

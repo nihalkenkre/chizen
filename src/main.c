@@ -15,7 +15,7 @@
 
 const float RENDER_HEIGHT = 720.f;
 const float ASPECT_RATIO = 16.f / 9.f;
-const uint8_t NUM_SAMPLES = 4;
+const uint8_t NUM_SAMPLES = 32;
 
 typedef enum render_mode {
     CPU,

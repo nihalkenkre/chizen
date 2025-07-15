@@ -1,5 +1,9 @@
 #include "common.cu.h"
 
+typedef struct ray_payload
+{
+	float4 p;
+} ray_payload;
 
 extern "C" __constant__ launch_params lp;
 
@@ -14,27 +18,27 @@ __device__ static ray_cu ray_cu_create(float3 org, float3 dir)
 	return r;
 }
 
-__device__ float3 static float3_add(float3 a, float3 b)
+__device__ static float3 float3_add(float3 a, float3 b)
 {
 	return { a.x + b.x, a.y + b.y, a.z + b.z };
 }
 
-__device__ float3 static float3_scale(float3 v, float s)
+__device__ static float3 float3_scale(float3 v, float s)
 {
 	return { v.x * s, v.y * s, v.z * s };
 }
 
-__device__ float static float3_dot(float3 a, float3 b)
+__device__ static float float3_dot(float3 a, float3 b)
 {
 	return a.x * b.x + a.y * b.y + a.z * b.z;
 }
 
-__device__ float3 static float3_sub(float3 a, float3 b)
+__device__ static float3 float3_sub(float3 a, float3 b)
 {
 	return { a.x - b.x, a.y - b.y, a.z - b.z };
 }
 
-__device__ float3 static float3_normalize(float3 v)
+__device__ static float3 float3_normalize(float3 v)
 {
 	float mag = sqrtf(float3_dot(v, v));
 
@@ -47,10 +51,18 @@ __device__ static float3 ray_cu_pt_at(ray_cu r, const float t)
 	return float3_add(r.org, pt);
 }
 
-__device__ ray_cu static generate_ray(curandState rand_state, const size_t x, const size_t y, float3 pixel_00_loc, float3 pixel_delta_u, float3 pixel_delta_v, float3 org)
+__device__ static float4 color_blend(float4 src, float4 dst)
 {
-	float3 offset = { curand_uniform(&rand_state), curand_uniform(&rand_state), curand_uniform(&rand_state) };
+	return float4{
+		(src.x * src.w) + (dst.x * (1 - src.w)),
+		(src.y * src.w) + (dst.y * (1 - src.w)),
+		(src.z * src.w) + (dst.z * (1 - src.w)),
+		src.w
+	};
+}
 
+__device__ static ray_cu generate_ray(float2 offset, const size_t x, const size_t y, float3 pixel_00_loc, float3 pixel_delta_u, float3 pixel_delta_v, float3 org)
+{
 	float3 pixel_delta_u_x = float3_scale(pixel_delta_u, (float)x);
 	float3 pixel_delta_v_y = float3_scale(pixel_delta_v, (float)y);
 
@@ -73,14 +85,28 @@ extern "C"  __global__ void __raygen__rg()
 	uint3 launch_index = optixGetLaunchIndex();
 	ray_gen_record_data* rg_data = (ray_gen_record_data*)optixGetSbtDataPointer();
 
-	curandState rand_state = { 0 };
-	curand_init(1237, launch_index.y * lp.render_width + launch_index.x, 0, &rand_state);
+	unsigned int p0 = 0, p1 = 0, p2 = 0, p3 = 0;
+	unsigned int r_idx = threadIdx.x + blockIdx.x * blockDim.x;
 
-	ray_cu r = generate_ray(rand_state, launch_index.x, launch_index.y, rg_data->pixel_00_loc, rg_data->pixel_delta_u, rg_data->pixel_delta_v, rg_data->org);
+	curand_init(launch_index.x + launch_index.y, launch_index.x + launch_index.y, 0, &rg_data->states[r_idx]);
 
-	unsigned p0 = 0, p1 = 0, p2 = 0, p3 = 0;
+	for (size_t s = 0; s < rg_data->num_samples; ++s) {
+		float2 offset = { curand_uniform(&rg_data->states[r_idx]), curand_uniform(&rg_data->states[r_idx]) };
+		ray_cu r = generate_ray(offset, launch_index.x, launch_index.y, rg_data->pixel_00_loc, rg_data->pixel_delta_u, rg_data->pixel_delta_v, rg_data->org);
 
-	optixTrace(lp.handle, r.org, r.dir, 0.f, 1000.f, 0.f, 0xFF, 0, 0, 0, 0, p0, p1, p2, p3);
+		unsigned int sp0 = 0.f, sp1 = 0.f, sp2 = 0.f, sp3 = 0.f;
+		optixTrace(lp.handle, r.org, r.dir, 0.f, 1000.f, 0.f, 0xFF, 0, 0, 0, 0, sp0, sp1, sp2, sp3);
+
+		p0 += sp0;
+		p1 += sp1;
+		p2 += sp2;
+		p3 += sp3;
+	}
+
+	p0 /= rg_data->num_samples;
+	p1 /= rg_data->num_samples;
+	p2 /= rg_data->num_samples;
+	p3 /= rg_data->num_samples;
 
 	size_t pixel_idx = (launch_index.y * lp.render_width * 4) + (launch_index.x * 4);
 	lp.pixels[pixel_idx] = p0;

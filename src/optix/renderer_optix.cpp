@@ -1,6 +1,6 @@
 #include "../common/renderer.h"
-#include "common.cu.h"
 #include "../common/utils.h"
+#include "common.cu.h"
 
 #include <Shlwapi.h>
 
@@ -91,7 +91,7 @@ void renderer_render_optix(const size_t render_width, const size_t render_height
 	OPTIX_CHECK("create module", optixModuleCreate(ctx, &module_compile_options, &pipeline_compile_options, (char*)module_data, module_data_size, nullptr, nullptr, &module));
 
 	const OptixPipelineLinkOptions pipeline_link_options = {
-		.maxTraceDepth = 16,
+		.maxTraceDepth = 31, 
 	};
 
 	const OptixProgramGroupDesc ray_gen_program_group_desc = {
@@ -134,22 +134,21 @@ void renderer_render_optix(const size_t render_width, const size_t render_height
 	vec3 pixel_00_loc = { 0 }, pixel_delta_u = { 0 }, pixel_delta_v = { 0 };
 	utils_find_pixel_vecs(s.camera, s.camera.fov, (float)render_width, (float)render_height, pixel_00_loc, pixel_delta_u, pixel_delta_v);
 
-	const ray_gen_record_data rg_record_data = {
-		.pixel_00_loc = float3(pixel_00_loc[0], pixel_00_loc[1], pixel_00_loc[2]),
-		.pixel_delta_u = float3(pixel_delta_u[0], pixel_delta_u[1], pixel_delta_u[2]),
-		.pixel_delta_v = float3(pixel_delta_v[0], pixel_delta_v[1], pixel_delta_v[2]),
-		.org = float3(s.camera.pos[0], s.camera.pos[1], s.camera.pos[2]),
-	};
+	CUdeviceptr d_rand_states = 0;
+	CU_CHECK("alloc rand states", cudaMalloc((void**)&d_rand_states, render_width * render_height * sizeof(curandState)));
 
-	ray_gen_record rg_record = {
+	const ray_gen_record rg_record = {
 		.data = {
 			.pixel_00_loc = float3(pixel_00_loc[0], pixel_00_loc[1], pixel_00_loc[2]),
 			.pixel_delta_u = float3(pixel_delta_u[0], pixel_delta_u[1], pixel_delta_u[2]),
 			.pixel_delta_v = float3(pixel_delta_v[0], pixel_delta_v[1], pixel_delta_v[2]),
 			.org = float3(s.camera.pos[0], s.camera.pos[1], s.camera.pos[2]),
+			.num_samples = num_samples,
+			.states = (curandState*)d_rand_states,
 		}
 	};
-	OPTIX_CHECK("pack raygen sbt header", optixSbtRecordPackHeader(ray_gen_program_group, &rg_record.header));
+
+	OPTIX_CHECK("pack raygen sbt header", optixSbtRecordPackHeader(ray_gen_program_group, (void*)rg_record.header));
 
 	char closest_hit_record_header[OPTIX_SBT_RECORD_HEADER_SIZE];
 	OPTIX_CHECK("pack raygen sbt header", optixSbtRecordPackHeader(closest_hit_program_group, closest_hit_record_header));
@@ -209,6 +208,7 @@ void renderer_render_optix(const size_t render_width, const size_t render_height
 
 	scene_optix_destroy(s);
 
+	CU_CHECK("dealloc rand states", cudaFree((void*)d_rand_states));
 	CU_CHECK("dealloc miss record ptr", cudaFree((void*)d_miss_record));
 	CU_CHECK("dealloc ray gen record", cudaFree((void*)d_ray_gen_record));
 	OPTIX_CHECK("destroy program group", optixProgramGroupDestroy(ray_gen_program_group));
