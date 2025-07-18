@@ -18,14 +18,15 @@ for /R %%F in (*.optixir) do (
 for /R %%F in (*.cu) do (
     echo compiling %%F
     if "%2" == "Debug" (
-        nvcc --optix-ir -I"%OPTIX_PATH%"/include -I"%CUDA_PATH%"/include -I"%1../.." -Wno-deprecated-gpu-targets -m64 -G -rdc=true %%F -o %%F.optixir
+        nvcc --optix-ir -I"%OPTIX_PATH%"/include -I"%OPTIX_PATH%"/SDK -I"%CUDA_PATH%"/include -I"%1../../" -Wno-deprecated-gpu-targets -m64 -G -rdc=true %%F -o %%F.optixir
     )
 
     if  "%2" == "Release" (
-        nvcc --optix-ir -I"%OPTIX_PATH%"/include -I"%CUDA_PATH%"/include -I"%1../.." -Wno-deprecated-gpu-targets -m64 -rdc=true %%F -o %%F.optixir
+        nvcc --optix-ir -I"%OPTIX_PATH%"/include -I"%OPTIX_PATH%"/SDK -I"%CUDA_PATH%"/include -I"%1../../" -Wno-deprecated-gpu-targets -m64 -rdc=true %%F -o %%F.optixir
     )
 )
 
+:: cd to src folder
 cd ..
 
 :: delete compiled optixir from target dir

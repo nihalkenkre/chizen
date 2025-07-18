@@ -14,6 +14,7 @@
 #endif
 #include <optix_stack_size.h>
 #include <optix_function_table_definition.h>
+#include <sutil/vec_math.h>
 
 typedef struct launch_params
 {
@@ -31,6 +32,8 @@ typedef struct ray_gen_record_data
     float3 org;
     size_t num_samples;
     curandState* states;
+    float3* normals;
+    uint3* indices;
 } ray_gen_record_data;
 
 typedef struct ray_gen_record
@@ -64,10 +67,10 @@ typedef struct miss_record
     miss_record_data* data;
 } miss_record;
 
-typedef struct ray_cu
+typedef struct ray
 {
-	float3 org;
-	float3 dir;
-	float3 inv_dir;
-	uint3 sign;
-} ray_cu;
+    float3 org;
+    float3 dir;
+    float3 inv_dir;
+    uint3 sign;
+} ray;

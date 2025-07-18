@@ -1,9 +1,11 @@
-#include "scene_optix.h"
+#include "scene.h"
 #include "utils.h"
 
-scene_optix scene_optix_create(const char* gltf_path, const OptixDeviceContext ctx, const cudaStream_t stream)
+#include <string.h>
+
+scene scene_create(const char* gltf_path, const OptixDeviceContext ctx, const cudaStream_t stream)
 {
-	scene_optix s = { 0 };
+	scene s = { 0 };
 	cgltf_options gltf_options = { 0 };
 	cgltf_data* gltf_data = NULL;
 
@@ -24,14 +26,14 @@ scene_optix scene_optix_create(const char* gltf_path, const OptixDeviceContext c
 
 			if (s.meshes_count == 0)
 			{
-				s.meshes = malloc(sizeof(mesh_optix));
+				s.meshes = malloc(sizeof(mesh));
 			}
 			else
 			{
-				s.meshes = realloc(s.meshes, sizeof(mesh_optix) * (s.meshes_count + 1));
+				s.meshes = realloc(s.meshes, sizeof(mesh) * (s.meshes_count + 1));
 			}
 
-			s.meshes[s.meshes_count++] = mesh_optix_create(curr_node, ctx, stream);
+			s.meshes[s.meshes_count++] = mesh_create(curr_node, ctx, stream);
 		}
 		else if (curr_node->camera != NULL)
 		{
@@ -42,13 +44,24 @@ scene_optix scene_optix_create(const char* gltf_path, const OptixDeviceContext c
 		}
 	}
 
-	size_t instances_size = sizeof(OptixInstance) * s.meshes_count;
-
-	OptixInstance* instances = malloc(instances_size);
+	size_t instances_count = 0;
 
 	for (size_t m = 0; m < s.meshes_count; ++m)
 	{
-		instances[m] = s.meshes[m].instance;
+		instances_count += s.meshes[m].prims_count;
+	}
+
+	size_t instances_size = sizeof(OptixInstance) * instances_count;
+	OptixInstance* instances = malloc(instances_size);
+	memset(instances, 0, instances_size);
+	size_t instance_idx = 0;
+
+	for (size_t m = 0; m < s.meshes_count; ++m)
+	{
+		for (size_t p = 0; p < s.meshes[m].prims_count; ++p)
+		{
+			instances[instance_idx++] = s.meshes[m].instances[p];
+		}
 	}
 
 	CUdeviceptr d_instances = 0;
@@ -59,8 +72,7 @@ scene_optix scene_optix_create(const char* gltf_path, const OptixDeviceContext c
 		.type = OPTIX_BUILD_INPUT_TYPE_INSTANCES,
 		.instanceArray = {
 			.instances = d_instances,
-			.instanceStride = sizeof(OptixInstance),
-			.numInstances = (unsigned int)s.meshes_count,
+			.numInstances = (unsigned int)instances_count,
 		},
 	};
 
@@ -74,32 +86,34 @@ scene_optix scene_optix_create(const char* gltf_path, const OptixDeviceContext c
 
 	CUdeviceptr d_tmp_buffer = 0;
 	CU_CHECK("alloc ias d_tmp_buffer", cudaMalloc((void**)&d_tmp_buffer, buffer_sizes.tempSizeInBytes));
-	CU_CHECK("alloc ias d_ias_buffer", cudaMalloc((void**)&s.d_ias_buffer, buffer_sizes.outputSizeInBytes));
+	CU_CHECK("alloc ias d_ias_buffer", cudaMalloc((void**)&s.d_ias_op_buffer, buffer_sizes.outputSizeInBytes));
 
-	OPTIX_CHECK("ias accel build", optixAccelBuild(ctx, stream, &accel_options, &build_input, 1, d_tmp_buffer, buffer_sizes.tempSizeInBytes, s.d_ias_buffer, buffer_sizes.outputSizeInBytes, &s.ias_hnd, NULL, 0));
+	OPTIX_CHECK("ias accel build", optixAccelBuild(ctx, stream, &accel_options, &build_input, 1, d_tmp_buffer, buffer_sizes.tempSizeInBytes, s.d_ias_op_buffer, buffer_sizes.outputSizeInBytes, &s.ias_hnd, NULL, 0));
 
 	CU_CHECK("ias accel build sync", cudaStreamSynchronize(stream));
 	CU_CHECK("dealloc d_instances", cudaFree((void*)d_instances));
+	CU_CHECK("dealloc d_tmp_buffer", cudaFree((void*)d_tmp_buffer));
 
 	free(instances);
+
 shutdown:
 	cgltf_free(gltf_data);
 
 	return s;
 }
 
-void scene_optix_destroy(scene_optix s)
+void scene_destroy(scene s)
 {
 	if (s.meshes != NULL)
 	{
 		for (size_t m = 0; m < s.meshes_count; ++m)
 		{
-			mesh_optix_destroy(s.meshes[m]);
+			mesh_destroy(s.meshes[m]);
 		}
 
 		free(s.meshes);
 		s.meshes_count = 0;
 	}
 
-	CU_CHECK("dealloc ias accel buffer", cudaFree((void*)s.d_ias_buffer));
+	CU_CHECK("dealloc ias accel buffer", cudaFree((void*)s.d_ias_op_buffer));
 }

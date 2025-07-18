@@ -7,9 +7,9 @@ typedef struct ray_payload
 
 extern "C" __constant__ launch_params lp;
 
-__device__ static ray_cu ray_cu_create(float3 org, float3 dir)
+__device__ static ray ray_create(float3 org, float3 dir)
 {
-	ray_cu r = { 0 };
+	ray r = { 0 };
 	r.org = org;
 	r.dir = dir;
 	r.inv_dir = { 1.f / dir.x, 1.f / dir.y, 1.f / dir.z };
@@ -45,7 +45,7 @@ __device__ static float3 float3_normalize(float3 v)
 	return float3_scale(v, 1.f / mag);
 }
 
-__device__ static float3 ray_cu_pt_at(ray_cu r, const float t)
+__device__ static float3 ray_pt_at(ray r, const float t)
 {
 	float3 pt = float3_scale(r.dir, t);
 	return float3_add(r.org, pt);
@@ -61,7 +61,7 @@ __device__ static float4 color_blend(float4 src, float4 dst)
 	};
 }
 
-__device__ static ray_cu generate_ray(float2 offset, const size_t x, const size_t y, float3 pixel_00_loc, float3 pixel_delta_u, float3 pixel_delta_v, float3 org)
+__device__ static ray generate_ray(float2 offset, const size_t x, const size_t y, float3 pixel_00_loc, float3 pixel_delta_u, float3 pixel_delta_v, float3 org)
 {
 	float3 pixel_delta_u_x = float3_scale(pixel_delta_u, (float)x);
 	float3 pixel_delta_v_y = float3_scale(pixel_delta_v, (float)y);
@@ -76,9 +76,8 @@ __device__ static ray_cu generate_ray(float2 offset, const size_t x, const size_
 
 	float3 dir = float3_normalize(float3_sub(pixel_center, org));
 
-	return ray_cu_create(org, dir);
+	return ray_create(org, dir);
 }
-
 
 extern "C"  __global__ void __raygen__rg()
 {
@@ -92,7 +91,7 @@ extern "C"  __global__ void __raygen__rg()
 
 	for (size_t s = 0; s < rg_data->num_samples; ++s) {
 		float2 offset = { curand_uniform(&rg_data->states[r_idx]), curand_uniform(&rg_data->states[r_idx]) };
-		ray_cu r = generate_ray(offset, launch_index.x, launch_index.y, rg_data->pixel_00_loc, rg_data->pixel_delta_u, rg_data->pixel_delta_v, rg_data->org);
+		ray r = generate_ray(offset, launch_index.x, launch_index.y, rg_data->pixel_00_loc, rg_data->pixel_delta_u, rg_data->pixel_delta_v, rg_data->org);
 
 		unsigned int sp0 = 0.f, sp1 = 0.f, sp2 = 0.f, sp3 = 0.f;
 		optixTrace(lp.handle, r.org, r.dir, 0.f, 1000.f, 0.f, 0xFF, 0, 0, 0, 0, sp0, sp1, sp2, sp3);
@@ -119,6 +118,14 @@ extern "C" __global__ void __closesthit__ch()
 {
 	float2 bary_coords = optixGetTriangleBarycentrics();
 	uint3 launch_index = optixGetLaunchIndex();
+	unsigned int primitive_idx = optixGetPrimitiveIndex();
+
+	ray_gen_record_data* rg_data = (ray_gen_record_data*)optixGetSbtDataPointer();
+	//uint3 index_triplet = rg_data->indices[primitive_idx];
+
+	//float3 normal = ((1 - bary_coords.x - bary_coords.y) * rg_data->normals[index_triplet.x]) +
+	//	(bary_coords.x * rg_data->normals[index_triplet.y]) +
+	//		(bary_coords.y + rg_data->normals[index_triplet.z]);
 
 	optixSetPayload_0(bary_coords.x * 255);
 	optixSetPayload_1(bary_coords.y * 255);

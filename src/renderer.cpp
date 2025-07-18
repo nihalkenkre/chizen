@@ -1,33 +1,15 @@
-#include "../common/renderer.h"
-#include "../common/utils.h"
-#include "common.cu.h"
+#include "renderer.h"
+#include "utils.h"
+#include "optix/common.cu.h"
 
 #include <Shlwapi.h>
-
-static inline void CU_CHECK(const char* action, const cudaError_t result)
-{
-	if (result > cudaSuccess)
-	{
-		printf("CUDA ERR %d: %s\nExiting...\n", result, action);
-		exit(result);
-	}
-}
-
-static inline void OPTIX_CHECK(const char* action, const OptixResult result)
-{
-	if (result > OPTIX_SUCCESS)
-	{
-		printf("ERR: %s %s\n", action, optixGetErrorName(result));
-		exit(result);
-	}
-}
 
 static void log_cb(unsigned int level, const char* tag, const char* message, void* cbdata)
 {
 	printf("%d - %s: %s\n", level, tag, message);
 }
 
-void renderer_render_optix(const size_t render_width, const size_t render_height, const uint8_t num_samples, const char* gltf_path, uint8_t* pixels)
+void renderer_render(const size_t render_width, const size_t render_height, const uint8_t num_samples, const char* gltf_path, uint8_t* pixels)
 {
 	CU_CHECK("init cuda", cudaFree(nullptr));
 	OPTIX_CHECK("optix init", optixInit());
@@ -46,7 +28,7 @@ void renderer_render_optix(const size_t render_width, const size_t render_height
 	cudaStream_t stream = nullptr;
 	CU_CHECK("create stream", cudaStreamCreate(&stream));
 
-	const scene_optix s = scene_optix_create(gltf_path, ctx, stream);
+	const scene s = scene_create(gltf_path, ctx, stream);
 
 	const OptixPipelineCompileOptions pipeline_compile_options = {
 		.traversableGraphFlags = OPTIX_TRAVERSABLE_GRAPH_FLAG_ALLOW_ANY,
@@ -91,7 +73,7 @@ void renderer_render_optix(const size_t render_width, const size_t render_height
 	OPTIX_CHECK("create module", optixModuleCreate(ctx, &module_compile_options, &pipeline_compile_options, (char*)module_data, module_data_size, nullptr, nullptr, &module));
 
 	const OptixPipelineLinkOptions pipeline_link_options = {
-		.maxTraceDepth = 31, 
+		.maxTraceDepth = 31,
 	};
 
 	const OptixProgramGroupDesc ray_gen_program_group_desc = {
@@ -110,7 +92,7 @@ void renderer_render_optix(const size_t render_width, const size_t render_height
 		},
 	};
 
-	const OptixProgramGroupDesc closest_program_group_desc = {
+	const OptixProgramGroupDesc closest_hit_program_group_desc = {
 		.kind = OPTIX_PROGRAM_GROUP_KIND_HITGROUP,
 		.hitgroup = {
 			.moduleCH = module,
@@ -126,7 +108,7 @@ void renderer_render_optix(const size_t render_width, const size_t render_height
 	OPTIX_CHECK("create ray_gen program group", optixProgramGroupCreate(ctx, &ray_gen_program_group_desc, 1, &module_program_group_options, nullptr, nullptr, &ray_gen_program_group));
 
 	OptixProgramGroup closest_hit_program_group = nullptr;
-	OPTIX_CHECK("create closesthit program group", optixProgramGroupCreate(ctx, &closest_program_group_desc, 1, &module_program_group_options, nullptr, nullptr, &closest_hit_program_group));
+	OPTIX_CHECK("create closesthit program group", optixProgramGroupCreate(ctx, &closest_hit_program_group_desc, 1, &module_program_group_options, nullptr, nullptr, &closest_hit_program_group));
 
 	OptixProgramGroup miss_program_group = nullptr;
 	OPTIX_CHECK("create miss program group", optixProgramGroupCreate(ctx, &miss_program_group_desc, 1, &module_program_group_options, nullptr, nullptr, &miss_program_group));
@@ -206,7 +188,7 @@ void renderer_render_optix(const size_t render_width, const size_t render_height
 
 	CU_CHECK("copy pixels to host", cudaMemcpy(pixels, (void*)d_pixels, render_width * render_height * 4, cudaMemcpyDeviceToHost));
 
-	scene_optix_destroy(s);
+	scene_destroy(s);
 
 	CU_CHECK("dealloc rand states", cudaFree((void*)d_rand_states));
 	CU_CHECK("dealloc miss record ptr", cudaFree((void*)d_miss_record));
