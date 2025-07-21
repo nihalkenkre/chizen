@@ -10,7 +10,7 @@ inline void CU_CHECK(const char* action, const cudaError_t result)
 {
 	if (result > cudaSuccess)
 	{
-		printf("CUDA ERR %d: %s\nExiting...\n", result, action);
+		printf("CUDA ERR %d: %s\nExiting...\n", result, cudaGetErrorName(result));
 		exit(result);
 	}
 }
@@ -23,6 +23,15 @@ inline void OPTIX_CHECK(const char* action, const OptixResult result)
 		exit(result);
 	}
 }
+
+typedef struct custom_gas_data
+{
+	__align__(OPTIX_ACCEL_BUFFER_BYTE_ALIGNMENT)
+		float3* normals;
+	float2* uvs;
+	uint3* indices;
+} custom_gas_data;
+
 
 #ifdef __cplusplus
 extern "C" {

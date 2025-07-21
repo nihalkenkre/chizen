@@ -18,7 +18,7 @@
 
 typedef struct launch_params
 {
-    uint8_t *pixels;
+    float* pixels;
     size_t render_width;
     size_t render_height;
     OptixTraversableHandle handle;
@@ -32,8 +32,6 @@ typedef struct ray_gen_record_data
     float3 org;
     size_t num_samples;
     curandState* states;
-    float3* normals;
-    uint3* indices;
 } ray_gen_record_data;
 
 typedef struct ray_gen_record

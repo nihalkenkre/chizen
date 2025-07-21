@@ -3,7 +3,7 @@
 
 #include <string.h>
 
-mesh mesh_create(cgltf_node* curr_node, const OptixDeviceContext ctx, const cudaStream_t stream)
+mesh mesh_create(cgltf_data* data, cgltf_node* curr_node, const OptixDeviceContext ctx, const cudaStream_t stream)
 {
 	mesh m = { 0 };
 
@@ -21,7 +21,7 @@ mesh mesh_create(cgltf_node* curr_node, const OptixDeviceContext ctx, const cuda
 	glm_mat4_transpose_to(m.xform, xform_transposed);
 	for (size_t p = 0; p < m.prims_count; ++p)
 	{
-		m.prims[p] = primitive_create(curr_mesh->primitives + p, ctx, stream);
+		m.prims[p] = primitive_create(data, curr_mesh->primitives + p, ctx, stream);
 		m.instances[p].flags = inst_flags;
 		m.instances[p].visibilityMask = 0xFF;
 		m.instances[p].traversableHandle = m.prims[p].gas_hnd;

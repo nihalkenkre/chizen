@@ -20,10 +20,14 @@ typedef struct primitive
 	size_t indices_count;
 
 	CUdeviceptr d_positions;
+	CUdeviceptr d_normals;
+	CUdeviceptr d_uvs;
 	CUdeviceptr d_indices;
 	OptixTraversableHandle gas_hnd;
 	CUdeviceptr d_gas_op_buffer;
+
+	int32_t material_index;
 } primitive;
 
-primitive primitive_create(cgltf_primitive* curr_prim, const OptixDeviceContext ctx, const cudaStream_t stream);
+primitive primitive_create(cgltf_data* data, cgltf_primitive* curr_prim, const OptixDeviceContext ctx, const cudaStream_t stream);
 void primitive_destroy(primitive p);

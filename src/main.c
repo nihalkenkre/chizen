@@ -13,13 +13,15 @@
 #define STB_IMAGE_WRITE_IMPLEMENTATION
 #include <stb/stb_image_write.h>
 
+#include "misc.hpp"
+
 const float RENDER_HEIGHT = 720.f;
 const float ASPECT_RATIO = 16.f / 9.f;
 const uint8_t NUM_SAMPLES = 32;
 
 int main(int argc, char** argv)
 {
-	uint8_t* pixels = NULL;
+	float* pixels = NULL;
 
 	printf("Hello World\n");
 
@@ -42,24 +44,21 @@ int main(int argc, char** argv)
 	}
 
 	const float RENDER_WIDTH = RENDER_HEIGHT * ASPECT_RATIO;
-	pixels = malloc((size_t)(RENDER_WIDTH * RENDER_HEIGHT) * 4);
-	if (pixels == NULL)
-		goto shutdown;
 
-	memset(pixels, 0, (size_t)(RENDER_WIDTH * RENDER_HEIGHT) * 4);
+	pixels = malloc((size_t)(RENDER_WIDTH * RENDER_HEIGHT * 4 * sizeof(float)));
+	memset(pixels, 0, (size_t)(RENDER_WIDTH * RENDER_HEIGHT) * 4 * sizeof(float));
 
 	renderer_render((size_t)RENDER_WIDTH, (size_t)RENDER_HEIGHT, NUM_SAMPLES, gltf_path, pixels);
 
 	char img_path[MAX_PATH];
 	GetModuleFileNameA(GetModuleHandleA(NULL), img_path, MAX_PATH);
 	PathRemoveFileSpecA(img_path);
-	strcat(img_path, "\\test.png");
+	strcat(img_path, "\\test.exr");
 
-	stbi_write_png(img_path, (int)RENDER_WIDTH, (int)RENDER_HEIGHT, 4, pixels, 0);
+	write_exr(img_path, (size_t)RENDER_WIDTH, (size_t)RENDER_HEIGHT, pixels);
 
 shutdown:
-	if (pixels != NULL)
-		free(pixels);
+	free(pixels);
 
 	printf("Bye World\n");
 	return 0;

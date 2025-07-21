@@ -15,7 +15,7 @@
   </ItemGroup>
   <ItemGroup>
     <None Include="..\..\src\build_shaders.bat" />
-    <None Include="..\..\src\pbr.cu">
+    <None Include="..\..\src\optix\pbr.cu">
       <Filter>Optix</Filter>
     </None>
   </ItemGroup>
@@ -44,6 +44,9 @@
     <ClCompile Include="..\..\src\utils.c">
       <Filter>Sources</Filter>
     </ClCompile>
+    <ClCompile Include="..\..\src\misc.cpp">
+      <Filter>Sources</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="..\..\src\camera.h">
@@ -67,8 +70,11 @@
     <ClInclude Include="..\..\src\utils.h">
       <Filter>Headers</Filter>
     </ClInclude>
-    <ClInclude Include="..\..\src\common.cu.h">
+    <ClInclude Include="..\..\src\optix\common.cu.h">
       <Filter>Optix</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\src\misc.hpp">
+      <Filter>Headers</Filter>
     </ClInclude>
   </ItemGroup>
 </Project>

@@ -33,7 +33,7 @@ scene scene_create(const char* gltf_path, const OptixDeviceContext ctx, const cu
 				s.meshes = realloc(s.meshes, sizeof(mesh) * (s.meshes_count + 1));
 			}
 
-			s.meshes[s.meshes_count++] = mesh_create(curr_node, ctx, stream);
+			s.meshes[s.meshes_count++] = mesh_create(gltf_data, curr_node, ctx, stream);
 		}
 		else if (curr_node->camera != NULL)
 		{

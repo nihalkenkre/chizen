@@ -20,13 +20,14 @@
   </ItemGroup>
   <ItemGroup>
     <None Include="..\..\src\build_shaders.bat" />
-    <None Include="..\..\src\pbr.cu" />
+    <None Include="..\..\src\optix\pbr.cu" />
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="..\..\src\camera.c" />
     <ClCompile Include="..\..\src\main.c" />
     <ClCompile Include="..\..\src\material.c" />
     <ClCompile Include="..\..\src\mesh.c" />
+    <ClCompile Include="..\..\src\misc.cpp" />
     <ClCompile Include="..\..\src\primitive.c" />
     <ClCompile Include="..\..\src\renderer.cpp" />
     <ClCompile Include="..\..\src\scene.c" />
@@ -34,7 +35,8 @@
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="..\..\src\camera.h" />
-    <ClInclude Include="..\..\src\common.cu.h" />
+    <ClInclude Include="..\..\src\misc.hpp" />
+    <ClInclude Include="..\..\src\optix\common.cu.h" />
     <ClInclude Include="..\..\src\material.h" />
     <ClInclude Include="..\..\src\mesh.h" />
     <ClInclude Include="..\..\src\primitive.h" />
@@ -131,14 +133,14 @@
       <ConformanceMode>true</ConformanceMode>
       <LanguageStandard_C>stdc17</LanguageStandard_C>
       <ExceptionHandling>false</ExceptionHandling>
-      <AdditionalIncludeDirectories>$(SolutionDir)..\..;%(AdditionalIncludeDirectories);%OPTIX_PATH%/Include;%OPTIX_PATH%/SDK;%CUDA_PATH%/include</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>$(SolutionDir)..\..;%(AdditionalIncludeDirectories);%OPTIX_PATH%/Include;%OPTIX_PATH%/SDK;%CUDA_PATH%/include;%OPENEXR_PATH%\build\src\examples;%OPENEXR_PATH%\src\examples;%OPENEXR_PATH%\build\_deps\openjph-src\src\core\common;%OPENEXR_PATH%\src\lib\OpenEXR;%OPENEXR_PATH%\build\cmake;%OPENEXR_PATH%\build\_deps\imath-src\src\Imath;%OPENEXR_PATH%\build\_deps\imath-build\config;%OPENEXR_PATH%\src\lib\Iex;%OPENEXR_PATH%\src\lib\IlmThread;C:\Users\nihal\Documents\openexr\src\lib\OpenEXRCore</AdditionalIncludeDirectories>
       <LanguageStandard>stdcpp20</LanguageStandard>
     </ClCompile>
     <Link>
       <SubSystem>Console</SubSystem>
       <GenerateDebugInformation>true</GenerateDebugInformation>
-      <AdditionalDependencies>$(CoreLibraryDependencies);%(AdditionalDependencies);shlwapi.lib;cudart.lib;curand.lib</AdditionalDependencies>
-      <AdditionalLibraryDirectories>%CUDA_PATH%/lib/x64</AdditionalLibraryDirectories>
+      <AdditionalDependencies>$(CoreLibraryDependencies);%(AdditionalDependencies);shlwapi.lib;cudart.lib;curand.lib;OpenEXRCore-3_4_d.lib;openjph.0.21_d.lib;OpenEXR-3_4_d.lib;IlmThread-3_4_d.lib;Iex-3_4_d.lib;Imath-3_2_d.lib</AdditionalDependencies>
+      <AdditionalLibraryDirectories>%CUDA_PATH%/lib/x64;%OPENEXR_PATH%/build/src/lib/OpenEXRCore/Debug;%OPENEXR_PATH%/build/_deps/openjph-build/src/core/Debug;%OPENEXR_PATH%/build/_deps/imath-build/src/Imath/Debug;%OPENEXR_PATH%/build/src/lib/Iex/Debug;%OPENEXR_PATH%/build/src/lib/IlmThread/Debug;%OPENEXR_PATH%/build/src/lib/OpenEXR/Debug</AdditionalLibraryDirectories>
     </Link>
     <CudaLink>
       <AdditionalDependencies>cudart.lib;</AdditionalDependencies>
@@ -150,6 +152,10 @@
     <PostBuildEvent>
       <Command>$(SolutionDir)..\..\src\build_shaders.bat $(SolutionDir) $(ConfigurationName) $(TargetDir)</Command>
     </PostBuildEvent>
+    <PreBuildEvent>
+      <Command>
+      </Command>
+    </PreBuildEvent>
   </ItemDefinitionGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
     <ClCompile>
@@ -161,7 +167,7 @@
       <ConformanceMode>true</ConformanceMode>
       <LanguageStandard_C>stdc17</LanguageStandard_C>
       <ExceptionHandling>false</ExceptionHandling>
-      <AdditionalIncludeDirectories>$(SolutionDir)..\..;%(AdditionalIncludeDirectories);%OPTIX_PATH%/Include;%OPTIX_PATH%/SDK;%CUDA_PATH%/include</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>$(SolutionDir)..\..;%(AdditionalIncludeDirectories);%OPTIX_PATH%/Include;%OPTIX_PATH%/SDK;%CUDA_PATH%/include;%OPENEXR_PATH%\build\src\examples;%OPENEXR_PATH%\src\examples;%OPENEXR_PATH%\build\_deps\openjph-src\src\core\common;%OPENEXR_PATH%\src\lib\OpenEXR;%OPENEXR_PATH%\build\cmake;%OPENEXR_PATH%\build\_deps\imath-src\src\Imath;%OPENEXR_PATH%\build\_deps\imath-build\config;%OPENEXR_PATH%\src\lib\Iex;%OPENEXR_PATH%\src\lib\IlmThread;C:\Users\nihal\Documents\openexr\src\lib\OpenEXRCore</AdditionalIncludeDirectories>
       <LanguageStandard>stdcpp20</LanguageStandard>
     </ClCompile>
     <Link>
@@ -169,8 +175,8 @@
       <EnableCOMDATFolding>true</EnableCOMDATFolding>
       <OptimizeReferences>true</OptimizeReferences>
       <GenerateDebugInformation>true</GenerateDebugInformation>
-      <AdditionalDependencies>$(CoreLibraryDependencies);%(AdditionalDependencies);shlwapi.lib;cudart.lib;curand.lib</AdditionalDependencies>
-      <AdditionalLibraryDirectories>%CUDA_PATH%/lib/x64</AdditionalLibraryDirectories>
+      <AdditionalDependencies>$(CoreLibraryDependencies);%(AdditionalDependencies);shlwapi.lib;cudart.lib;curand.lib;OpenEXRCore-3_4.lib;openjph.0.21.lib;OpenEXR-3_4.lib;IlmThread-3_4.lib;Iex-3_4.lib;Imath-3_2.lib</AdditionalDependencies>
+      <AdditionalLibraryDirectories>%CUDA_PATH%/lib/x64;%OPENEXR_PATH%/build/src/lib/OpenEXRCore/MinSizeRel;%OPENEXR_PATH%/build/_deps/openjph-build/src/core/MinSizeRel;%OPENEXR_PATH%/build/_deps/imath-build/src/Imath/MinSizeRel;%OPENEXR_PATH%/build/src/lib/Iex/MinSizeRel;%OPENEXR_PATH%/build/src/lib/IlmThread/MinSizeRel;%OPENEXR_PATH%/build/src/lib/OpenEXR/MinSizeRel</AdditionalLibraryDirectories>
     </Link>
     <CudaLink>
       <AdditionalDependencies>cudart.lib;</AdditionalDependencies>
@@ -182,6 +188,10 @@
     <PostBuildEvent>
       <Command>$(SolutionDir)..\..\src\build_shaders.bat $(SolutionDir) $(ConfigurationName) $(TargetDir)</Command>
     </PostBuildEvent>
+    <PreBuildEvent>
+      <Command>
+      </Command>
+    </PreBuildEvent>
   </ItemDefinitionGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets" />

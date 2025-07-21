@@ -9,7 +9,7 @@ static void log_cb(unsigned int level, const char* tag, const char* message, voi
 	printf("%d - %s: %s\n", level, tag, message);
 }
 
-void renderer_render(const size_t render_width, const size_t render_height, const uint8_t num_samples, const char* gltf_path, uint8_t* pixels)
+void renderer_render(const size_t render_width, const size_t render_height, const uint8_t num_samples, const char* gltf_path, float* pixels)
 {
 	CU_CHECK("init cuda", cudaFree(nullptr));
 	OPTIX_CHECK("optix init", optixInit());
@@ -56,10 +56,16 @@ void renderer_render(const size_t render_width, const size_t render_height, cons
 	OFSTRUCT open_file = { 0 };
 	HANDLE h_file = (HANDLE)OpenFile(curr_dir, &open_file, OF_READ);
 
-	unsigned int module_data_size = (unsigned int)GetFileSize(h_file, nullptr);
-	void* module_data = malloc(module_data_size);
+	LARGE_INTEGER file_size = { 0 };
+	if (!GetFileSizeEx(h_file, &file_size))
+	{
+		printf("GetFileSizeEx failed for %s with %d\n", curr_dir, GetLastError());
+		return;
+	}
 
-	if (!ReadFile(h_file, module_data, module_data_size, nullptr, nullptr))
+	void* module_data = malloc(file_size.QuadPart);
+
+	if (!ReadFile(h_file, module_data, (DWORD)file_size.QuadPart, nullptr, nullptr))
 	{
 		printf("Could not read module file: %s - %d\n", curr_dir, GetLastError());
 		if (module_data != nullptr)
@@ -70,7 +76,7 @@ void renderer_render(const size_t render_width, const size_t render_height, cons
 	}
 
 	OptixModule module = nullptr;
-	OPTIX_CHECK("create module", optixModuleCreate(ctx, &module_compile_options, &pipeline_compile_options, (char*)module_data, module_data_size, nullptr, nullptr, &module));
+	OPTIX_CHECK("create module", optixModuleCreate(ctx, &module_compile_options, &pipeline_compile_options, (char*)module_data, file_size.QuadPart, nullptr, nullptr, &module));
 
 	const OptixPipelineLinkOptions pipeline_link_options = {
 		.maxTraceDepth = 31,
@@ -161,10 +167,10 @@ void renderer_render(const size_t render_width, const size_t render_height, cons
 	};
 
 	CUdeviceptr d_pixels = 0;
-	CU_CHECK("alloc d_pixels", cudaMalloc((void**)&d_pixels, render_width * render_height * 4));
+	CU_CHECK("alloc d_pixels", cudaMalloc((void**)&d_pixels, render_width * render_height * 4 * sizeof(float)));
 
 	const launch_params lp = {
-		.pixels = (uint8_t*)d_pixels,
+		.pixels = (float*)d_pixels,
 		.render_width = render_width,
 		.render_height = render_height,
 		.handle = s.ias_hnd,
@@ -184,9 +190,10 @@ void renderer_render(const size_t render_width, const size_t render_height, cons
 
 	OPTIX_CHECK("launch optix", optixLaunch(pipeline, stream, d_launch_params, sizeof(launch_params), &sbt, (unsigned int)render_width, (unsigned int)render_height, 1));
 
+	CU_CHECK("launch optix kernel", cudaGetLastError());
 	CU_CHECK("cuda sync", cudaStreamSynchronize(stream));
 
-	CU_CHECK("copy pixels to host", cudaMemcpy(pixels, (void*)d_pixels, render_width * render_height * 4, cudaMemcpyDeviceToHost));
+	CU_CHECK("copy pixels to host", cudaMemcpy(pixels, (void*)d_pixels, render_width * render_height * 4 * sizeof(float), cudaMemcpyDeviceToHost));
 
 	scene_destroy(s);
 
