@@ -14,11 +14,12 @@
 #endif
 #include <optix_stack_size.h>
 #include <optix_function_table_definition.h>
-#include <sutil/vec_math.h>
+
+#include "../utils.h"
 
 typedef struct launch_params
 {
-    float** passes_pixels;
+    exr_pass* passes;
     size_t passes_count;
     size_t render_width;
     size_t render_height;

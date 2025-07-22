@@ -23,6 +23,24 @@ inline void OPTIX_CHECK(const char* action, const OptixResult result)
 	}
 }
 
+typedef enum EXR_LAYER
+{
+	EXR_LAYER_NORMAL,
+	EXR_LAYER_UV,
+} EXR_LAYER;
+
+typedef struct exr_pass
+{
+	float* pixels;
+	EXR_LAYER layer;
+} exr_pass;
+
+typedef struct d_exr_pass
+{
+	CUdeviceptr pixels;
+	EXR_LAYER layer;
+} d_exr_pass;
+
 typedef struct custom_gas_data
 {
 	__align__(OPTIX_ACCEL_BUFFER_BYTE_ALIGNMENT)

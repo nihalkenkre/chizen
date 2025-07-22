@@ -9,7 +9,7 @@ static void log_cb(unsigned int level, const char* tag, const char* message, voi
 	printf("%d - %s: %s\n", level, tag, message);
 }
 
-void renderer_render(const size_t render_width, const size_t render_height, const uint8_t num_samples, const char* gltf_path, float** passes_pixels, const size_t passes_count)
+void renderer_render(const size_t render_width, const size_t render_height, const uint8_t num_samples, const char* gltf_path, exr_pass* passes, const size_t passes_count)
 {
 	CU_CHECK("init cuda", cudaFree(nullptr));
 	OPTIX_CHECK("optix init", optixInit());
@@ -166,20 +166,20 @@ void renderer_render(const size_t render_width, const size_t render_height, cons
 		.hitgroupRecordCount = 1,
 	};
 
-	float** d_passes_pixels_tmp = reinterpret_cast<float**>(malloc(sizeof(float*) * passes_count));
+	d_exr_pass* d_exr_passes_tmp = reinterpret_cast<d_exr_pass*>(malloc(sizeof(d_exr_pass) * passes_count));
 
-	for (size_t pp = 0; pp < passes_count; ++pp)
+	for (size_t p = 0; p < passes_count; ++p)
 	{
-		CU_CHECK("alloc d_pixels", cudaMalloc((void**)(&d_passes_pixels_tmp[pp]), render_width * render_height * 4 * sizeof(float)));
+		d_exr_passes_tmp[p].layer = passes[p].layer;
+		CU_CHECK("alloc d_exr_pass_tmp_pixels", cudaMalloc((void**)(&d_exr_passes_tmp[p].pixels), render_width * render_height * 4 * sizeof(float)));
 	}
 
-	CUdeviceptr d_passes_pixels = 0;
-
-	CU_CHECK("alloc d_passes_pixels", cudaMalloc((void**)&d_passes_pixels, sizeof(CUdeviceptr) * passes_count));
-	CU_CHECK("copy passes_pixels ptr to device", cudaMemcpy((void*)d_passes_pixels, d_passes_pixels_tmp, sizeof(CUdeviceptr) * passes_count, cudaMemcpyHostToDevice));
+	CUdeviceptr d_exr_passes = 0;
+	CU_CHECK("alloc d_exr_passes", cudaMalloc((void**)&d_exr_passes, sizeof(d_exr_pass) * passes_count));
+	CU_CHECK("copy d_exr_passes", cudaMemcpy((void*)d_exr_passes, d_exr_passes_tmp, sizeof(exr_pass) * passes_count, cudaMemcpyHostToDevice));
 
 	const launch_params lp = {
-		.passes_pixels = (float**)d_passes_pixels,
+		.passes = (exr_pass*)d_exr_passes,
 		.passes_count = passes_count,
 		.render_width = render_width,
 		.render_height = render_height,
@@ -203,9 +203,9 @@ void renderer_render(const size_t render_width, const size_t render_height, cons
 	CU_CHECK("optix kernel", cudaGetLastError());
 	CU_CHECK("stream sync", cudaStreamSynchronize(stream));
 
-	for (size_t pp = 0; pp < passes_count; ++pp)
+	for (size_t p = 0; p < passes_count; ++p)
 	{
-		CU_CHECK("copy pixels to host", cudaMemcpy(passes_pixels[pp], (void*)(((CUdeviceptr*)d_passes_pixels_tmp)[pp]), render_width * render_height * 4 * sizeof(float), cudaMemcpyDeviceToHost));
+		CU_CHECK("copy pixels to host", cudaMemcpy(passes[p].pixels, (void*)((d_exr_pass*)d_exr_passes_tmp)[p].pixels, render_width * render_height * 4 * sizeof(float), cudaMemcpyDeviceToHost));
 	}
 
 	scene_destroy(s);
@@ -218,13 +218,13 @@ void renderer_render(const size_t render_width, const size_t render_height, cons
 	OPTIX_CHECK("destroy module", optixModuleDestroy(module));
 	OPTIX_CHECK("pipeline destroy", optixPipelineDestroy(pipeline));
 	CU_CHECK("destroy stream", cudaStreamDestroy(stream));
-	for (size_t pp = 0; pp < passes_count; ++pp)
+	for (size_t p = 0; p < passes_count; ++p)
 	{
-		CU_CHECK("dealloc d_pixels", cudaFree((void*)(((CUdeviceptr*)d_passes_pixels_tmp)[pp])));
+		CU_CHECK("dealloc d_pixels", cudaFree((void*) ((d_exr_pass*)d_exr_passes_tmp)[p].pixels));
 	}
-	free(d_passes_pixels_tmp);
+	free(d_exr_passes_tmp);
 
-	CU_CHECK("dealloc d_passes_pixels", cudaFree((void*)d_passes_pixels));
+	CU_CHECK("dealloc d_passes_pixels", cudaFree((void*)d_exr_passes));
 	CU_CHECK("dealloc d_launch_params", cudaFree((void*)d_launch_params));
 	OPTIX_CHECK("optix device context destroy", optixDeviceContextDestroy(ctx));
 }

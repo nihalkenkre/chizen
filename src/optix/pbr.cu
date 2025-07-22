@@ -86,8 +86,8 @@ extern "C"  __global__ void __raygen__rg()
 	uint3 launch_index = optixGetLaunchIndex();
 	ray_gen_record_data* rg_data = (ray_gen_record_data*)optixGetSbtDataPointer();
 
-	float n0 = 0, n1 = 0, n2 = 0, n3 = 0;
-	float uv0 = 0, uv1 = 0, uv2 = 0, uv3 = 0;
+	//float n0 = 0, n1 = 0, n2 = 0, n3 = 0;
+	//float uv0 = 0, uv1 = 0, uv2 = 0, uv3 = 0;
 	unsigned int r_idx = threadIdx.x + blockIdx.x * blockDim.x;
 
 	curand_init(launch_index.x + launch_index.y, launch_index.x + launch_index.y, 0, &rg_data->states[r_idx]);
@@ -96,42 +96,18 @@ extern "C"  __global__ void __raygen__rg()
 		float2 offset = { curand_uniform(&rg_data->states[r_idx]), curand_uniform(&rg_data->states[r_idx]) };
 		ray r = generate_ray(offset, launch_index.x, launch_index.y, rg_data->pixel_00_loc, rg_data->pixel_delta_u, rg_data->pixel_delta_v, rg_data->org);
 
-		unsigned int sn0 = 0.f, sn1 = 0.f, sn2 = 0.f, sn3 = 0.f;
-		unsigned int suv0 = 0.f, suv1 = 0.f, suv2 = 0.f, suv3 = 0.f;
-		optixTrace(lp.handle, r.org, r.dir, 0.f, 1000.f, 0.f, 0xFF, 0, 0, 0, 0, sn0, sn1, sn2, sn3, suv0, suv1, suv2, suv3);
-
-		n0 += __uint_as_float(sn0);
-		n1 += __uint_as_float(sn1);
-		n2 += __uint_as_float(sn2);
-		n3 += __uint_as_float(sn3);
-
-		uv0 += __uint_as_float(suv0);
-		uv1 += __uint_as_float(suv1);
-		uv2 += __uint_as_float(suv2);
-		uv3 += __uint_as_float(suv3);
+		optixTrace(lp.handle, r.org, r.dir, 0.f, 1000.f, 0.f, 0xFF, 0, 0, 0, 0);
 	}
-
-	n0 /= rg_data->num_samples;
-	n1 /= rg_data->num_samples;
-	n2 /= rg_data->num_samples;
-	n3 /= rg_data->num_samples;
-
-	uv0 /= rg_data->num_samples;
-	uv1 /= rg_data->num_samples;
-	uv2 /= rg_data->num_samples;
-	uv3 /= rg_data->num_samples;
 
 	size_t pixel_idx = (launch_index.y * lp.render_width * 4) + (launch_index.x * 4);
 
-	lp.passes_pixels[0][pixel_idx] = n0;
-	lp.passes_pixels[0][pixel_idx + 1] = n1;
-	lp.passes_pixels[0][pixel_idx + 2] = n2;
-	lp.passes_pixels[0][pixel_idx + 3] = n3;
-
-	lp.passes_pixels[1][pixel_idx] = uv0;
-	lp.passes_pixels[1][pixel_idx + 1] = uv1;
-	lp.passes_pixels[1][pixel_idx + 2] = uv2;
-	lp.passes_pixels[1][pixel_idx + 3] = uv3;
+	for (size_t p = 0; p < lp.passes_count; ++p)
+	{
+		lp.passes[p].pixels[pixel_idx] /= rg_data->num_samples;
+		lp.passes[p].pixels[pixel_idx + 1] /= rg_data->num_samples;
+		lp.passes[p].pixels[pixel_idx + 2] /= rg_data->num_samples;
+		lp.passes[p].pixels[pixel_idx + 3] /= rg_data->num_samples;
+	}
 }
 
 extern "C" __global__ void __closesthit__ch()
@@ -157,41 +133,34 @@ extern "C" __global__ void __closesthit__ch()
 			cgd->normals[index_triplet.z] * bary_coords.y)
 		);
 
-	optixSetPayload_0(__float_as_uint(normal.x));
-	optixSetPayload_1(__float_as_uint(normal.y));
-	optixSetPayload_2(__float_as_uint(normal.z));
-	optixSetPayload_3(__float_as_uint(1.f));
+	float2 uv = { 0,0 };
 
 	if (cgd->uvs > 0)
 	{
-		float2 uv =
-			cgd->uvs[index_triplet.x] * bary_coords.z + cgd->uvs[index_triplet.y] * bary_coords.x + cgd->uvs[index_triplet.z] * bary_coords.y;
-
-		optixSetPayload_4(__float_as_uint(uv.x));
-		optixSetPayload_5(__float_as_uint(uv.y));
-		optixSetPayload_6(0);
-		optixSetPayload_7(1);
+		uv = cgd->uvs[index_triplet.x] * bary_coords.z + cgd->uvs[index_triplet.y] * bary_coords.x + cgd->uvs[index_triplet.z] * bary_coords.y;
 	}
-	else
+
+	size_t pixel_idx = (launch_index.y * lp.render_width * 4) + (launch_index.x * 4);
+	for (size_t p = 0; p < lp.passes_count; ++p)
 	{
-		optixSetPayload_4(0);
-		optixSetPayload_5(0);
-		optixSetPayload_6(0);
-		optixSetPayload_7(1);
+		if (lp.passes[p].layer == EXR_LAYER_NORMAL)
+		{
+			lp.passes[p].pixels[pixel_idx] += normal.x;
+			lp.passes[p].pixels[pixel_idx + 1] += normal.y;
+			lp.passes[p].pixels[pixel_idx + 2] += normal.z;
+			lp.passes[p].pixels[pixel_idx + 3] += 1.f;
+		}
+		else if (lp.passes[p].layer == EXR_LAYER_UV)
+		{
+			lp.passes[p].pixels[pixel_idx] += uv.x;
+			lp.passes[p].pixels[pixel_idx + 1] += uv.y;
+			lp.passes[p].pixels[pixel_idx + 2] += 0;
+			lp.passes[p].pixels[pixel_idx + 3] += 1.f;
+		}
 	}
 }
 
 extern "C" __global__ void __miss__ms()
 {
 	miss_record_data* ms_data = (miss_record_data*)optixGetSbtDataPointer();
-
-	optixSetPayload_0(0);
-	optixSetPayload_1(0);
-	optixSetPayload_2(0);
-	optixSetPayload_3(0);
-
-	optixSetPayload_4(0);
-	optixSetPayload_5(0);
-	optixSetPayload_6(0);
-	optixSetPayload_7(0);
 }

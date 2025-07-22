@@ -14,6 +14,7 @@
 #include <stb/stb_image_write.h>
 
 #include "misc.hpp"
+#include "utils.h"
 
 const float RENDER_HEIGHT = 720.f;
 const float ASPECT_RATIO = 16.f / 9.f;
@@ -43,7 +44,8 @@ int main(int argc, char** argv)
 
 	const float RENDER_WIDTH = RENDER_HEIGHT * ASPECT_RATIO;
 
-	const exr_pass passes[] = {
+	exr_pass passes[] = 
+	{
 		{
 			.layer = EXR_LAYER_NORMAL,
 			.pixels = malloc((size_t)(RENDER_WIDTH * RENDER_HEIGHT * 4 * sizeof(float))),
@@ -54,14 +56,7 @@ int main(int argc, char** argv)
 		},
 	};
 
-	float** passes_pixels = malloc(sizeof(float*) * _countof(passes));
-
-	for (size_t pp = 0; pp < _countof(passes); ++pp)
-	{
-		passes_pixels[pp] = passes[pp].pixels;
-	}
-
-	renderer_render((size_t)RENDER_WIDTH, (size_t)RENDER_HEIGHT, NUM_SAMPLES, gltf_path, passes_pixels, _countof(passes));
+	renderer_render((size_t)RENDER_WIDTH, (size_t)RENDER_HEIGHT, NUM_SAMPLES, gltf_path, passes, _countof(passes));
 
 	char img_path[MAX_PATH];
 	GetModuleFileNameA(GetModuleHandleA(NULL), img_path, MAX_PATH);
@@ -74,8 +69,6 @@ int main(int argc, char** argv)
 	{
 		free(passes[p].pixels);
 	}
-
-	free(passes_pixels);
 
 shutdown:
 

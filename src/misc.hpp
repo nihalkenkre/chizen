@@ -1,16 +1,6 @@
 #pragma once
 
-typedef enum EXR_LAYER
-{
-	EXR_LAYER_NORMAL,
-	EXR_LAYER_UV,
-} EXR_LAYER;
-
-typedef struct exr_pass
-{
-	EXR_LAYER layer;
-	float* pixels;
-} exr_pass;
+#include "utils.h"
 
 #ifdef __cplusplus
 extern "C" {

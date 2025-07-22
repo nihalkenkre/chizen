@@ -5,6 +5,8 @@
 #include <ImfHeader.h>
 #include <ImfFrameBuffer.h>
 
+#include "utils.h"
+
 void write_exr(const char* file_path, const size_t render_width, const size_t render_height, const exr_pass* passes, const size_t passes_count)
 {
 	Imf_3_4::Header header((int)render_width, (int)render_height);
@@ -18,6 +20,7 @@ void write_exr(const char* file_path, const size_t render_width, const size_t re
 			header.channels().insert("Normal.G", Imf_3_4::Channel(Imf_3_4::FLOAT));
 			header.channels().insert("Normal.B", Imf_3_4::Channel(Imf_3_4::FLOAT));
 			header.channels().insert("Normal.A", Imf_3_4::Channel(Imf_3_4::FLOAT));
+
 			framebuffer.insert("Normal.R", Imf_3_4::Slice(Imf_3_4::FLOAT, reinterpret_cast<char*>(passes[p].pixels), sizeof(float) * 4, sizeof(float) * 4 * render_width));
 			framebuffer.insert("Normal.G", Imf_3_4::Slice(Imf_3_4::FLOAT, reinterpret_cast<char*>(&passes[p].pixels[1]), sizeof(float) * 4, sizeof(float) * 4 * render_width));
 			framebuffer.insert("Normal.B", Imf_3_4::Slice(Imf_3_4::FLOAT, reinterpret_cast<char*>(&passes[p].pixels[2]), sizeof(float) * 4, sizeof(float) * 4 * render_width));
