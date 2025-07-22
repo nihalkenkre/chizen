@@ -5,20 +5,37 @@
 #include <ImfHeader.h>
 #include <ImfFrameBuffer.h>
 
-void write_exr(const char* file_path, const size_t render_width, const size_t render_height, float* pixels)
+void write_exr(const char* file_path, const size_t render_width, const size_t render_height, const exr_pass* passes, const size_t passes_count)
 {
 	Imf_3_4::Header header((int)render_width, (int)render_height);
-	header.channels().insert("R", Imf_3_4::Channel(Imf_3_4::FLOAT));
-	header.channels().insert("G", Imf_3_4::Channel(Imf_3_4::FLOAT));
-	header.channels().insert("B", Imf_3_4::Channel(Imf_3_4::FLOAT));
-	header.channels().insert("A", Imf_3_4::Channel(Imf_3_4::FLOAT));
-
 	Imf_3_4::FrameBuffer framebuffer;
 
-	framebuffer.insert("R", Imf_3_4::Slice(Imf_3_4::FLOAT, reinterpret_cast<char*>(pixels), sizeof(float) * 4, sizeof(float) * 4 * render_width));
-	framebuffer.insert("G", Imf_3_4::Slice(Imf_3_4::FLOAT, reinterpret_cast<char*>(pixels) + sizeof(float), sizeof(float) * 4, sizeof(float) * 4 * render_width));
-	framebuffer.insert("B", Imf_3_4::Slice(Imf_3_4::FLOAT, reinterpret_cast<char*>(pixels) + (sizeof(float) * 2), sizeof(float) * 4, sizeof(float) * 4 * render_width));
-	framebuffer.insert("A", Imf_3_4::Slice(Imf_3_4::FLOAT, reinterpret_cast<char*>(pixels) + (sizeof(float) * 3), sizeof(float) * 4, sizeof(float) * 4 * render_width));
+	for (size_t p = 0; p < passes_count; ++p)
+	{
+		if (passes[p].layer == EXR_LAYER_NORMAL)
+		{
+			header.channels().insert("Normal.R", Imf_3_4::Channel(Imf_3_4::FLOAT));
+			header.channels().insert("Normal.G", Imf_3_4::Channel(Imf_3_4::FLOAT));
+			header.channels().insert("Normal.B", Imf_3_4::Channel(Imf_3_4::FLOAT));
+			header.channels().insert("Normal.A", Imf_3_4::Channel(Imf_3_4::FLOAT));
+			framebuffer.insert("Normal.R", Imf_3_4::Slice(Imf_3_4::FLOAT, reinterpret_cast<char*>(passes[p].pixels), sizeof(float) * 4, sizeof(float) * 4 * render_width));
+			framebuffer.insert("Normal.G", Imf_3_4::Slice(Imf_3_4::FLOAT, reinterpret_cast<char*>(&passes[p].pixels[1]), sizeof(float) * 4, sizeof(float) * 4 * render_width));
+			framebuffer.insert("Normal.B", Imf_3_4::Slice(Imf_3_4::FLOAT, reinterpret_cast<char*>(&passes[p].pixels[2]), sizeof(float) * 4, sizeof(float) * 4 * render_width));
+			framebuffer.insert("Normal.A", Imf_3_4::Slice(Imf_3_4::FLOAT, reinterpret_cast<char*>(&passes[p].pixels[3]), sizeof(float) * 4, sizeof(float) * 4 * render_width));
+		}
+		else if (passes[p].layer == EXR_LAYER_UV)
+		{
+			header.channels().insert("UV.R", Imf_3_4::Channel(Imf_3_4::FLOAT));
+			header.channels().insert("UV.G", Imf_3_4::Channel(Imf_3_4::FLOAT));
+			header.channels().insert("UV.B", Imf_3_4::Channel(Imf_3_4::FLOAT));
+			header.channels().insert("UV.A", Imf_3_4::Channel(Imf_3_4::FLOAT));
+
+			framebuffer.insert("UV.R", Imf_3_4::Slice(Imf_3_4::FLOAT, reinterpret_cast<char*>(passes[p].pixels), sizeof(float) * 4, sizeof(float) * 4 * render_width));
+			framebuffer.insert("UV.G", Imf_3_4::Slice(Imf_3_4::FLOAT, reinterpret_cast<char*>(&passes[p].pixels[1]), sizeof(float) * 4, sizeof(float) * 4 * render_width));
+			framebuffer.insert("UV.B", Imf_3_4::Slice(Imf_3_4::FLOAT, reinterpret_cast<char*>(&passes[p].pixels[2]), sizeof(float) * 4, sizeof(float) * 4 * render_width));
+			framebuffer.insert("UV.A", Imf_3_4::Slice(Imf_3_4::FLOAT, reinterpret_cast<char*>(&passes[p].pixels[3]), sizeof(float) * 4, sizeof(float) * 4 * render_width));
+		}
+	}
 
 	Imf_3_4::OutputFile output_file(file_path, header);
 	output_file.setFrameBuffer(framebuffer);

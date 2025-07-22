@@ -86,7 +86,8 @@ extern "C"  __global__ void __raygen__rg()
 	uint3 launch_index = optixGetLaunchIndex();
 	ray_gen_record_data* rg_data = (ray_gen_record_data*)optixGetSbtDataPointer();
 
-	float p0 = 0, p1 = 0, p2 = 0, p3 = 0;
+	float n0 = 0, n1 = 0, n2 = 0, n3 = 0;
+	float uv0 = 0, uv1 = 0, uv2 = 0, uv3 = 0;
 	unsigned int r_idx = threadIdx.x + blockIdx.x * blockDim.x;
 
 	curand_init(launch_index.x + launch_index.y, launch_index.x + launch_index.y, 0, &rg_data->states[r_idx]);
@@ -95,26 +96,42 @@ extern "C"  __global__ void __raygen__rg()
 		float2 offset = { curand_uniform(&rg_data->states[r_idx]), curand_uniform(&rg_data->states[r_idx]) };
 		ray r = generate_ray(offset, launch_index.x, launch_index.y, rg_data->pixel_00_loc, rg_data->pixel_delta_u, rg_data->pixel_delta_v, rg_data->org);
 
-		unsigned int sp0 = 0.f, sp1 = 0.f, sp2 = 0.f, sp3 = 0.f;
-		optixTrace(lp.handle, r.org, r.dir, 0.f, 1000.f, 0.f, 0xFF, 0, 0, 0, 0, sp0, sp1, sp2, sp3);
+		unsigned int sn0 = 0.f, sn1 = 0.f, sn2 = 0.f, sn3 = 0.f;
+		unsigned int suv0 = 0.f, suv1 = 0.f, suv2 = 0.f, suv3 = 0.f;
+		optixTrace(lp.handle, r.org, r.dir, 0.f, 1000.f, 0.f, 0xFF, 0, 0, 0, 0, sn0, sn1, sn2, sn3, suv0, suv1, suv2, suv3);
 
-		p0 += __uint_as_float(sp0);
-		p1 += __uint_as_float(sp1);
-		p2 += __uint_as_float(sp2);
-		p3 += __uint_as_float(sp3);
+		n0 += __uint_as_float(sn0);
+		n1 += __uint_as_float(sn1);
+		n2 += __uint_as_float(sn2);
+		n3 += __uint_as_float(sn3);
+
+		uv0 += __uint_as_float(suv0);
+		uv1 += __uint_as_float(suv1);
+		uv2 += __uint_as_float(suv2);
+		uv3 += __uint_as_float(suv3);
 	}
 
-	p0 /= rg_data->num_samples;
-	p1 /= rg_data->num_samples;
-	p2 /= rg_data->num_samples;
-	p3 /= rg_data->num_samples;
+	n0 /= rg_data->num_samples;
+	n1 /= rg_data->num_samples;
+	n2 /= rg_data->num_samples;
+	n3 /= rg_data->num_samples;
+
+	uv0 /= rg_data->num_samples;
+	uv1 /= rg_data->num_samples;
+	uv2 /= rg_data->num_samples;
+	uv3 /= rg_data->num_samples;
 
 	size_t pixel_idx = (launch_index.y * lp.render_width * 4) + (launch_index.x * 4);
 
-	lp.pixels[pixel_idx] = p0;
-	lp.pixels[pixel_idx + 1] = p1;
-	lp.pixels[pixel_idx + 2] = p2;
-	lp.pixels[pixel_idx + 3] = p3;
+	lp.passes_pixels[0][pixel_idx] = n0;
+	lp.passes_pixels[0][pixel_idx + 1] = n1;
+	lp.passes_pixels[0][pixel_idx + 2] = n2;
+	lp.passes_pixels[0][pixel_idx + 3] = n3;
+
+	lp.passes_pixels[1][pixel_idx] = uv0;
+	lp.passes_pixels[1][pixel_idx + 1] = uv1;
+	lp.passes_pixels[1][pixel_idx + 2] = uv2;
+	lp.passes_pixels[1][pixel_idx + 3] = uv3;
 }
 
 extern "C" __global__ void __closesthit__ch()
@@ -126,7 +143,6 @@ extern "C" __global__ void __closesthit__ch()
 		1.f - tmp_bary_coords.x - tmp_bary_coords.y,
 	};
 	uint3 launch_index = optixGetLaunchIndex();
-	float4 output_color;
 
 	unsigned int primitive_idx = optixGetPrimitiveIndex();
 
@@ -135,29 +151,34 @@ extern "C" __global__ void __closesthit__ch()
 	custom_gas_data* cgd = (custom_gas_data*)(optixGetGASPointerFromHandle(optixGetGASTraversableHandle()) - sizeof(custom_gas_data));
 	uint3 index_triplet = cgd->indices[primitive_idx];
 	float3 normal =
-		float3_normalize(optixTransformNormalFromObjectToWorldSpace(cgd->normals[index_triplet.x] * bary_coords.z +
+		float3_normalize(optixTransformNormalFromObjectToWorldSpace(
+			cgd->normals[index_triplet.x] * bary_coords.z +
 			cgd->normals[index_triplet.y] * bary_coords.x +
-			cgd->normals[index_triplet.z] * bary_coords.y));
+			cgd->normals[index_triplet.z] * bary_coords.y)
+		);
 
-	output_color.x = normal.x;
-	output_color.y = normal.y;
-	output_color.z = normal.z;
-	output_color.w = 1.f;
+	optixSetPayload_0(__float_as_uint(normal.x));
+	optixSetPayload_1(__float_as_uint(normal.y));
+	optixSetPayload_2(__float_as_uint(normal.z));
+	optixSetPayload_3(__float_as_uint(1.f));
 
 	if (cgd->uvs > 0)
 	{
 		float2 uv =
 			cgd->uvs[index_triplet.x] * bary_coords.z + cgd->uvs[index_triplet.y] * bary_coords.x + cgd->uvs[index_triplet.z] * bary_coords.y;
-		output_color.x = uv.x;
-		output_color.y = uv.y;
-		output_color.z = 0.f;
-		output_color.w = 1.f;
-	}
 
-	optixSetPayload_0(__float_as_uint(output_color.x));
-	optixSetPayload_1(__float_as_uint(output_color.y));
-	optixSetPayload_2(__float_as_uint(output_color.z));
-	optixSetPayload_3(__float_as_uint(1.f));
+		optixSetPayload_4(__float_as_uint(uv.x));
+		optixSetPayload_5(__float_as_uint(uv.y));
+		optixSetPayload_6(0);
+		optixSetPayload_7(1);
+	}
+	else
+	{
+		optixSetPayload_4(0);
+		optixSetPayload_5(0);
+		optixSetPayload_6(0);
+		optixSetPayload_7(1);
+	}
 }
 
 extern "C" __global__ void __miss__ms()
@@ -168,4 +189,9 @@ extern "C" __global__ void __miss__ms()
 	optixSetPayload_1(0);
 	optixSetPayload_2(0);
 	optixSetPayload_3(0);
+
+	optixSetPayload_4(0);
+	optixSetPayload_5(0);
+	optixSetPayload_6(0);
+	optixSetPayload_7(0);
 }

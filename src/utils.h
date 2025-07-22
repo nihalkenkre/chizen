@@ -6,7 +6,6 @@
 #include "camera.h"
 
 inline void CU_CHECK(const char* action, const cudaError_t result)
-
 {
 	if (result > cudaSuccess)
 	{

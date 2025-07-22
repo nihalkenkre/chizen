@@ -11,7 +11,7 @@
 #ifdef __cplusplus
 extern "C" {
 #endif
-	void renderer_render(const size_t render_width, const size_t render_height, const uint8_t num_samples, const char* gltf_path, float* pixels);
+	void renderer_render(const size_t render_width, const size_t render_height, const uint8_t num_samples, const char* gltf_path, float** passes_pixels, const size_t passes_pixels_count);
 #ifdef __cplusplus
 }
 #endif

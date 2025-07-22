@@ -21,8 +21,6 @@ const uint8_t NUM_SAMPLES = 32;
 
 int main(int argc, char** argv)
 {
-	float* pixels = NULL;
-
 	printf("Hello World\n");
 
 	char* gltf_path = NULL;
@@ -45,20 +43,41 @@ int main(int argc, char** argv)
 
 	const float RENDER_WIDTH = RENDER_HEIGHT * ASPECT_RATIO;
 
-	pixels = malloc((size_t)(RENDER_WIDTH * RENDER_HEIGHT * 4 * sizeof(float)));
-	memset(pixels, 0, (size_t)(RENDER_WIDTH * RENDER_HEIGHT) * 4 * sizeof(float));
+	const exr_pass passes[] = {
+		{
+			.layer = EXR_LAYER_NORMAL,
+			.pixels = malloc((size_t)(RENDER_WIDTH * RENDER_HEIGHT * 4 * sizeof(float))),
+		},
+		{
+			.layer = EXR_LAYER_UV,
+			.pixels = malloc((size_t)(RENDER_WIDTH * RENDER_HEIGHT * 4 * sizeof(float))),
+		},
+	};
 
-	renderer_render((size_t)RENDER_WIDTH, (size_t)RENDER_HEIGHT, NUM_SAMPLES, gltf_path, pixels);
+	float** passes_pixels = malloc(sizeof(float*) * _countof(passes));
+
+	for (size_t pp = 0; pp < _countof(passes); ++pp)
+	{
+		passes_pixels[pp] = passes[pp].pixels;
+	}
+
+	renderer_render((size_t)RENDER_WIDTH, (size_t)RENDER_HEIGHT, NUM_SAMPLES, gltf_path, passes_pixels, _countof(passes));
 
 	char img_path[MAX_PATH];
 	GetModuleFileNameA(GetModuleHandleA(NULL), img_path, MAX_PATH);
 	PathRemoveFileSpecA(img_path);
 	strcat(img_path, "\\test.exr");
 
-	write_exr(img_path, (size_t)RENDER_WIDTH, (size_t)RENDER_HEIGHT, pixels);
+	write_exr(img_path, (size_t)RENDER_WIDTH, (size_t)RENDER_HEIGHT, passes, _countof(passes));
+
+	for (size_t p = 0; p < _countof(passes); ++p)
+	{
+		free(passes[p].pixels);
+	}
+
+	free(passes_pixels);
 
 shutdown:
-	free(pixels);
 
 	printf("Bye World\n");
 	return 0;

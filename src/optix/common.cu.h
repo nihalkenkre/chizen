@@ -18,7 +18,8 @@
 
 typedef struct launch_params
 {
-    float* pixels;
+    float** passes_pixels;
+    size_t passes_count;
     size_t render_width;
     size_t render_height;
     OptixTraversableHandle handle;
