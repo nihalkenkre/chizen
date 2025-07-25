@@ -9,7 +9,7 @@ static void log_cb(unsigned int level, const char* tag, const char* message, voi
 	printf("%d - %s: %s\n", level, tag, message);
 }
 
-void renderer_render(const size_t render_width, const size_t render_height, const uint8_t num_samples, const char* gltf_path, exr_pass* passes, const size_t passes_count)
+void renderer_render_gltf(const size_t render_width, const size_t render_height, const uint8_t num_samples, const char* gltf_path, exr_pass* passes, const size_t passes_count)
 {
 	CU_CHECK("init cuda", cudaFree(nullptr));
 	OPTIX_CHECK("optix init", optixInit());
@@ -24,15 +24,27 @@ void renderer_render(const size_t render_width, const size_t render_height, cons
 	};
 
 	OPTIX_CHECK("optix device context create", optixDeviceContextCreate(0, &ctx_options, &ctx));
+	OPTIX_CHECK("disable shader cache", optixDeviceContextSetCacheEnabled(ctx, 0));
 
 	cudaStream_t stream = nullptr;
 	CU_CHECK("create stream", cudaStreamCreate(&stream));
 
-	const scene s = scene_create(gltf_path, ctx, stream);
+	cgltf_options gltf_options = { 0 };
+	cgltf_data* gltf_data = NULL;
+
+	if (cgltf_parse_file(&gltf_options, gltf_path, &gltf_data) != cgltf_result_success ||
+		cgltf_validate(gltf_data) != cgltf_result_success ||
+		cgltf_load_buffers(&gltf_options, gltf_data, gltf_path) != cgltf_result_success)
+	{
+		printf("Error parsing %s\n", gltf_path);
+		exit(0xdeadbabe);
+	}
+
+	const scene s = scene_create_from_gltf(gltf_data, ctx, stream);
 
 	const OptixPipelineCompileOptions pipeline_compile_options = {
-		.traversableGraphFlags = OPTIX_TRAVERSABLE_GRAPH_FLAG_ALLOW_ANY,
-		.numPayloadValues = 8,
+		.traversableGraphFlags = OPTIX_TRAVERSABLE_GRAPH_FLAG_ALLOW_SINGLE_LEVEL_INSTANCING,
+		.numPayloadValues = 0,
 		.numAttributeValues = 2,
 		.pipelineLaunchParamsVariableName = "lp",
 		.usesPrimitiveTypeFlags = (unsigned int)OPTIX_PRIMITIVE_TYPE_FLAGS_TRIANGLE,
@@ -166,17 +178,17 @@ void renderer_render(const size_t render_width, const size_t render_height, cons
 		.hitgroupRecordCount = 1,
 	};
 
-	d_exr_pass* d_exr_passes_tmp = reinterpret_cast<d_exr_pass*>(malloc(sizeof(d_exr_pass) * passes_count));
+	d_exr_pass* d_exr_passes_staging = reinterpret_cast<d_exr_pass*>(malloc(sizeof(d_exr_pass) * passes_count));
 
 	for (size_t p = 0; p < passes_count; ++p)
 	{
-		d_exr_passes_tmp[p].layer = passes[p].layer;
-		CU_CHECK("alloc d_exr_pass_tmp_pixels", cudaMalloc((void**)(&d_exr_passes_tmp[p].pixels), render_width * render_height * 4 * sizeof(float)));
+		d_exr_passes_staging[p].layer = passes[p].layer;
+		CU_CHECK("alloc d_exr_pass_tmp_pixels", cudaMalloc((void**)(&d_exr_passes_staging[p].pixels), render_width * render_height * 4 * sizeof(float)));
 	}
 
 	CUdeviceptr d_exr_passes = 0;
 	CU_CHECK("alloc d_exr_passes", cudaMalloc((void**)&d_exr_passes, sizeof(d_exr_pass) * passes_count));
-	CU_CHECK("copy d_exr_passes", cudaMemcpy((void*)d_exr_passes, d_exr_passes_tmp, sizeof(exr_pass) * passes_count, cudaMemcpyHostToDevice));
+	CU_CHECK("copy d_exr_passes_staging to device", cudaMemcpy((void*)d_exr_passes, d_exr_passes_staging, sizeof(exr_pass) * passes_count, cudaMemcpyHostToDevice));
 
 	const launch_params lp = {
 		.passes = (exr_pass*)d_exr_passes,
@@ -205,7 +217,7 @@ void renderer_render(const size_t render_width, const size_t render_height, cons
 
 	for (size_t p = 0; p < passes_count; ++p)
 	{
-		CU_CHECK("copy pixels to host", cudaMemcpy(passes[p].pixels, (void*)((d_exr_pass*)d_exr_passes_tmp)[p].pixels, render_width * render_height * 4 * sizeof(float), cudaMemcpyDeviceToHost));
+		CU_CHECK("copy pixels to host", cudaMemcpy(passes[p].pixels, (void*)((d_exr_pass*)d_exr_passes_staging)[p].pixels, render_width * render_height * 4 * sizeof(float), cudaMemcpyDeviceToHost));
 	}
 
 	scene_destroy(s);
@@ -220,11 +232,17 @@ void renderer_render(const size_t render_width, const size_t render_height, cons
 	CU_CHECK("destroy stream", cudaStreamDestroy(stream));
 	for (size_t p = 0; p < passes_count; ++p)
 	{
-		CU_CHECK("dealloc d_pixels", cudaFree((void*) ((d_exr_pass*)d_exr_passes_tmp)[p].pixels));
+		CU_CHECK("dealloc d_pixels", cudaFree((void*) ((d_exr_pass*)d_exr_passes_staging)[p].pixels));
 	}
-	free(d_exr_passes_tmp);
+	free(d_exr_passes_staging);
 
 	CU_CHECK("dealloc d_passes_pixels", cudaFree((void*)d_exr_passes));
 	CU_CHECK("dealloc d_launch_params", cudaFree((void*)d_launch_params));
 	OPTIX_CHECK("optix device context destroy", optixDeviceContextDestroy(ctx));
+
+	cgltf_free(gltf_data);
+}
+
+void renderer_render_usd(const size_t render_width, const size_t render_height, const uint8_t num_samples, const char* gltf_path, exr_pass* passes, const size_t passes_pixels_count)
+{
 }

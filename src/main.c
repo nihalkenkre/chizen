@@ -2,6 +2,8 @@
 #include <Shlwapi.h>
 
 #include "renderer.h"
+#include "exr.h"
+#include "utils.h"
 
 #define CGLTF_IMPLEMENTATION
 #include <cgltf/cgltf.h>
@@ -13,9 +15,6 @@
 #define STB_IMAGE_WRITE_IMPLEMENTATION
 #include <stb/stb_image_write.h>
 
-#include "misc.hpp"
-#include "utils.h"
-
 const float RENDER_HEIGHT = 720.f;
 const float ASPECT_RATIO = 16.f / 9.f;
 const uint8_t NUM_SAMPLES = 32;
@@ -24,27 +23,27 @@ int main(int argc, char** argv)
 {
 	printf("Hello World\n");
 
-	char* gltf_path = NULL;
+	char* file_path = NULL;
 	if (argc == 2)
 	{
-		gltf_path = argv[1];
+		file_path = argv[1];
 	}
 	else
 	{
-		printf("Usage: chizen.exe <gltf_path>\n");
+		printf("Usage: chizen.exe <gltf_path/usd_path>\n");
 		goto shutdown;
 	}
 
-	char* ext = PathFindExtensionA(gltf_path);
-	if (strcmp(ext, ".glb") != 0 && strcmp(ext, ".gltf") != 0)
+	char* ext = PathFindExtensionA(file_path);
+	if (strcmp(ext, ".glb") != 0 && strcmp(ext, ".gltf") != 0 && strcmp(ext, ".usda") != 0 && strcmp(ext, ".usdc"))
 	{
-		printf("Only GLTF files supported... Exiting...");
+		printf("Only GLTF and USD files supported... Exiting...");
 		goto shutdown;
 	}
 
 	const float RENDER_WIDTH = RENDER_HEIGHT * ASPECT_RATIO;
 
-	exr_pass passes[] = 
+	exr_pass passes[] =
 	{
 		{
 			.layer = EXR_LAYER_NORMAL,
@@ -56,7 +55,10 @@ int main(int argc, char** argv)
 		},
 	};
 
-	renderer_render((size_t)RENDER_WIDTH, (size_t)RENDER_HEIGHT, NUM_SAMPLES, gltf_path, passes, _countof(passes));
+	if (strcmp(ext, ".glb") == 0 || strcmp(ext, ".gltf") == 0)
+		renderer_render_gltf((size_t)RENDER_WIDTH, (size_t)RENDER_HEIGHT, NUM_SAMPLES, file_path, passes, _countof(passes));
+	else if (strcmp(ext, "usda") == 0 || strcmp(ext, "usdc") == 0)
+		renderer_render_usd((size_t)RENDER_WIDTH, (size_t)RENDER_HEIGHT, NUM_SAMPLES, file_path, passes, _countof(passes));
 
 	char img_path[MAX_PATH];
 	GetModuleFileNameA(GetModuleHandleA(NULL), img_path, MAX_PATH);

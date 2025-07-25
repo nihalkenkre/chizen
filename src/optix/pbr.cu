@@ -86,8 +86,6 @@ extern "C"  __global__ void __raygen__rg()
 	uint3 launch_index = optixGetLaunchIndex();
 	ray_gen_record_data* rg_data = (ray_gen_record_data*)optixGetSbtDataPointer();
 
-	//float n0 = 0, n1 = 0, n2 = 0, n3 = 0;
-	//float uv0 = 0, uv1 = 0, uv2 = 0, uv3 = 0;
 	unsigned int r_idx = threadIdx.x + blockIdx.x * blockDim.x;
 
 	curand_init(launch_index.x + launch_index.y, launch_index.x + launch_index.y, 0, &rg_data->states[r_idx]);
@@ -108,6 +106,7 @@ extern "C"  __global__ void __raygen__rg()
 		lp.passes[p].pixels[pixel_idx + 2] /= rg_data->num_samples;
 		lp.passes[p].pixels[pixel_idx + 3] /= rg_data->num_samples;
 	}
+
 }
 
 extern "C" __global__ void __closesthit__ch()
@@ -121,11 +120,21 @@ extern "C" __global__ void __closesthit__ch()
 	uint3 launch_index = optixGetLaunchIndex();
 
 	unsigned int primitive_idx = optixGetPrimitiveIndex();
-
 	ray_gen_record_data* rg_data = (ray_gen_record_data*)optixGetSbtDataPointer();
-
 	custom_gas_data* cgd = (custom_gas_data*)(optixGetGASPointerFromHandle(optixGetGASTraversableHandle()) - sizeof(custom_gas_data));
-	uint3 index_triplet = cgd->indices[primitive_idx];
+
+	uint3 index_triplet;
+	if (cgd->indices_format == OPTIX_INDICES_FORMAT_UNSIGNED_SHORT3)
+	{
+		ushort3 tmp = ((ushort3*)cgd->indices)[primitive_idx];
+		index_triplet.x = tmp.x;
+		index_triplet.y = tmp.y;
+		index_triplet.z = tmp.z;
+	}
+	else {
+		index_triplet = ((uint3*)cgd->indices)[primitive_idx];
+	}
+
 	float3 normal =
 		float3_normalize(optixTransformNormalFromObjectToWorldSpace(
 			cgd->normals[index_triplet.x] * bary_coords.z +
@@ -152,6 +161,9 @@ extern "C" __global__ void __closesthit__ch()
 		}
 		else if (lp.passes[p].layer == EXR_LAYER_UV)
 		{
+			if (launch_index.x == 640 && launch_index.y == 360)
+				printf("%llu, *pixels %16p\n", p, lp.passes[p].pixels);
+
 			lp.passes[p].pixels[pixel_idx] += uv.x;
 			lp.passes[p].pixels[pixel_idx + 1] += uv.y;
 			lp.passes[p].pixels[pixel_idx + 2] += 0;

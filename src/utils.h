@@ -46,7 +46,8 @@ typedef struct custom_gas_data
 	__align__(OPTIX_ACCEL_BUFFER_BYTE_ALIGNMENT)
 		float3* normals;
 	float2* uvs;
-	uint3* indices;
+	void* indices;
+	OptixIndicesFormat indices_format;
 } custom_gas_data;
 
 

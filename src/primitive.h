@@ -7,18 +7,6 @@
 
 typedef struct primitive
 {
-	vec3* positions;
-	size_t positions_count;
-
-	vec3* normals;
-	size_t normals_count;
-
-	vec2* uvs;
-	size_t uvs_count;
-
-	uint32_t* indices;
-	size_t indices_count;
-
 	CUdeviceptr d_positions;
 	CUdeviceptr d_normals;
 	CUdeviceptr d_uvs;
@@ -29,5 +17,5 @@ typedef struct primitive
 	int32_t material_index;
 } primitive;
 
-primitive primitive_create(cgltf_data* data, cgltf_primitive* curr_prim, const OptixDeviceContext ctx, const cudaStream_t stream);
+primitive primitive_create(const cgltf_data* data, cgltf_primitive* curr_prim, const OptixDeviceContext ctx, const cudaStream_t stream);
 void primitive_destroy(primitive p);

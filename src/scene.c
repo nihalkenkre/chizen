@@ -3,19 +3,9 @@
 
 #include <string.h>
 
-scene scene_create(const char* gltf_path, const OptixDeviceContext ctx, const cudaStream_t stream)
+scene scene_create_from_gltf(cgltf_data* gltf_data, const OptixDeviceContext ctx, const cudaStream_t stream)
 {
 	scene s = { 0 };
-	cgltf_options gltf_options = { 0 };
-	cgltf_data* gltf_data = NULL;
-
-	if (cgltf_parse_file(&gltf_options, gltf_path, &gltf_data) != cgltf_result_success ||
-		cgltf_validate(gltf_data) != cgltf_result_success ||
-		cgltf_load_buffers(&gltf_options, gltf_data, gltf_path) != cgltf_result_success)
-	{
-		printf("Error parsing %s\n", gltf_path);
-		goto shutdown;
-	}
 
 	for (size_t n = 0; n < gltf_data->nodes_count; ++n)
 	{
@@ -96,8 +86,6 @@ scene scene_create(const char* gltf_path, const OptixDeviceContext ctx, const cu
 
 	free(instances);
 
-shutdown:
-	cgltf_free(gltf_data);
 
 	return s;
 }

@@ -3,7 +3,7 @@
 
 #include <string.h>
 
-mesh mesh_create(cgltf_data* data, cgltf_node* curr_node, const OptixDeviceContext ctx, const cudaStream_t stream)
+mesh mesh_create(const cgltf_data* data, cgltf_node* curr_node, const OptixDeviceContext ctx, const cudaStream_t stream)
 {
 	mesh m = { 0 };
 

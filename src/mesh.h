@@ -13,5 +13,5 @@ typedef struct mesh
     OptixInstance* instances;
 } mesh;
 
-mesh mesh_create(cgltf_data* data, cgltf_node* curr_node, const OptixDeviceContext ctx, const cudaStream_t stream);
+mesh mesh_create(const cgltf_data* data, cgltf_node* curr_node, const OptixDeviceContext ctx, const cudaStream_t stream);
 void mesh_destroy(mesh m);
