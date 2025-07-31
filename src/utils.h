@@ -26,20 +26,29 @@ inline void OPTIX_CHECK(const char* action, const OptixResult result)
 	}
 }
 
-typedef enum EXR_LAYER
+typedef enum EXR_LAYER_TYPE
 {
-	EXR_LAYER_BEAUTY,
-	EXR_LAYER_NORMAL,
-	EXR_LAYER_UV,
+	EXR_LAYER_TYPE_BEAUTY,
+	EXT_LAYER_TYPE_TRANSMISSION,
+	EXR_LAYER_TYPE_NORMAL,
+	EXR_LAYER_TYPE_UV,
+	EXR_LAYER_TYPE_METALNESS,
+	EXR_LAYER_TYPE_ROUGHNESS,
+} EXR_LAYER_TYPE;
+
+typedef struct EXR_LAYER
+{
+	EXR_LAYER_TYPE type;
+	char name[64];
 } EXR_LAYER;
 
 typedef struct exr_pass
 {
 	union {
-		// CPU
+		// CPU pixels
 		float* pixels;
-		// GPU
-		float* d_pixel_array;
+		// GPU pixels
+		float* d_pixels;
 	};
 	EXR_LAYER layer;
 } exr_pass;

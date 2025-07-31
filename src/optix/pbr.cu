@@ -109,6 +109,14 @@ extern "C"  __global__ void __raygen__rg()
 
 }
 
+__device__ void write_pixels(size_t passes_index, size_t pixel_index, float4 color)
+{
+	lp.passes[passes_index].d_pixels[pixel_index] += color.x;
+	lp.passes[passes_index].d_pixels[pixel_index + 1] += color.y;
+	lp.passes[passes_index].d_pixels[pixel_index + 2] += color.z;
+	lp.passes[passes_index].d_pixels[pixel_index + 3] += color.w;
+}
+
 extern "C" __global__ void __closesthit__ch()
 {
 	float2 tmp_bary_coords = optixGetTriangleBarycentrics();
@@ -152,43 +160,72 @@ extern "C" __global__ void __closesthit__ch()
 	size_t pixel_idx = (launch_index.y * lp.render_width * 4) + (launch_index.x * 4);
 	for (size_t p = 0; p < lp.passes_count; ++p)
 	{
+#ifdef _DEBUG
 		if (launch_index.x == 640 && launch_index.y == 360)
 		{
 			printf("%llu, *pixels 0x%16p\n", p, lp.passes[p].pixels);
 		}
+#endif
 
-		if (lp.passes[p].layer == EXR_LAYER_BEAUTY)
+		if (lp.passes[p].layer.type == EXR_LAYER_TYPE_BEAUTY)
 		{
 			if (cgd->material_index >= 0)
 			{
-				float4 color = tex2D<float4>(lp.textures[lp.materials[cgd->material_index].base_texture_index].d_obj, uv.x, uv.y) * lp.materials[cgd->material_index].base_color;
+				if (lp.materials[cgd->material_index].base_tex_idx >= 0)
+				{
+					float4 color = tex2D<float4>(lp.textures[lp.materials[cgd->material_index].base_tex_idx].d_obj, uv.x, uv.y) *
+						lp.materials[cgd->material_index].base_color_factor;
 
-				lp.passes[p].pixels[pixel_idx] += color.x;
-				lp.passes[p].pixels[pixel_idx + 1] += color.y;
-				lp.passes[p].pixels[pixel_idx + 2] += color.z;
-				lp.passes[p].pixels[pixel_idx + 3] += color.w;
+					write_pixels(p, pixel_idx, color);
+				}
+				else
+				{
+					write_pixels(p, pixel_idx, lp.materials[cgd->material_index].base_color_factor);
+				}
 			}
-			else
+		}
+		else if (lp.passes[p].layer.type == EXR_LAYER_TYPE_METALNESS)
+		{
+			if (cgd->material_index >= 0)
 			{
-				lp.passes[p].pixels[pixel_idx] += lp.materials[cgd->material_index].base_color.x;
-				lp.passes[p].pixels[pixel_idx + 1] += lp.materials[cgd->material_index].base_color.y;
-				lp.passes[p].pixels[pixel_idx + 2] += lp.materials[cgd->material_index].base_color.z;
-				lp.passes[p].pixels[pixel_idx + 3] += lp.materials[cgd->material_index].base_color.w;
+				if (lp.materials[cgd->material_index].mr_tex_idx >= 0)
+				{
+					float4 color = tex2D<float4>(lp.textures[lp.materials[cgd->material_index].mr_tex_idx].d_obj, uv.x, uv.y) *
+						lp.materials[cgd->material_index].metalness_factor;
+
+					write_pixels(p, pixel_idx, make_float4(make_float3(color.z), 1.f));
+				}
+				else
+				{
+					write_pixels(p, pixel_idx, make_float4(lp.materials[cgd->material_index].metalness_factor));
+				}
 			}
 		}
-		else if (lp.passes[p].layer == EXR_LAYER_NORMAL)
+		else if (lp.passes[p].layer.type == EXR_LAYER_TYPE_ROUGHNESS)
 		{
-			lp.passes[p].pixels[pixel_idx] += normal.x;
-			lp.passes[p].pixels[pixel_idx + 1] += normal.y;
-			lp.passes[p].pixels[pixel_idx + 2] += normal.z;
-			lp.passes[p].pixels[pixel_idx + 3] += 1.f;
+			if (cgd->material_index >= 0)
+			{
+				if (lp.materials[cgd->material_index].mr_tex_idx >= 0)
+				{
+					float4 color = tex2D<float4>(lp.textures[lp.materials[cgd->material_index].mr_tex_idx].d_obj, uv.x, uv.y) *
+						lp.materials[cgd->material_index].roughness_factor;
+
+					write_pixels(p, pixel_idx, make_float4(make_float3(color.y), 1.f));
+				}
+				else
+				{
+					write_pixels(p, pixel_idx, make_float4(lp.materials[cgd->material_index].roughness_factor));
+				}
+			}
+
 		}
-		else if (lp.passes[p].layer == EXR_LAYER_UV)
+		else if (lp.passes[p].layer.type == EXR_LAYER_TYPE_NORMAL)
 		{
-			lp.passes[p].pixels[pixel_idx] += uv.x;
-			lp.passes[p].pixels[pixel_idx + 1] += uv.y;
-			lp.passes[p].pixels[pixel_idx + 2] += 0;
-			lp.passes[p].pixels[pixel_idx + 3] += 1.f;
+			write_pixels(p, pixel_idx, make_float4(normal, 1.f));
+		}
+		else if (lp.passes[p].layer.type == EXR_LAYER_TYPE_UV)
+		{
+			write_pixels(p, pixel_idx, make_float4(uv, 0, 1.f));
 		}
 	}
 }

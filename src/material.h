@@ -7,8 +7,11 @@
 
 typedef struct material
 {
-	int32_t base_texture_index;
-	float4 base_color;
+	float4 base_color_factor;
+	float metalness_factor;
+	float roughness_factor;
+	int32_t base_tex_idx;
+	int32_t mr_tex_idx;
 } material;
 
 material material_create(const cgltf_data* gltf_data, cgltf_material* curr_mat, texture* textures);

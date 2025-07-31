@@ -5,17 +5,25 @@
 material material_create(const cgltf_data* gltf_data, cgltf_material* curr_mat, texture* textures)
 {
 	material m = {
-		.base_texture_index = -1,
+		.base_tex_idx = -1,
+		.mr_tex_idx = -1,
 	};
 
 	if (curr_mat->has_pbr_metallic_roughness)
 	{
 		cgltf_pbr_metallic_roughness pbr_mr = curr_mat->pbr_metallic_roughness;
-		memcpy(&m.base_color, pbr_mr.base_color_factor, sizeof(m.base_color));
+		memcpy(&m.base_color_factor, pbr_mr.base_color_factor, sizeof(m.base_color_factor));
 		if (pbr_mr.base_color_texture.texture != NULL)
 		{
-			m.base_texture_index = (int32_t)cgltf_texture_index(gltf_data, pbr_mr.base_color_texture.texture);
+			m.base_tex_idx = (int32_t)cgltf_texture_index(gltf_data, pbr_mr.base_color_texture.texture);
 		}
+
+		m.metalness_factor = pbr_mr.metallic_factor;
+		if (pbr_mr.metallic_roughness_texture.texture != NULL)
+		{
+			m.mr_tex_idx = (int32_t)cgltf_texture_index(gltf_data, pbr_mr.metallic_roughness_texture.texture);
+		}
+		m.roughness_factor = pbr_mr.roughness_factor;
 	}
 
 	return m;

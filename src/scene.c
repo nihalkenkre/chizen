@@ -81,10 +81,6 @@ scene scene_create_from_gltf(cgltf_data* gltf_data, const OptixDeviceContext ctx
 	CU_CHECK("alloc d_materials", cudaMalloc((void**)&s.d_materials, materials_size));
 	CU_CHECK("copy d_materials to device", cudaMemcpy((void*)s.d_materials, materials, materials_size, cudaMemcpyHostToDevice));
 
-	free(images);
-	free(textures);
-	free(materials);
-
 	size_t instances_count = 0;
 
 	for (size_t m = 0; m < s.meshes_count; ++m)
@@ -136,6 +132,9 @@ scene scene_create_from_gltf(cgltf_data* gltf_data, const OptixDeviceContext ctx
 	CU_CHECK("dealloc d_tmp_buffer", cudaFree((void*)d_tmp_buffer));
 
 	free(instances);
+	free(images);
+	free(textures);
+	free(materials);
 
 	return s;
 }

@@ -45,15 +45,38 @@ int main(int argc, char** argv)
 	exr_pass passes[] =
 	{
 		{
-			.layer = EXR_LAYER_BEAUTY,
+			.layer = {
+				.type = EXR_LAYER_TYPE_BEAUTY,
+				.name = "Beauty",
+			},
 			.pixels = malloc((size_t)(RENDER_WIDTH * RENDER_HEIGHT * 4 * sizeof(float))),
 		},
 		{
-			.layer = EXR_LAYER_NORMAL,
+			.layer = {
+				.type = EXR_LAYER_TYPE_NORMAL,
+				.name = "Normal",
+			},
 			.pixels = malloc((size_t)(RENDER_WIDTH * RENDER_HEIGHT * 4 * sizeof(float))),
 		},
 		{
-			.layer = EXR_LAYER_UV,
+			.layer = {
+				.type = EXR_LAYER_TYPE_UV,
+				.name = "UV",
+			},
+			.pixels = malloc((size_t)(RENDER_WIDTH * RENDER_HEIGHT * 4 * sizeof(float))),
+		},
+		{
+			.layer = {
+				.type = EXR_LAYER_TYPE_METALNESS,
+				.name = "Metalness",
+			},
+			.pixels = malloc((size_t)(RENDER_WIDTH * RENDER_HEIGHT * 4 * sizeof(float))),
+		},
+		{
+			.layer = {
+				.type = EXR_LAYER_TYPE_ROUGHNESS,
+				.name = "Roughness",
+			},
 			.pixels = malloc((size_t)(RENDER_WIDTH * RENDER_HEIGHT * 4 * sizeof(float))),
 		},
 	};

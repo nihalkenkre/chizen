@@ -35,11 +35,12 @@ image image_create(const cgltf_data* gltf_data, cgltf_image* curr_img)
 	else if (num_channels == 3 || num_channels == 4)
 	{
 		cfd = cudaCreateChannelDesc(32, 32, 32, 32, cudaChannelFormatKindFloat);
-		num_channels = 4;
 	}
 
 	CU_CHECK("create cuda pixel_array", cudaMallocArray(&img.d_pixel_array, &cfd, img.width, img.height, cudaArrayDefault));
-	CU_CHECK("copy pixels to device", cudaMemcpy2DToArray(img.d_pixel_array, 0, 0, pixels, img.width * num_channels * sizeof(float), img.width * num_channels * sizeof(float), img.height, cudaMemcpyHostToDevice));
+	CU_CHECK("copy pixels to device", cudaMemcpy2DToArray(img.d_pixel_array, 0, 0, 
+		pixels, img.width * num_channels * sizeof(float), img.width * num_channels * sizeof(float), img.height, 
+		cudaMemcpyHostToDevice));
 
 	stbi_image_free(pixels);
 
