@@ -15,5 +15,6 @@ typedef struct camera
     vec3 u;
 } camera;
 
-camera camera_create(cgltf_node* camera_node);
+camera camera_create_from_gltf(cgltf_node* camera_node);
+camera camera_create_default(void);
 void camera_destroy(camera c);

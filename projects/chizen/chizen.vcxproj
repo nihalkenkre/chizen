@@ -25,23 +25,27 @@
   <ItemGroup>
     <ClCompile Include="..\..\src\camera.c" />
     <ClCompile Include="..\..\src\exr.c" />
+    <ClCompile Include="..\..\src\image.c" />
     <ClCompile Include="..\..\src\main.c" />
     <ClCompile Include="..\..\src\material.c" />
     <ClCompile Include="..\..\src\mesh.c" />
     <ClCompile Include="..\..\src\primitive.c" />
     <ClCompile Include="..\..\src\renderer.cpp" />
     <ClCompile Include="..\..\src\scene.c" />
+    <ClCompile Include="..\..\src\texture.c" />
     <ClCompile Include="..\..\src\utils.c" />
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="..\..\src\camera.h" />
     <ClInclude Include="..\..\src\exr.h" />
+    <ClInclude Include="..\..\src\image.h" />
     <ClInclude Include="..\..\src\optix\common.cu.h" />
     <ClInclude Include="..\..\src\material.h" />
     <ClInclude Include="..\..\src\mesh.h" />
     <ClInclude Include="..\..\src\primitive.h" />
     <ClInclude Include="..\..\src\renderer.h" />
     <ClInclude Include="..\..\src\scene.h" />
+    <ClInclude Include="..\..\src\texture.h" />
     <ClInclude Include="..\..\src\utils.h" />
   </ItemGroup>
   <PropertyGroup Label="Globals">

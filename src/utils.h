@@ -4,6 +4,9 @@
 #include <cuda_runtime.h>
 #include <stdio.h>
 #include "camera.h"
+#include "image.h"
+#include "texture.h"
+#include "material.h"
 
 inline void CU_CHECK(const char* action, const cudaError_t result)
 {
@@ -25,21 +28,21 @@ inline void OPTIX_CHECK(const char* action, const OptixResult result)
 
 typedef enum EXR_LAYER
 {
+	EXR_LAYER_BEAUTY,
 	EXR_LAYER_NORMAL,
 	EXR_LAYER_UV,
 } EXR_LAYER;
 
 typedef struct exr_pass
 {
-	float* pixels;
+	union {
+		// CPU
+		float* pixels;
+		// GPU
+		float* d_pixel_array;
+	};
 	EXR_LAYER layer;
 } exr_pass;
-
-typedef struct d_exr_pass
-{
-	CUdeviceptr pixels;
-	EXR_LAYER layer;
-} d_exr_pass;
 
 typedef struct custom_gas_data
 {
@@ -48,8 +51,8 @@ typedef struct custom_gas_data
 	float2* uvs;
 	void* indices;
 	OptixIndicesFormat indices_format;
+	int32_t material_index;
 } custom_gas_data;
-
 
 #ifdef __cplusplus
 extern "C" {

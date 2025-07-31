@@ -11,9 +11,8 @@
 #define CGLM_IMPLEMENTATION
 #include <cglm/include/cglm/cglm.h>
 
-#define STB_IMPLEMENTATION
-#define STB_IMAGE_WRITE_IMPLEMENTATION
-#include <stb/stb_image_write.h>
+#define STB_IMAGE_IMPLEMENTATION
+#include <stb/stb_image.h>
 
 const float RENDER_HEIGHT = 720.f;
 const float ASPECT_RATIO = 16.f / 9.f;
@@ -30,14 +29,14 @@ int main(int argc, char** argv)
 	}
 	else
 	{
-		printf("Usage: chizen.exe <gltf_path/usd_path>\n");
+		printf("Usage: chizen.exe <gltf_path>\n");
 		goto shutdown;
 	}
 
 	char* ext = PathFindExtensionA(file_path);
-	if (strcmp(ext, ".glb") != 0 && strcmp(ext, ".gltf") != 0 && strcmp(ext, ".usda") != 0 && strcmp(ext, ".usdc"))
+	if (strcmp(ext, ".glb") != 0 && strcmp(ext, ".gltf") != 0)
 	{
-		printf("Only GLTF and USD files supported... Exiting...");
+		printf("Only GLTF files supported... Exiting...");
 		goto shutdown;
 	}
 
@@ -45,6 +44,10 @@ int main(int argc, char** argv)
 
 	exr_pass passes[] =
 	{
+		{
+			.layer = EXR_LAYER_BEAUTY,
+			.pixels = malloc((size_t)(RENDER_WIDTH * RENDER_HEIGHT * 4 * sizeof(float))),
+		},
 		{
 			.layer = EXR_LAYER_NORMAL,
 			.pixels = malloc((size_t)(RENDER_WIDTH * RENDER_HEIGHT * 4 * sizeof(float))),
@@ -55,10 +58,7 @@ int main(int argc, char** argv)
 		},
 	};
 
-	if (strcmp(ext, ".glb") == 0 || strcmp(ext, ".gltf") == 0)
-		renderer_render_gltf((size_t)RENDER_WIDTH, (size_t)RENDER_HEIGHT, NUM_SAMPLES, file_path, passes, _countof(passes));
-	else if (strcmp(ext, "usda") == 0 || strcmp(ext, "usdc") == 0)
-		renderer_render_usd((size_t)RENDER_WIDTH, (size_t)RENDER_HEIGHT, NUM_SAMPLES, file_path, passes, _countof(passes));
+	renderer_render_gltf((size_t)RENDER_WIDTH, (size_t)RENDER_HEIGHT, NUM_SAMPLES, file_path, passes, _countof(passes));
 
 	char img_path[MAX_PATH];
 	GetModuleFileNameA(GetModuleHandleA(NULL), img_path, MAX_PATH);

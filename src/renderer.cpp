@@ -178,20 +178,22 @@ void renderer_render_gltf(const size_t render_width, const size_t render_height,
 		.hitgroupRecordCount = 1,
 	};
 
-	d_exr_pass* d_exr_passes_staging = reinterpret_cast<d_exr_pass*>(malloc(sizeof(d_exr_pass) * passes_count));
+	exr_pass* d_exr_passes_staging = reinterpret_cast<exr_pass*>(malloc(sizeof(exr_pass) * passes_count));
 
 	for (size_t p = 0; p < passes_count; ++p)
 	{
 		d_exr_passes_staging[p].layer = passes[p].layer;
-		CU_CHECK("alloc d_exr_pass_tmp_pixels", cudaMalloc((void**)(&d_exr_passes_staging[p].pixels), render_width * render_height * 4 * sizeof(float)));
+		CU_CHECK("alloc d_exr_pass_tmp_pixels", cudaMalloc((void**)(&d_exr_passes_staging[p].d_pixel_array), render_width * render_height * 4 * sizeof(float)));
 	}
 
-	CUdeviceptr d_exr_passes = 0;
-	CU_CHECK("alloc d_exr_passes", cudaMalloc((void**)&d_exr_passes, sizeof(d_exr_pass) * passes_count));
+	exr_pass* d_exr_passes = 0;
+	CU_CHECK("alloc d_exr_passes", cudaMalloc((void**)&d_exr_passes, sizeof(exr_pass) * passes_count));
 	CU_CHECK("copy d_exr_passes_staging to device", cudaMemcpy((void*)d_exr_passes, d_exr_passes_staging, sizeof(exr_pass) * passes_count, cudaMemcpyHostToDevice));
 
 	const launch_params lp = {
-		.passes = (exr_pass*)d_exr_passes,
+		.textures = s.d_textures,
+		.materials = s.d_materials,
+		.passes = d_exr_passes,
 		.passes_count = passes_count,
 		.render_width = render_width,
 		.render_height = render_height,
@@ -217,7 +219,7 @@ void renderer_render_gltf(const size_t render_width, const size_t render_height,
 
 	for (size_t p = 0; p < passes_count; ++p)
 	{
-		CU_CHECK("copy pixels to host", cudaMemcpy(passes[p].pixels, (void*)((d_exr_pass*)d_exr_passes_staging)[p].pixels, render_width * render_height * 4 * sizeof(float), cudaMemcpyDeviceToHost));
+		CU_CHECK("copy pixels to host", cudaMemcpy(passes[p].pixels, (void*)((exr_pass*)d_exr_passes_staging)[p].d_pixel_array, render_width * render_height * 4 * sizeof(float), cudaMemcpyDeviceToHost));
 	}
 
 	scene_destroy(s);
@@ -232,7 +234,7 @@ void renderer_render_gltf(const size_t render_width, const size_t render_height,
 	CU_CHECK("destroy stream", cudaStreamDestroy(stream));
 	for (size_t p = 0; p < passes_count; ++p)
 	{
-		CU_CHECK("dealloc d_pixels", cudaFree((void*) ((d_exr_pass*)d_exr_passes_staging)[p].pixels));
+		CU_CHECK("dealloc d_pixels", cudaFree((void*)((exr_pass*)d_exr_passes_staging)[p].d_pixel_array));
 	}
 	free(d_exr_passes_staging);
 

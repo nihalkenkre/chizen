@@ -152,7 +152,31 @@ extern "C" __global__ void __closesthit__ch()
 	size_t pixel_idx = (launch_index.y * lp.render_width * 4) + (launch_index.x * 4);
 	for (size_t p = 0; p < lp.passes_count; ++p)
 	{
-		if (lp.passes[p].layer == EXR_LAYER_NORMAL)
+		if (launch_index.x == 640 && launch_index.y == 360)
+		{
+			printf("%llu, *pixels 0x%16p\n", p, lp.passes[p].pixels);
+		}
+
+		if (lp.passes[p].layer == EXR_LAYER_BEAUTY)
+		{
+			if (cgd->material_index >= 0)
+			{
+				float4 color = tex2D<float4>(lp.textures[lp.materials[cgd->material_index].base_texture_index].d_obj, uv.x, uv.y) * lp.materials[cgd->material_index].base_color;
+
+				lp.passes[p].pixels[pixel_idx] += color.x;
+				lp.passes[p].pixels[pixel_idx + 1] += color.y;
+				lp.passes[p].pixels[pixel_idx + 2] += color.z;
+				lp.passes[p].pixels[pixel_idx + 3] += color.w;
+			}
+			else
+			{
+				lp.passes[p].pixels[pixel_idx] += lp.materials[cgd->material_index].base_color.x;
+				lp.passes[p].pixels[pixel_idx + 1] += lp.materials[cgd->material_index].base_color.y;
+				lp.passes[p].pixels[pixel_idx + 2] += lp.materials[cgd->material_index].base_color.z;
+				lp.passes[p].pixels[pixel_idx + 3] += lp.materials[cgd->material_index].base_color.w;
+			}
+		}
+		else if (lp.passes[p].layer == EXR_LAYER_NORMAL)
 		{
 			lp.passes[p].pixels[pixel_idx] += normal.x;
 			lp.passes[p].pixels[pixel_idx + 1] += normal.y;
@@ -161,9 +185,6 @@ extern "C" __global__ void __closesthit__ch()
 		}
 		else if (lp.passes[p].layer == EXR_LAYER_UV)
 		{
-			if (launch_index.x == 640 && launch_index.y == 360)
-				printf("%llu, *pixels %16p\n", p, lp.passes[p].pixels);
-
 			lp.passes[p].pixels[pixel_idx] += uv.x;
 			lp.passes[p].pixels[pixel_idx + 1] += uv.y;
 			lp.passes[p].pixels[pixel_idx + 2] += 0;

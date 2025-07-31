@@ -2,6 +2,9 @@
 
 #include "camera.h"
 #include "mesh.h"
+#include "image.h"
+#include "texture.h"
+#include "material.h"
 
 typedef struct scene
 {
@@ -9,6 +12,10 @@ typedef struct scene
     size_t meshes_count;
 
     camera camera;
+
+    image* d_images;
+    texture* d_textures;
+    material* d_materials;
 
     OptixTraversableHandle ias_hnd;
     CUdeviceptr d_ias_op_buffer;

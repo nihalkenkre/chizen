@@ -44,7 +44,13 @@
     <ClCompile Include="..\..\src\utils.c">
       <Filter>Sources</Filter>
     </ClCompile>
-    <ClCompile Include="..\..\src\misc.cpp">
+    <ClCompile Include="..\..\src\exr.c">
+      <Filter>Sources</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\src\image.c">
+      <Filter>Sources</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\src\texture.c">
       <Filter>Sources</Filter>
     </ClCompile>
   </ItemGroup>
@@ -73,7 +79,13 @@
     <ClInclude Include="..\..\src\optix\common.cu.h">
       <Filter>Optix</Filter>
     </ClInclude>
-    <ClInclude Include="..\..\src\misc.hpp">
+    <ClInclude Include="..\..\src\exr.h">
+      <Filter>Headers</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\src\image.h">
+      <Filter>Headers</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\src\texture.h">
       <Filter>Headers</Filter>
     </ClInclude>
   </ItemGroup>

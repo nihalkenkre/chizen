@@ -27,7 +27,15 @@ void write_exr(const char* file_path, const size_t render_width, const size_t re
 
 	for (size_t p = 0; p < passes_count; ++p)
 	{
-		if (passes[p].layer == EXR_LAYER_NORMAL)
+		if (passes[p].layer == EXR_LAYER_BEAUTY)
+		{
+			EXR_CHECK("add beauty channel R", exr_add_channel(out, part_id, "Beauty.R", EXR_PIXEL_FLOAT, EXR_PERCEPTUALLY_LINEAR, 1, 1));
+			EXR_CHECK("add beauty channel G", exr_add_channel(out, part_id, "Beauty.G", EXR_PIXEL_FLOAT, EXR_PERCEPTUALLY_LINEAR, 1, 1));
+			EXR_CHECK("add beauty channel B", exr_add_channel(out, part_id, "Beauty.B", EXR_PIXEL_FLOAT, EXR_PERCEPTUALLY_LINEAR, 1, 1));
+			EXR_CHECK("add beauty channel A", exr_add_channel(out, part_id, "Beauty.A", EXR_PIXEL_FLOAT, EXR_PERCEPTUALLY_LINEAR, 1, 1));
+		}
+
+		else if (passes[p].layer == EXR_LAYER_NORMAL)
 		{
 			EXR_CHECK("add normal channel R", exr_add_channel(out, part_id, "Normal.R", EXR_PIXEL_FLOAT, EXR_PERCEPTUALLY_LINEAR, 1, 1));
 			EXR_CHECK("add normal channel G", exr_add_channel(out, part_id, "Normal.G", EXR_PIXEL_FLOAT, EXR_PERCEPTUALLY_LINEAR, 1, 1));
@@ -70,7 +78,47 @@ void write_exr(const char* file_path, const size_t render_width, const size_t re
 
 		for (int16_t c = 0; c < encoder.channel_count; ++c)
 		{
-			if (strcmp(encoder.channels[c].channel_name, "Normal.R") == 0)
+			if (strcmp(encoder.channels[c].channel_name, "Beauty.R") == 0)
+			{
+				for (size_t p = 0; p < passes_count; ++p)
+				{
+					if (passes[p].layer == EXR_LAYER_BEAUTY)
+					{
+						encoder.channels[c].encode_from_ptr = (uint8_t*)(&passes[p].pixels[(chunk_info.start_y * render_width * 4) + (chunk_info.start_x * 4)]);
+					}
+				}
+			}
+			else if (strcmp(encoder.channels[c].channel_name, "Beauty.G") == 0)
+			{
+				for (size_t p = 0; p < passes_count; ++p)
+				{
+					if (passes[p].layer == EXR_LAYER_BEAUTY)
+					{
+						encoder.channels[c].encode_from_ptr = (uint8_t*)(&passes[p].pixels[(chunk_info.start_y * render_width * 4) + (chunk_info.start_x * 4 + 1)]);
+					}
+				}
+			}
+			else if (strcmp(encoder.channels[c].channel_name, "Beauty.B") == 0)
+			{
+				for (size_t p = 0; p < passes_count; ++p)
+				{
+					if (passes[p].layer == EXR_LAYER_BEAUTY)
+					{
+						encoder.channels[c].encode_from_ptr = (uint8_t*)(&passes[p].pixels[(chunk_info.start_y * render_width * 4) + (chunk_info.start_x * 4 + 2)]);
+					}
+				}
+			}
+			else if (strcmp(encoder.channels[c].channel_name, "Beauty.A") == 0)
+			{
+				for (size_t p = 0; p < passes_count; ++p)
+				{
+					if (passes[p].layer == EXR_LAYER_BEAUTY)
+					{
+						encoder.channels[c].encode_from_ptr = (uint8_t*)(&passes[p].pixels[(chunk_info.start_y * render_width * 4) + (chunk_info.start_x * 4 + 3)]);
+					}
+				}
+			}
+			else if (strcmp(encoder.channels[c].channel_name, "Normal.R") == 0)
 			{
 				for (size_t p = 0; p < passes_count; ++p)
 				{

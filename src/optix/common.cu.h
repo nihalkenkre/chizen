@@ -14,11 +14,12 @@
 #endif
 #include <optix_stack_size.h>
 #include <optix_function_table_definition.h>
-
 #include "../utils.h"
 
 typedef struct launch_params
 {
+    texture* textures;
+    material* materials;
     exr_pass* passes;
     size_t passes_count;
     size_t render_width;

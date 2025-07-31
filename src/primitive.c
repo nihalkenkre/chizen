@@ -37,16 +37,6 @@ primitive primitive_create(const cgltf_data* data, cgltf_primitive* curr_prim, c
 		}
 	}
 
-	if (curr_prim->material != NULL)
-	{
-		p.material_index = (int32_t)cgltf_material_index(data, curr_prim->material);
-	}
-	else
-	{
-		p.material_index = -1;
-	}
-
-
 	size_t indices_size = curr_prim->indices->buffer_view->size;
 	OptixIndicesFormat indices_format = OPTIX_INDICES_FORMAT_NONE;
 
@@ -90,13 +80,22 @@ primitive primitive_create(const cgltf_data* data, cgltf_primitive* curr_prim, c
 	CU_CHECK("alloc gas tmp_buffer", cudaMalloc((void**)&tmp_buffer, buffer_sizes.tempSizeInBytes));
 	CU_CHECK("alloc accel op_buffer", cudaMalloc((void**)&p.d_gas_op_buffer, buffer_sizes.outputSizeInBytes + sizeof(custom_gas_data)));
 
+	int32_t material_index = -1;
+
+	if (curr_prim->material != NULL)
+	{
+		material_index = (int32_t)cgltf_material_index(data, curr_prim->material);
+	}
+
 	const custom_gas_data cgd = {
 		.normals = (float3*)p.d_normals,
 		.uvs = (float2*)p.d_uvs,
 		.indices = (uint3*)p.d_indices,
 		.indices_format = indices_format,
+		.material_index = material_index,
 	};
-	CU_CHECK("copy deadbeefcafebabe", cudaMemcpy((void*)p.d_gas_op_buffer, &cgd, sizeof(custom_gas_data), cudaMemcpyHostToDevice));
+
+	CU_CHECK("copy custom_gas_data", cudaMemcpy((void*)p.d_gas_op_buffer, &cgd, sizeof(custom_gas_data), cudaMemcpyHostToDevice));
 
 	OPTIX_CHECK("gas accel build", optixAccelBuild(ctx, stream, &build_options, &build_input, 1, tmp_buffer, buffer_sizes.tempSizeInBytes, p.d_gas_op_buffer + sizeof(custom_gas_data), buffer_sizes.outputSizeInBytes, &p.gas_hnd, NULL, 0));
 	CU_CHECK("sync gas accel build", cudaStreamSynchronize(stream));
