@@ -80,10 +80,7 @@ void renderer_render_gltf(const size_t render_width, const size_t render_height,
 	if (!ReadFile(h_file, module_data, (DWORD)file_size.QuadPart, nullptr, nullptr))
 	{
 		printf("Could not read module file: %s - %d\n", curr_dir, GetLastError());
-		if (module_data != nullptr)
-		{
-			free(module_data);
-		}
+		free(module_data);
 		return;
 	}
 

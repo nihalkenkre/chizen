@@ -8,17 +8,12 @@
 
 typedef struct scene
 {
-    mesh* meshes;
-    size_t meshes_count;
-
     camera camera;
 
-    image* d_images;
     texture* d_textures;
     material* d_materials;
 
     OptixTraversableHandle ias_hnd;
-    CUdeviceptr d_ias_op_buffer;
 } scene;
 
 #ifdef __cplusplus

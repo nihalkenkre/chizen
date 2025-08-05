@@ -46,8 +46,8 @@ int main(int argc, char** argv)
 	{
 		{
 			.layer = {
-				.type = EXR_LAYER_TYPE_BEAUTY,
-				.name = "Beauty",
+				.type = EXR_LAYER_TYPE_BASECOLOR,
+				.name = "BaseColor",
 			},
 			.pixels = malloc((size_t)(RENDER_WIDTH * RENDER_HEIGHT * 4 * sizeof(float))),
 		},

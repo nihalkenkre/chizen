@@ -3,6 +3,9 @@
 
 #include <string.h>
 
+CUdeviceptr d_images = 0;
+CUdeviceptr d_ias_op_buffer = 0;
+
 static size_t images_count = 0;
 static size_t textures_count = 0;
 
@@ -10,31 +13,13 @@ scene scene_create_from_gltf(cgltf_data* gltf_data, const OptixDeviceContext ctx
 {
 	scene s = { 0 };
 
-	for (size_t n = 0; n < gltf_data->nodes_count; ++n)
-	{
-		cgltf_node* curr_node = gltf_data->nodes + n;
-		if (curr_node->mesh != NULL)
-		{
-			cgltf_mesh* curr_mesh = curr_node->mesh;
-
-			if (s.meshes_count == 0)
-			{
-				s.meshes = malloc(sizeof(mesh));
-			}
-			else
-			{
-				s.meshes = realloc(s.meshes, sizeof(mesh) * (s.meshes_count + 1));
-			}
-
-			s.meshes[s.meshes_count++] = mesh_create(gltf_data, curr_node, ctx, stream);
-		}
-	}
-
 	if (gltf_data->cameras_count == 0)
 	{
-		s.camera = camera_create_default();
+		printf("Please have at least one perspective camera in the scene.\nExiting...");
+		exit(0xdeadbabe);
 	}
 	else {
+		bool is_persp_cam_found = false;
 		for (size_t n = 0; n < gltf_data->nodes_count; ++n)
 		{
 			if (gltf_data->nodes[n].camera == NULL)
@@ -44,7 +29,15 @@ scene scene_create_from_gltf(cgltf_data* gltf_data, const OptixDeviceContext ctx
 			if (curr_node->camera->type == cgltf_camera_type_perspective)
 			{
 				s.camera = camera_create_from_gltf(curr_node);
+				is_persp_cam_found = true;
+				break;
 			}
+		}
+
+		if (!is_persp_cam_found)
+		{
+			printf("Please have at least one perspective camera in the scene.\nExiting...");
+			exit(0xdeadbabe);
 		}
 	}
 
@@ -55,9 +48,8 @@ scene scene_create_from_gltf(cgltf_data* gltf_data, const OptixDeviceContext ctx
 		images[i] = image_create(gltf_data, gltf_data->images + i);
 	}
 
-	CU_CHECK("alloc d_textures", cudaMalloc((void**)&s.d_images, images_size));
-	CU_CHECK("copy d_textures to device", cudaMemcpy((void*)s.d_images, images, images_size, cudaMemcpyHostToDevice));
-
+	CU_CHECK("alloc d_textures", cudaMalloc((void**)&d_images, images_size));
+	CU_CHECK("copy d_textures to device", cudaMemcpy((void*)d_images, images, images_size, cudaMemcpyHostToDevice));
 
 	size_t texture_size = sizeof(texture) * gltf_data->textures_count;
 	texture* textures = malloc(texture_size);
@@ -69,7 +61,6 @@ scene scene_create_from_gltf(cgltf_data* gltf_data, const OptixDeviceContext ctx
 	CU_CHECK("alloc d_textures", cudaMalloc((void**)&s.d_textures, texture_size));
 	CU_CHECK("copy d_textures to device", cudaMemcpy((void*)s.d_textures, textures, texture_size, cudaMemcpyHostToDevice));
 
-	
 	size_t materials_size = sizeof(material) * gltf_data->materials_count;
 	material* materials = malloc(materials_size);
 
@@ -81,23 +72,50 @@ scene scene_create_from_gltf(cgltf_data* gltf_data, const OptixDeviceContext ctx
 	CU_CHECK("alloc d_materials", cudaMalloc((void**)&s.d_materials, materials_size));
 	CU_CHECK("copy d_materials to device", cudaMemcpy((void*)s.d_materials, materials, materials_size, cudaMemcpyHostToDevice));
 
+	size_t meshes_size = sizeof(mesh) * gltf_data->meshes_count;
+	mesh* meshes = malloc(meshes_size);
+
+	for (size_t m = 0; m < gltf_data->meshes_count; ++m)
+	{
+		meshes[m] = mesh_create(gltf_data, gltf_data->meshes + m, ctx, stream);
+	}
+
 	size_t instances_count = 0;
 
-	for (size_t m = 0; m < s.meshes_count; ++m)
+	for (size_t n = 0; n < gltf_data->nodes_count; ++n)
 	{
-		instances_count += s.meshes[m].prims_count;
+		if (gltf_data->nodes[n].mesh == NULL)
+			continue;
+
+		instances_count += meshes[cgltf_mesh_index(gltf_data, gltf_data->nodes[n].mesh)].prims_count;
 	}
 
 	size_t instances_size = sizeof(OptixInstance) * instances_count;
 	OptixInstance* instances = malloc(instances_size);
 	memset(instances, 0, instances_size);
+
 	size_t instance_idx = 0;
 
-	for (size_t m = 0; m < s.meshes_count; ++m)
+	for (size_t n = 0; n < gltf_data->nodes_count; ++n)
 	{
-		for (size_t p = 0; p < s.meshes[m].prims_count; ++p)
+		if (gltf_data->nodes[n].mesh == NULL)
+			continue;
+
+		mat4 xform = { 0 };
+		utils_get_xform_matrix_for_node(gltf_data->nodes + n, xform);
+		mat4 xform_xposed = { 0 };
+		glm_mat4_transpose_to(xform, xform_xposed);
+
+		size_t mesh_idx = cgltf_mesh_index(gltf_data, gltf_data->nodes[n].mesh);
+
+		for (size_t p = 0; p < meshes[mesh_idx].prims_count; ++p)
 		{
-			instances[instance_idx++] = s.meshes[m].instances[p];
+			instances[instance_idx].flags = 0;
+			instances[instance_idx].visibilityMask = 0xFF;
+			instances[instance_idx].traversableHandle = meshes[mesh_idx].prims[p].gas_hnd;
+			memcpy(instances[instance_idx].transform, xform_xposed, sizeof(float) * 12);
+
+			++instance_idx;
 		}
 	}
 
@@ -123,9 +141,9 @@ scene scene_create_from_gltf(cgltf_data* gltf_data, const OptixDeviceContext ctx
 
 	CUdeviceptr d_tmp_buffer = 0;
 	CU_CHECK("alloc ias d_tmp_buffer", cudaMalloc((void**)&d_tmp_buffer, buffer_sizes.tempSizeInBytes));
-	CU_CHECK("alloc ias d_ias_buffer", cudaMalloc((void**)&s.d_ias_op_buffer, buffer_sizes.outputSizeInBytes));
+	CU_CHECK("alloc ias d_ias_buffer", cudaMalloc((void**)&d_ias_op_buffer, buffer_sizes.outputSizeInBytes));
 
-	OPTIX_CHECK("ias accel build", optixAccelBuild(ctx, stream, &accel_options, &build_input, 1, d_tmp_buffer, buffer_sizes.tempSizeInBytes, s.d_ias_op_buffer, buffer_sizes.outputSizeInBytes, &s.ias_hnd, NULL, 0));
+	OPTIX_CHECK("ias accel build", optixAccelBuild(ctx, stream, &accel_options, &build_input, 1, d_tmp_buffer, buffer_sizes.tempSizeInBytes, d_ias_op_buffer, buffer_sizes.outputSizeInBytes, &s.ias_hnd, NULL, 0));
 
 	CU_CHECK("ias accel build sync", cudaStreamSynchronize(stream));
 	CU_CHECK("dealloc d_instances", cudaFree((void*)d_instances));
@@ -135,30 +153,20 @@ scene scene_create_from_gltf(cgltf_data* gltf_data, const OptixDeviceContext ctx
 	free(images);
 	free(textures);
 	free(materials);
+	free(meshes);
 
 	return s;
 }
 
 void scene_destroy(scene s)
 {
-	if (s.meshes != NULL)
-	{
-		for (size_t m = 0; m < s.meshes_count; ++m)
-		{
-			mesh_destroy(s.meshes[m]);
-		}
-
-		free(s.meshes);
-		s.meshes = NULL;
-		s.meshes_count = 0;
-	}
 	for (size_t i = 0; i < images_count; ++i)
 	{
 		image img = { 0 };
-		CU_CHECK("copy image to host", cudaMemcpy((void*)&img, (void*)((size_t)s.d_images + (sizeof(image) * i)), sizeof(image), cudaMemcpyDeviceToHost));
+		CU_CHECK("copy image to host", cudaMemcpy((void*)&img, (void*)((size_t)d_images + (sizeof(image) * i)), sizeof(image), cudaMemcpyDeviceToHost));
 		image_destroy(img);
 	}
-	CU_CHECK("dealloc d_images", cudaFree((void*)s.d_images));
+	CU_CHECK("dealloc d_images", cudaFree((void*)d_images));
 
 	for (size_t t = 0; t < textures_count; ++t)
 	{
@@ -169,5 +177,5 @@ void scene_destroy(scene s)
 	CU_CHECK("dealloc d_textures", cudaFree((void*)s.d_textures));
 	CU_CHECK("dealloc d_materials", cudaFree((void*)s.d_materials));
 
-	CU_CHECK("dealloc ias accel buffer", cudaFree((void*)s.d_ias_op_buffer));
+	CU_CHECK("dealloc ias accel buffer", cudaFree((void*)d_ias_op_buffer));
 }

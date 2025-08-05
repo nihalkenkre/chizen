@@ -28,7 +28,7 @@ inline void OPTIX_CHECK(const char* action, const OptixResult result)
 
 typedef enum EXR_LAYER_TYPE
 {
-	EXR_LAYER_TYPE_BEAUTY,
+	EXR_LAYER_TYPE_BASECOLOR,
 	EXT_LAYER_TYPE_TRANSMISSION,
 	EXR_LAYER_TYPE_NORMAL,
 	EXR_LAYER_TYPE_UV,
