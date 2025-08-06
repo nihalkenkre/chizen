@@ -1,6 +1,7 @@
 #pragma once
 
 #include <stdint.h>
+#include "error.h"
 
 typedef enum EXR_LAYER_TYPE
 {
@@ -29,4 +30,4 @@ typedef struct exr_pass
 	EXR_LAYER layer;
 } exr_pass;
 
-void write_exr(const char* file_path, const size_t render_width, const size_t render_height, const exr_pass* passes, const size_t passes_count);
+CHIZEN_RESULT write_exr(const char* file_path, const size_t render_width, const size_t render_height, const exr_pass* passes, const size_t passes_count);

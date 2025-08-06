@@ -3,6 +3,7 @@
 #include <cgltf/cgltf.h>
 #include <cglm/include/cglm/cglm.h>
 #include "material.h"
+#include "error.h"
 
 typedef struct custom_gas_data
 {
@@ -22,6 +23,7 @@ typedef struct primitive
 	CUdeviceptr d_indices;
 	OptixTraversableHandle gas_hnd;
 	CUdeviceptr d_gas_op_buffer;
+	CHIZEN_RESULT result;
 } primitive;
 
 primitive primitive_create(const cgltf_data* data, cgltf_primitive* curr_prim, const OptixDeviceContext ctx, const cudaStream_t stream);

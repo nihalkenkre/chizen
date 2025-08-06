@@ -8,25 +8,20 @@
 #include "camera.h"
 #include "error.h"
 
-#define CU_CHECK(result)                                                            \
-	if (result > cudaSuccess)                                                        \
-	{                                                                                \
-		printf("CUDA ERR: %s %d %s\n", cudaGetErrorName(result), __LINE__, __FILE__); \
-		goto shutdown;                                                                \
+#define CU_CHECK(cu_result, result)                                                            \
+	if (cu_result > cudaSuccess)                                                        \
+	{                                                                                   \
+		printf("CUDA ERR: %s %d %s\n", cudaGetErrorName(cu_result), __LINE__, __FILE__); \
+		result = CHIZEN_RESULT_CUDA_ERROR;                                               \
+		goto shutdown;                                                                   \
 	}
 
-#define OPTIX_CHECK(result)                                                           \
-	if (result > OPTIX_SUCCESS)                                                        \
-	{                                                                                  \
-		printf("OPTIX ERR: %s %d %s\n", optixGetErrorName(result), __LINE__, __FILE__); \
-		goto shutdown;                                                                  \
-	}
-
-#define RESULT_CHECK(result)                                     \
-	if (result > RESULT_CODE_SUCCESS)                             \
-	{                                                             \
-		printf("APP ERR: %d %s %d\n", result, __FILE__, __LINE__); \
-		goto shutdown;                                             \
+#define OPTIX_CHECK(optix_result, result)                                                           \
+	if (optix_result > OPTIX_SUCCESS)                                                        \
+	{                                                                                        \
+		printf("OPTIX ERR: %s %d %s\n", optixGetErrorName(optix_result), __LINE__, __FILE__); \
+		result = CHIZEN_RESULT_OPTIX_ERROR;                                                   \
+		goto shutdown;                                                                        \
 	}
 
 #ifdef __cplusplus

@@ -3,7 +3,7 @@
 
 #include "renderer.h"
 #include "exr.h"
-#include "utils.h"
+#include "error.h"
 
 #define CGLTF_IMPLEMENTATION
 #include <cgltf/cgltf.h>
@@ -21,25 +21,7 @@ const uint8_t NUM_SAMPLES = 32;
 int main(int argc, char** argv)
 {
 	printf("Hello World\n");
-
-	char* file_path = NULL;
-	if (argc == 2)
-	{
-		file_path = argv[1];
-	}
-	else
-	{
-		printf("Usage: chizen.exe <gltf_path>\n");
-		goto shutdown;
-	}
-
-	char* ext = PathFindExtensionA(file_path);
-	if (strcmp(ext, ".glb") != 0 && strcmp(ext, ".gltf") != 0)
-	{
-		printf("Only GLTF files supported... Exiting...");
-		goto shutdown;
-	}
-
+	CHIZEN_RESULT result = CHIZEN_RESULT_SUCCESS;
 	const float RENDER_WIDTH = RENDER_HEIGHT * ASPECT_RATIO;
 
 	exr_pass passes[] =
@@ -81,21 +63,42 @@ int main(int argc, char** argv)
 		},
 	};
 
-	renderer_render_gltf((size_t)RENDER_WIDTH, (size_t)RENDER_HEIGHT, NUM_SAMPLES, file_path, passes, _countof(passes));
+	char* file_path = NULL;
+	if (argc == 2)
+	{
+		file_path = argv[1];
+	}
+	else
+	{
+		printf("Usage: chizen.exe <gltf_path>\n");
+		result = CHIZEN_RESULT_USAGE_ERROR;
+		goto shutdown;
+	}
+
+	char* ext = PathFindExtensionA(file_path);
+	if (strcmp(ext, ".glb") != 0 && strcmp(ext, ".gltf") != 0)
+	{
+		printf("Only GLTF files supported... Exiting...");
+		result = CHIZEN_RESULT_FILE_TYPE_ERROR;
+		goto shutdown;
+	}
+
+
+	CHIZEN_RESULT_CHECK(renderer_render_gltf((size_t)RENDER_WIDTH, (size_t)RENDER_HEIGHT, NUM_SAMPLES, file_path, passes, _countof(passes)), result);
 
 	char img_path[MAX_PATH];
 	GetModuleFileNameA(GetModuleHandleA(NULL), img_path, MAX_PATH);
 	PathRemoveFileSpecA(img_path);
 	strcat(img_path, "\\test.exr");
 
-	write_exr(img_path, (size_t)RENDER_WIDTH, (size_t)RENDER_HEIGHT, passes, _countof(passes));
+	CHIZEN_RESULT_CHECK(write_exr(img_path, (size_t)RENDER_WIDTH, (size_t)RENDER_HEIGHT, passes, _countof(passes)), result);
+
+shutdown:
 
 	for (size_t p = 0; p < _countof(passes); ++p)
 	{
 		free(passes[p].pixels);
 	}
-
-shutdown:
 
 	printf("Bye World\n");
 	return 0;

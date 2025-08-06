@@ -9,6 +9,7 @@
 typedef struct texture
 {
 	cudaTextureObject_t d_obj;
+	CHIZEN_RESULT result;
 } texture;
 
 texture texture_create(const cgltf_data* gltf_data, const cgltf_texture* curr_tex, const image* images);

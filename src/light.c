@@ -7,7 +7,8 @@ light light_create(const cgltf_data* data, const cgltf_light* curr_light)
 		.intensity = curr_light->intensity,
 		.range = curr_light->range,
 		.spot_inner_cone_angle = curr_light->spot_inner_cone_angle,
-		.spot_outer_cone_angle = curr_light->spot_outer_cone_angle
+		.spot_outer_cone_angle = curr_light->spot_outer_cone_angle,
+		.result = CHIZEN_RESULT_SUCCESS,
 	};
 
 	memcpy(l.color, curr_light->color, sizeof(l.color));

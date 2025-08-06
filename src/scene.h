@@ -17,7 +17,7 @@ typedef struct scene
     material* d_materials;
 
     OptixTraversableHandle ias_hnd;
-    RESULT_CODE result;
+    CHIZEN_RESULT result;
 } scene;
 
 #ifdef __cplusplus

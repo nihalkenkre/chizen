@@ -12,8 +12,11 @@ mesh mesh_create(const cgltf_data* data, cgltf_mesh* curr_mesh, const OptixDevic
 	for (size_t p = 0; p < m.prims_count; ++p)
 	{
 		m.prims[p] = primitive_create(data, curr_mesh->primitives + p, ctx, stream);
+
+		CHIZEN_RESULT_CHECK(m.prims[p].result, m.result);
 	}
 
+shutdown:
 	return m;
 }
 

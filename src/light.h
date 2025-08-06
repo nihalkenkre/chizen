@@ -1,6 +1,7 @@
 #pragma once
 
 #include <cgltf/cgltf.h>
+#include "error.h"
 
 typedef enum LIGHT_TYPE
 {
@@ -17,6 +18,7 @@ typedef struct light
 	float spot_inner_cone_angle;
 	float spot_outer_cone_angle;
 	LIGHT_TYPE type;
+	CHIZEN_RESULT result;
 } light;
 
 light light_create(const cgltf_data* data, const cgltf_light* curr_light);

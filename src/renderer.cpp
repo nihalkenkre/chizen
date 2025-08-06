@@ -9,8 +9,10 @@ static void log_cb(unsigned int level, const char* tag, const char* message, voi
 	printf("%d - %s: %s\n", level, tag, message);
 }
 
-void renderer_render_gltf(const size_t render_width, const size_t render_height, const uint8_t num_samples, const char* gltf_path, exr_pass* passes, const size_t passes_count)
+CHIZEN_RESULT renderer_render_gltf(const size_t render_width, const size_t render_height, const uint8_t num_samples, const char* gltf_path, exr_pass* passes, const size_t passes_count)
 {
+	CHIZEN_RESULT result = CHIZEN_RESULT_SUCCESS;
+
 	cudaStream_t stream = nullptr;
 	cgltf_options gltf_options = { };
 	cgltf_data* gltf_data = nullptr;
@@ -47,10 +49,10 @@ void renderer_render_gltf(const size_t render_width, const size_t render_height,
 	launch_params lp = {};
 	CUdeviceptr d_launch_params = 0;
 	OptixPipeline pipeline = nullptr;
-	OptixProgramGroup* pipeline_program_groups = nullptr;
+	OptixProgramGroup pipeline_program_groups[3];
 
-	CU_CHECK(cudaFree(nullptr));
-	OPTIX_CHECK(optixInit());
+	CU_CHECK(cudaFree(nullptr), result);
+	OPTIX_CHECK(optixInit(), result);
 
 	ctx_options = {
 #ifdef _DEBUG
@@ -60,10 +62,10 @@ void renderer_render_gltf(const size_t render_width, const size_t render_height,
 #endif
 	};
 
-	OPTIX_CHECK(optixDeviceContextCreate(0, &ctx_options, &ctx));
-	OPTIX_CHECK(optixDeviceContextSetCacheEnabled(ctx, 0));
+	OPTIX_CHECK(optixDeviceContextCreate(0, &ctx_options, &ctx), result);
+	OPTIX_CHECK(optixDeviceContextSetCacheEnabled(ctx, 0), result);
 
-	CU_CHECK(cudaStreamCreate(&stream));
+	CU_CHECK(cudaStreamCreate(&stream), result);
 
 	if (cgltf_parse_file(&gltf_options, gltf_path, &gltf_data) != cgltf_result_success ||
 		cgltf_validate(gltf_data) != cgltf_result_success ||
@@ -74,7 +76,7 @@ void renderer_render_gltf(const size_t render_width, const size_t render_height,
 	}
 
 	s = scene_create_from_gltf(gltf_data, ctx, stream);
-	RESULT_CHECK(s.result);
+	CHIZEN_RESULT_CHECK(s.result, result);
 
 	pipeline_compile_options = {
 		.traversableGraphFlags = OPTIX_TRAVERSABLE_GRAPH_FLAG_ALLOW_SINGLE_LEVEL_INSTANCING,
@@ -114,7 +116,7 @@ void renderer_render_gltf(const size_t render_width, const size_t render_height,
 		goto shutdown;
 	}
 
-	OPTIX_CHECK(optixModuleCreate(ctx, &module_compile_options, &pipeline_compile_options, (char*)module_data, file_size.QuadPart, nullptr, nullptr, &module));
+	OPTIX_CHECK(optixModuleCreate(ctx, &module_compile_options, &pipeline_compile_options, (char*)module_data, file_size.QuadPart, nullptr, nullptr, &module), result);
 
 	pipeline_link_options = {
 		.maxTraceDepth = 31,
@@ -144,13 +146,13 @@ void renderer_render_gltf(const size_t render_width, const size_t render_height,
 		},
 	};
 
-	OPTIX_CHECK(optixProgramGroupCreate(ctx, &ray_gen_program_group_desc, 1, &module_program_group_options, nullptr, nullptr, &ray_gen_program_group));
-	OPTIX_CHECK(optixProgramGroupCreate(ctx, &closest_hit_program_group_desc, 1, &module_program_group_options, nullptr, nullptr, &closest_hit_program_group));
-	OPTIX_CHECK(optixProgramGroupCreate(ctx, &miss_program_group_desc, 1, &module_program_group_options, nullptr, nullptr, &miss_program_group));
+	OPTIX_CHECK(optixProgramGroupCreate(ctx, &ray_gen_program_group_desc, 1, &module_program_group_options, nullptr, nullptr, &ray_gen_program_group), result);
+	OPTIX_CHECK(optixProgramGroupCreate(ctx, &closest_hit_program_group_desc, 1, &module_program_group_options, nullptr, nullptr, &closest_hit_program_group), result);
+	OPTIX_CHECK(optixProgramGroupCreate(ctx, &miss_program_group_desc, 1, &module_program_group_options, nullptr, nullptr, &miss_program_group), result);
 
 	utils_find_pixel_vecs(s.camera, s.camera.fov, (float)render_width, (float)render_height, pixel_00_loc, pixel_delta_u, pixel_delta_v);
 
-	CU_CHECK(cudaMalloc((void**)&d_rand_states, render_width * render_height * sizeof(curandState)));
+	CU_CHECK(cudaMalloc((void**)&d_rand_states, render_width * render_height * sizeof(curandState)), result);
 
 	rg_record = {
 		.data = {
@@ -163,18 +165,18 @@ void renderer_render_gltf(const size_t render_width, const size_t render_height,
 		},
 	};
 
-	OPTIX_CHECK(optixSbtRecordPackHeader(ray_gen_program_group, (void*)rg_record.header));
-	OPTIX_CHECK(optixSbtRecordPackHeader(closest_hit_program_group, closest_hit_record_header));
-	OPTIX_CHECK(optixSbtRecordPackHeader(miss_program_group, miss_record_header));
+	OPTIX_CHECK(optixSbtRecordPackHeader(ray_gen_program_group, (void*)rg_record.header), result);
+	OPTIX_CHECK(optixSbtRecordPackHeader(closest_hit_program_group, closest_hit_record_header), result);
+	OPTIX_CHECK(optixSbtRecordPackHeader(miss_program_group, miss_record_header), result);
 
-	CU_CHECK(cudaMalloc((void**)&d_ray_gen_record, sizeof(ray_gen_record)));
-	CU_CHECK(cudaMemcpy((void*)d_ray_gen_record, (void*)&rg_record, sizeof(ray_gen_record), cudaMemcpyHostToDevice));
+	CU_CHECK(cudaMalloc((void**)&d_ray_gen_record, sizeof(ray_gen_record)), result);
+	CU_CHECK(cudaMemcpy((void*)d_ray_gen_record, (void*)&rg_record, sizeof(ray_gen_record), cudaMemcpyHostToDevice), result);
 
-	CU_CHECK(cudaMalloc((void**)&d_closest_hit_record, sizeof(ray_gen_record)));
-	CU_CHECK(cudaMemcpy((void*)d_closest_hit_record, closest_hit_record_header, OPTIX_SBT_RECORD_HEADER_SIZE, cudaMemcpyHostToDevice));
+	CU_CHECK(cudaMalloc((void**)&d_closest_hit_record, sizeof(ray_gen_record)), result);
+	CU_CHECK(cudaMemcpy((void*)d_closest_hit_record, closest_hit_record_header, OPTIX_SBT_RECORD_HEADER_SIZE, cudaMemcpyHostToDevice), result);
 
-	CU_CHECK(cudaMalloc((void**)&d_miss_record, sizeof(ray_gen_record)));
-	CU_CHECK(cudaMemcpy((void*)d_miss_record, miss_record_header, OPTIX_SBT_RECORD_HEADER_SIZE, cudaMemcpyHostToDevice));
+	CU_CHECK(cudaMalloc((void**)&d_miss_record, sizeof(ray_gen_record)), result);
+	CU_CHECK(cudaMemcpy((void*)d_miss_record, miss_record_header, OPTIX_SBT_RECORD_HEADER_SIZE, cudaMemcpyHostToDevice), result);
 
 	sbt = {
 		.raygenRecord = d_ray_gen_record,
@@ -191,11 +193,11 @@ void renderer_render_gltf(const size_t render_width, const size_t render_height,
 	for (size_t p = 0; p < passes_count; ++p)
 	{
 		d_exr_passes_staging[p].layer = passes[p].layer;
-		CU_CHECK(cudaMalloc((void**)(&d_exr_passes_staging[p].d_pixels), render_width * render_height * 4 * sizeof(float)));
+		CU_CHECK(cudaMalloc((void**)(&d_exr_passes_staging[p].d_pixels), render_width * render_height * 4 * sizeof(float)), result);
 	}
 
-	CU_CHECK(cudaMalloc((void**)&d_exr_passes, sizeof(exr_pass) * passes_count));
-	CU_CHECK(cudaMemcpy((void*)d_exr_passes, d_exr_passes_staging, sizeof(exr_pass) * passes_count, cudaMemcpyHostToDevice));
+	CU_CHECK(cudaMalloc((void**)&d_exr_passes, sizeof(exr_pass) * passes_count), result);
+	CU_CHECK(cudaMemcpy((void*)d_exr_passes, d_exr_passes_staging, sizeof(exr_pass) * passes_count, cudaMemcpyHostToDevice), result);
 
 	lp = {
 		.textures = s.d_textures,
@@ -207,24 +209,23 @@ void renderer_render_gltf(const size_t render_width, const size_t render_height,
 		.handle = s.ias_hnd,
 	};
 
-	CU_CHECK(cudaMalloc((void**)&d_launch_params, sizeof(launch_params)));
-	CU_CHECK(cudaMemcpy((void*)d_launch_params, &lp, sizeof(launch_params), cudaMemcpyHostToDevice));
-	pipeline_program_groups = reinterpret_cast<OptixProgramGroup*>(malloc(sizeof(OptixProgramGroup) * 3));
+	CU_CHECK(cudaMalloc((void**)&d_launch_params, sizeof(launch_params)), result);
+	CU_CHECK(cudaMemcpy((void*)d_launch_params, &lp, sizeof(launch_params), cudaMemcpyHostToDevice), result);
 
 	pipeline_program_groups[0] = ray_gen_program_group;
 	pipeline_program_groups[1] = miss_program_group;
 	pipeline_program_groups[2] = closest_hit_program_group;
 
-	OPTIX_CHECK(optixPipelineCreate(ctx, &pipeline_compile_options, &pipeline_link_options, pipeline_program_groups, 3, nullptr, nullptr, &pipeline));
+	OPTIX_CHECK(optixPipelineCreate(ctx, &pipeline_compile_options, &pipeline_link_options, pipeline_program_groups, _countof(pipeline_program_groups), nullptr, nullptr, &pipeline), result);
 
-	OPTIX_CHECK(optixLaunch(pipeline, stream, d_launch_params, sizeof(launch_params), &sbt, (unsigned int)render_width, (unsigned int)render_height, 1));
+	OPTIX_CHECK(optixLaunch(pipeline, stream, d_launch_params, sizeof(launch_params), &sbt, (unsigned int)render_width, (unsigned int)render_height, 1), result);
 
-	CU_CHECK(cudaGetLastError());
-	CU_CHECK(cudaStreamSynchronize(stream));
+	CU_CHECK(cudaGetLastError(), result);
+	CU_CHECK(cudaStreamSynchronize(stream), result);
 
 	for (size_t p = 0; p < passes_count; ++p)
 	{
-		CU_CHECK(cudaMemcpy(passes[p].pixels, (void*)((exr_pass*)d_exr_passes_staging)[p].d_pixels, render_width * render_height * 4 * sizeof(float), cudaMemcpyDeviceToHost));
+		CU_CHECK(cudaMemcpy(passes[p].pixels, (void*)((exr_pass*)d_exr_passes_staging)[p].d_pixels, render_width * render_height * 4 * sizeof(float), cudaMemcpyDeviceToHost), result);
 	}
 
 shutdown:
@@ -235,30 +236,25 @@ shutdown:
 
 	scene_destroy(s);
 
-	if (pipeline_program_groups != nullptr)
-	{
-		free(pipeline_program_groups);
-	}
-
-	CU_CHECK(cudaFree((void*)d_rand_states));
-	CU_CHECK(cudaFree((void*)d_miss_record));
-	CU_CHECK(cudaFree((void*)d_ray_gen_record));
-	OPTIX_CHECK(optixProgramGroupDestroy(ray_gen_program_group));
-	OPTIX_CHECK(optixProgramGroupDestroy(miss_program_group));
-	OPTIX_CHECK(optixModuleDestroy(module));
-	OPTIX_CHECK(optixPipelineDestroy(pipeline));
-	CU_CHECK(cudaStreamDestroy(stream));
+	cudaFree((void*)d_rand_states);
+	cudaFree((void*)d_miss_record);
+	cudaFree((void*)d_ray_gen_record);
+	optixProgramGroupDestroy(ray_gen_program_group);
+	optixProgramGroupDestroy(miss_program_group);
+	optixModuleDestroy(module);
+	optixPipelineDestroy(pipeline);
+	cudaStreamDestroy(stream);
 	for (size_t p = 0; p < passes_count; ++p)
 	{
-		CU_CHECK(cudaFree((void*)((exr_pass*)d_exr_passes_staging)[p].d_pixels));
+		CU_CHECK(cudaFree((void*)((exr_pass*)d_exr_passes_staging)[p].d_pixels), result);
 	}
 	free(d_exr_passes_staging);
 
-	CU_CHECK(cudaFree((void*)d_exr_passes));
-	CU_CHECK(cudaFree((void*)d_launch_params));
-	OPTIX_CHECK(optixDeviceContextDestroy(ctx));
+	cudaFree((void*)d_exr_passes);
+	cudaFree((void*)d_launch_params);
+	optixDeviceContextDestroy(ctx);
 
 	cgltf_free(gltf_data);
 
-	return;
+	return result;
 }

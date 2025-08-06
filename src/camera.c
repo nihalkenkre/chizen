@@ -8,6 +8,7 @@ camera camera_create_from_gltf(cgltf_node *camera_node)
 		 .znear = camera_node->camera->data.perspective.znear,
 		 .zfar = camera_node->camera->data.perspective.has_zfar ? camera_node->camera->data.perspective.zfar : 1000.f,
 		 .aspect_ratio = camera_node->camera->data.perspective.has_aspect_ratio ? camera_node->camera->data.perspective.aspect_ratio : 16.f / 9.f,
+		 .result = CHIZEN_RESULT_SUCCESS,
 	};
 
 	mat4 xform = {0};

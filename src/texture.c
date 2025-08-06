@@ -58,7 +58,7 @@ texture texture_create(const cgltf_data* gltf_data, const cgltf_texture* curr_te
 		.normalizedCoords = true,
 	};
 
-	CU_CHECK(cudaCreateTextureObject(&t.d_obj, &tex_res_desc, &tex_desc, NULL));
+	CU_CHECK(cudaCreateTextureObject(&t.d_obj, &tex_res_desc, &tex_desc, NULL), t.result);
 
 shutdown:
 	return t;
@@ -66,8 +66,7 @@ shutdown:
 
 void texture_destroy(texture t)
 {
-	CU_CHECK(cudaDestroyTextureObject(t.d_obj));
+	cudaDestroyTextureObject(t.d_obj);
 
-shutdown:
 	return;
 }
