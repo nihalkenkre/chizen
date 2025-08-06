@@ -2,6 +2,7 @@
 
 #include "scene.h"
 #include "utils.h"
+#include "exr.h"
 
 #ifdef __cplusplus
 #include <cstdint>

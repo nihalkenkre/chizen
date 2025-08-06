@@ -1,5 +1,5 @@
-#include "common.cu.h"
-#include "../utils.h"
+#include "../common.h"
+#include "../primitive.h"
 #include <sutil/vec_math.h>
 
 typedef struct ray_payload

@@ -4,6 +4,16 @@
 #include <cglm/include/cglm/cglm.h>
 #include "material.h"
 
+typedef struct custom_gas_data
+{
+	__align__(OPTIX_ACCEL_BUFFER_BYTE_ALIGNMENT)
+		float3* normals;
+	float2* uvs;
+	void* indices;
+	OptixIndicesFormat indices_format;
+	int32_t material_index;
+} custom_gas_data;
+
 typedef struct primitive
 {
 	CUdeviceptr d_positions;

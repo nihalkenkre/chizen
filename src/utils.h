@@ -3,71 +3,38 @@
 #include <optix.h>
 #include <cuda_runtime.h>
 #include <stdio.h>
+#include <cgltf/cgltf.h>
+#include <cglm/include/cglm/cglm.h>
 #include "camera.h"
-#include "image.h"
-#include "texture.h"
-#include "material.h"
+#include "error.h"
 
-inline void CU_CHECK(const char* action, const cudaError_t result)
-{
-	if (result > cudaSuccess)
-	{
-		printf("CUDA ERR %d: %s\nExiting...\n", result, cudaGetErrorName(result));
-		exit(result);
+#define CU_CHECK(result)                                                            \
+	if (result > cudaSuccess)                                                        \
+	{                                                                                \
+		printf("CUDA ERR: %s %d %s\n", cudaGetErrorName(result), __LINE__, __FILE__); \
+		goto shutdown;                                                                \
 	}
-}
 
-inline void OPTIX_CHECK(const char* action, const OptixResult result)
-{
-	if (result > OPTIX_SUCCESS)
-	{
-		printf("ERR: %s %s\n", action, optixGetErrorName(result));
-		exit(result);
+#define OPTIX_CHECK(result)                                                           \
+	if (result > OPTIX_SUCCESS)                                                        \
+	{                                                                                  \
+		printf("OPTIX ERR: %s %d %s\n", optixGetErrorName(result), __LINE__, __FILE__); \
+		goto shutdown;                                                                  \
 	}
-}
 
-typedef enum EXR_LAYER_TYPE
-{
-	EXR_LAYER_TYPE_BASECOLOR,
-	EXT_LAYER_TYPE_TRANSMISSION,
-	EXR_LAYER_TYPE_NORMAL,
-	EXR_LAYER_TYPE_UV,
-	EXR_LAYER_TYPE_METALNESS,
-	EXR_LAYER_TYPE_ROUGHNESS,
-} EXR_LAYER_TYPE;
-
-typedef struct EXR_LAYER
-{
-	EXR_LAYER_TYPE type;
-	char name[64];
-} EXR_LAYER;
-
-typedef struct exr_pass
-{
-	union {
-		// CPU pixels
-		float* pixels;
-		// GPU pixels
-		float* d_pixels;
-	};
-	EXR_LAYER layer;
-} exr_pass;
-
-typedef struct custom_gas_data
-{
-	__align__(OPTIX_ACCEL_BUFFER_BYTE_ALIGNMENT)
-		float3* normals;
-	float2* uvs;
-	void* indices;
-	OptixIndicesFormat indices_format;
-	int32_t material_index;
-} custom_gas_data;
+#define RESULT_CHECK(result)                                     \
+	if (result > RESULT_CODE_SUCCESS)                             \
+	{                                                             \
+		printf("APP ERR: %d %s %d\n", result, __FILE__, __LINE__); \
+		goto shutdown;                                             \
+	}
 
 #ifdef __cplusplus
-extern "C" {
+extern "C"
+{
 #endif // __cplusplus
 
-	void utils_get_xform_matrix_for_node(cgltf_node* node, mat4 xform);
+	void utils_get_xform_matrix_for_node(cgltf_node *node, mat4 xform);
 	void utils_find_pixel_vecs(camera cam, float fov, float render_width, float render_height, vec3 out_pixel_00_loc, vec3 out_pixel_delta_u, vec3 out_pixel_delta_v);
 
 #ifdef __cplusplus

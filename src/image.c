@@ -37,11 +37,12 @@ image image_create(const cgltf_data* gltf_data, cgltf_image* curr_img)
 		cfd = cudaCreateChannelDesc(32, 32, 32, 32, cudaChannelFormatKindFloat);
 	}
 
-	CU_CHECK("create cuda pixel_array", cudaMallocArray(&img.d_pixel_array, &cfd, img.width, img.height, cudaArrayDefault));
-	CU_CHECK("copy pixels to device", cudaMemcpy2DToArray(img.d_pixel_array, 0, 0, 
-		pixels, img.width * num_channels * sizeof(float), img.width * num_channels * sizeof(float), img.height, 
+	CU_CHECK(cudaMallocArray(&img.d_pixel_array, &cfd, img.width, img.height, cudaArrayDefault));
+	CU_CHECK(cudaMemcpy2DToArray(img.d_pixel_array, 0, 0,
+		pixels, img.width * num_channels * sizeof(float), img.width * num_channels * sizeof(float), img.height,
 		cudaMemcpyHostToDevice));
 
+shutdown:
 	stbi_image_free(pixels);
 
 	return img;
@@ -49,5 +50,8 @@ image image_create(const cgltf_data* gltf_data, cgltf_image* curr_img)
 
 void image_destroy(image i)
 {
-	CU_CHECK("dealloc image d_pixel_array", cudaFreeArray(i.d_pixel_array));
+	CU_CHECK(cudaFreeArray(i.d_pixel_array));
+
+shutdown:
+	return;
 }

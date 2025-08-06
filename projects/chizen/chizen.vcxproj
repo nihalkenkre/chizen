@@ -26,6 +26,7 @@
     <ClCompile Include="..\..\src\camera.c" />
     <ClCompile Include="..\..\src\exr.c" />
     <ClCompile Include="..\..\src\image.c" />
+    <ClCompile Include="..\..\src\light.c" />
     <ClCompile Include="..\..\src\main.c" />
     <ClCompile Include="..\..\src\material.c" />
     <ClCompile Include="..\..\src\mesh.c" />
@@ -37,9 +38,11 @@
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="..\..\src\camera.h" />
+    <ClInclude Include="..\..\src\common.h" />
+    <ClInclude Include="..\..\src\error.h" />
     <ClInclude Include="..\..\src\exr.h" />
     <ClInclude Include="..\..\src\image.h" />
-    <ClInclude Include="..\..\src\optix\common.cu.h" />
+    <ClInclude Include="..\..\src\light.h" />
     <ClInclude Include="..\..\src\material.h" />
     <ClInclude Include="..\..\src\mesh.h" />
     <ClInclude Include="..\..\src\primitive.h" />

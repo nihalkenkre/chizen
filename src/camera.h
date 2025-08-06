@@ -16,5 +16,4 @@ typedef struct camera
 } camera;
 
 camera camera_create_from_gltf(cgltf_node* camera_node);
-camera camera_create_default(void);
 void camera_destroy(camera c);

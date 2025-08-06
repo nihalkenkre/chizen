@@ -53,6 +53,9 @@
     <ClCompile Include="..\..\src\texture.c">
       <Filter>Sources</Filter>
     </ClCompile>
+    <ClCompile Include="..\..\src\light.c">
+      <Filter>Sources</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="..\..\src\camera.h">
@@ -76,9 +79,6 @@
     <ClInclude Include="..\..\src\utils.h">
       <Filter>Headers</Filter>
     </ClInclude>
-    <ClInclude Include="..\..\src\optix\common.cu.h">
-      <Filter>Optix</Filter>
-    </ClInclude>
     <ClInclude Include="..\..\src\exr.h">
       <Filter>Headers</Filter>
     </ClInclude>
@@ -86,6 +86,15 @@
       <Filter>Headers</Filter>
     </ClInclude>
     <ClInclude Include="..\..\src\texture.h">
+      <Filter>Headers</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\src\light.h">
+      <Filter>Headers</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\src\common.h">
+      <Filter>Headers</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\src\error.h">
       <Filter>Headers</Filter>
     </ClInclude>
   </ItemGroup>

@@ -1,19 +1,23 @@
 #pragma once
 
+#include "light.h"
 #include "camera.h"
 #include "mesh.h"
 #include "image.h"
 #include "texture.h"
 #include "material.h"
+#include "error.h"
 
 typedef struct scene
 {
     camera camera;
 
+    light* d_lights;
     texture* d_textures;
     material* d_materials;
 
     OptixTraversableHandle ias_hnd;
+    RESULT_CODE result;
 } scene;
 
 #ifdef __cplusplus

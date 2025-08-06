@@ -17,22 +17,22 @@ primitive primitive_create(const cgltf_data* data, cgltf_primitive* curr_prim, c
 		{
 			positions_count = curr_attr->data->count;
 			size_t positions_size = curr_attr->data->buffer_view->size;
-			CU_CHECK("alloc prim positions", cudaMalloc((void**)&p.d_positions, positions_size));
-			CU_CHECK("copy positions to device", cudaMemcpy((void*)p.d_positions, (void*)((size_t)curr_attr->data->buffer_view->buffer->data + curr_attr->data->buffer_view->offset + curr_attr->data->offset), positions_size, cudaMemcpyHostToDevice));
+			CU_CHECK(cudaMalloc((void**)&p.d_positions, positions_size));
+			CU_CHECK(cudaMemcpy((void*)p.d_positions, (void*)((size_t)curr_attr->data->buffer_view->buffer->data + curr_attr->data->buffer_view->offset + curr_attr->data->offset), positions_size, cudaMemcpyHostToDevice));
 		}
 		else if (strcmp(curr_attr->name, "NORMAL") == 0)
 		{
 			size_t normals_size = curr_attr->data->buffer_view->size;
-			CU_CHECK("alloc prim normals", cudaMalloc((void**)&p.d_normals, normals_size));
-			CU_CHECK("copy normals to device", cudaMemcpy((void*)p.d_normals, (void*)((size_t)curr_attr->data->buffer_view->buffer->data + curr_attr->data->buffer_view->offset + curr_attr->data->offset), normals_size, cudaMemcpyHostToDevice));
+			CU_CHECK(cudaMalloc((void**)&p.d_normals, normals_size));
+			CU_CHECK(cudaMemcpy((void*)p.d_normals, (void*)((size_t)curr_attr->data->buffer_view->buffer->data + curr_attr->data->buffer_view->offset + curr_attr->data->offset), normals_size, cudaMemcpyHostToDevice));
 		}
 		else if (strcmp(curr_attr->name, "TEXCOORD_0") == 0)
 		{
 			size_t uvs_size = curr_attr->data->buffer_view->size;
 			if (uvs_size > 0)
 			{
-				CU_CHECK("alloc prim uvss", cudaMalloc((void**)&p.d_uvs, uvs_size));
-				CU_CHECK("copy uvss to device", cudaMemcpy((void*)p.d_uvs, (void*)((size_t)curr_attr->data->buffer_view->buffer->data + curr_attr->data->buffer_view->offset + curr_attr->data->offset), uvs_size, cudaMemcpyHostToDevice));
+				CU_CHECK(cudaMalloc((void**)&p.d_uvs, uvs_size));
+				CU_CHECK(cudaMemcpy((void*)p.d_uvs, (void*)((size_t)curr_attr->data->buffer_view->buffer->data + curr_attr->data->buffer_view->offset + curr_attr->data->offset), uvs_size, cudaMemcpyHostToDevice));
 			}
 		}
 	}
@@ -49,8 +49,8 @@ primitive primitive_create(const cgltf_data* data, cgltf_primitive* curr_prim, c
 		indices_format = OPTIX_INDICES_FORMAT_UNSIGNED_INT3;
 	}
 
-	CU_CHECK("alloc prim indices", cudaMalloc((void**)&p.d_indices, indices_size));
-	CU_CHECK("copy indices to device", cudaMemcpy((void*)p.d_indices, (void*)((size_t)curr_prim->indices->buffer_view->buffer->data + curr_prim->indices->buffer_view->offset + curr_prim->indices->offset), indices_size, cudaMemcpyHostToDevice));
+	CU_CHECK(cudaMalloc((void**)&p.d_indices, indices_size));
+	CU_CHECK(cudaMemcpy((void*)p.d_indices, (void*)((size_t)curr_prim->indices->buffer_view->buffer->data + curr_prim->indices->buffer_view->offset + curr_prim->indices->offset), indices_size, cudaMemcpyHostToDevice));
 
 	const unsigned int flags[1] = { 0 };
 
@@ -74,11 +74,11 @@ primitive primitive_create(const cgltf_data* data, cgltf_primitive* curr_prim, c
 	};
 
 	OptixAccelBufferSizes buffer_sizes = { 0 };
-	OPTIX_CHECK("compute gas accel build sizes", optixAccelComputeMemoryUsage(ctx, &build_options, &build_input, 1, &buffer_sizes));
+	OPTIX_CHECK(optixAccelComputeMemoryUsage(ctx, &build_options, &build_input, 1, &buffer_sizes));
 
 	CUdeviceptr tmp_buffer = 0;
-	CU_CHECK("alloc gas tmp_buffer", cudaMalloc((void**)&tmp_buffer, buffer_sizes.tempSizeInBytes));
-	CU_CHECK("alloc accel op_buffer", cudaMalloc((void**)&p.d_gas_op_buffer, buffer_sizes.outputSizeInBytes + sizeof(custom_gas_data)));
+	CU_CHECK(cudaMalloc((void**)&tmp_buffer, buffer_sizes.tempSizeInBytes));
+	CU_CHECK(cudaMalloc((void**)&p.d_gas_op_buffer, buffer_sizes.outputSizeInBytes + sizeof(custom_gas_data)));
 
 	int32_t material_index = -1;
 
@@ -95,21 +95,26 @@ primitive primitive_create(const cgltf_data* data, cgltf_primitive* curr_prim, c
 		.material_index = material_index,
 	};
 
-	CU_CHECK("copy custom_gas_data", cudaMemcpy((void*)p.d_gas_op_buffer, &cgd, sizeof(custom_gas_data), cudaMemcpyHostToDevice));
+	CU_CHECK(cudaMemcpy((void*)p.d_gas_op_buffer, &cgd, sizeof(custom_gas_data), cudaMemcpyHostToDevice));
 
-	OPTIX_CHECK("gas accel build", optixAccelBuild(ctx, stream, &build_options, &build_input, 1, tmp_buffer, buffer_sizes.tempSizeInBytes, p.d_gas_op_buffer + sizeof(custom_gas_data), buffer_sizes.outputSizeInBytes, &p.gas_hnd, NULL, 0));
-	CU_CHECK("sync gas accel build", cudaStreamSynchronize(stream));
+	OPTIX_CHECK(optixAccelBuild(ctx, stream, &build_options, &build_input, 1, tmp_buffer, buffer_sizes.tempSizeInBytes, p.d_gas_op_buffer + sizeof(custom_gas_data), buffer_sizes.outputSizeInBytes, &p.gas_hnd, NULL, 0));
+	CU_CHECK(cudaStreamSynchronize(stream));
 
-	CU_CHECK("dealloc gas tmp_buffer", cudaFree((void*)tmp_buffer));
+
+shutdown:
+	CU_CHECK(cudaFree((void*)tmp_buffer));
 
 	return p;
 }
 
 void primitive_destroy(primitive p)
 {
-	CU_CHECK("dealloc d_positions", cudaFree((void*)p.d_positions));
-	CU_CHECK("dealloc d_normals", cudaFree((void*)p.d_normals));
-	CU_CHECK("dealloc d_uvs", cudaFree((void*)p.d_uvs));
-	CU_CHECK("dealloc d_indices", cudaFree((void*)p.d_indices));
-	CU_CHECK("dealloc d_gas_op_buffer", cudaFree((void*)p.d_gas_op_buffer));
+	CU_CHECK(cudaFree((void*)p.d_positions));
+	CU_CHECK(cudaFree((void*)p.d_normals));
+	CU_CHECK(cudaFree((void*)p.d_uvs));
+	CU_CHECK(cudaFree((void*)p.d_indices));
+	CU_CHECK(cudaFree((void*)p.d_gas_op_buffer));
+
+shutdown:
+	return;
 }
