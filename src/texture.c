@@ -4,6 +4,8 @@
 
 texture texture_create(const cgltf_data* gltf_data, const cgltf_texture* curr_tex, const image* images)
 {
+	cudaError_t cuda_error = 0;
+
 	const struct cudaResourceDesc tex_res_desc = {
 		.res = {
 			.array = {
@@ -58,9 +60,9 @@ texture texture_create(const cgltf_data* gltf_data, const cgltf_texture* curr_te
 		.normalizedCoords = true,
 	};
 
-	CU_CHECK(cudaCreateTextureObject(&t.d_obj, &tex_res_desc, &tex_desc, NULL), t.result);
+	CU_CHECK("create texture object", cudaCreateTextureObject(&t.d_obj, &tex_res_desc, &tex_desc, NULL), t.result);
 
-shutdown:
+gpu_error:
 	return t;
 }
 

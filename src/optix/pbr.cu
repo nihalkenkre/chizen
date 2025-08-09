@@ -2,6 +2,22 @@
 #include "../primitive.h"
 #include <sutil/vec_math.h>
 
+#include <curand_kernel.h>
+#include <cuda_runtime.h>
+
+#include <optix.h>
+#include <optix_stubs.h>
+
+#ifdef min
+#undef min
+#endif
+#ifdef max
+#undef max
+#endif
+
+#include <optix_stack_size.h>
+#include <optix_function_table_definition.h>
+
 typedef struct ray_payload
 {
 	float4 p;
@@ -11,27 +27,13 @@ extern "C" __constant__ launch_params lp;
 
 __device__ static ray ray_create(float3 org, float3 dir)
 {
-	ray r = {0};
+	ray r = { 0 };
 	r.org = org;
 	r.dir = dir;
-	r.inv_dir = {1.f / dir.x, 1.f / dir.y, 1.f / dir.z};
-	r.sign = {r.inv_dir.x < 0.f, r.inv_dir.y < 0.f, r.inv_dir.z < 0.f};
+	r.inv_dir = { 1.f / dir.x, 1.f / dir.y, 1.f / dir.z };
+	r.sign = { r.inv_dir.x < 0.f, r.inv_dir.y < 0.f, r.inv_dir.z < 0.f };
 
 	return r;
-}
-
-__device__ static float3 ray_pt_at(ray r, const float t)
-{
-	return r.org + r.dir * t;
-}
-
-__device__ static float4 color_blend(float4 src, float4 dst)
-{
-	return float4{
-		 (src.x * src.w) + (dst.x * (1 - src.w)),
-		 (src.y * src.w) + (dst.y * (1 - src.w)),
-		 (src.z * src.w) + (dst.z * (1 - src.w)),
-		 src.w};
 }
 
 __device__ static ray generate_ray(float2 offset, const size_t x, const size_t y, float3 pixel_00_loc, float3 pixel_delta_u, float3 pixel_delta_v, float3 org)
@@ -55,18 +57,18 @@ __device__ static ray generate_ray(float2 offset, const size_t x, const size_t y
 extern "C" __global__ void __raygen__rg()
 {
 	uint3 launch_index = optixGetLaunchIndex();
-	ray_gen_record_data *rg_data = (ray_gen_record_data *)optixGetSbtDataPointer();
+	ray_gen_record_data* rg_data = (ray_gen_record_data*)optixGetSbtDataPointer();
 
 	unsigned int r_idx = threadIdx.x + blockIdx.x * blockDim.x;
 
-	curand_init(launch_index.x + launch_index.y, launch_index.x + launch_index.y, 0, &rg_data->states[r_idx]);
+	curand_init(launch_index.x + launch_index.y, launch_index.x + launch_index.y, 0, ((curandState*)rg_data->states) + r_idx);
 
 	for (size_t s = 0; s < rg_data->num_samples; ++s)
 	{
-		float2 offset = {curand_uniform(&rg_data->states[r_idx]), curand_uniform(&rg_data->states[r_idx])};
+		float2 offset = { curand_uniform(((curandState*)rg_data->states) + r_idx), curand_uniform(((curandState*)rg_data->states) + r_idx) };
 		ray r = generate_ray(offset, launch_index.x, launch_index.y, rg_data->pixel_00_loc, rg_data->pixel_delta_u, rg_data->pixel_delta_v, rg_data->org);
 
-		optixTrace(lp.handle, r.org, r.dir, 0.f, 1000.f, 0.f, 0xFF, 0, 0, 0, 0);
+		optixTrace(lp.handle, r.org, r.dir, 0.f, 1000.f, 0.f, 0xFF, 0, 0, 1, 0);
 	}
 
 	size_t pixel_idx = (launch_index.y * lp.render_width * 4) + (launch_index.x * 4);
@@ -99,33 +101,40 @@ extern "C" __global__ void __closesthit__ch()
 	uint3 launch_index = optixGetLaunchIndex();
 
 	unsigned int primitive_idx = optixGetPrimitiveIndex();
-	ray_gen_record_data *rg_data = (ray_gen_record_data *)optixGetSbtDataPointer();
-	custom_gas_data *cgd = (custom_gas_data *)(optixGetGASPointerFromHandle(optixGetGASTraversableHandle()) - sizeof(custom_gas_data));
 
-	uint3 index_triplet;
-	if (cgd->indices_format == OPTIX_INDICES_FORMAT_UNSIGNED_SHORT3)
+	closest_hit_record_data* ch_data = (closest_hit_record_data*)optixGetSbtDataPointer();
+
+	uint3 index_triplet = {};
+	if (ch_data->indices_format == OPTIX_INDICES_FORMAT_UNSIGNED_BYTE3)
 	{
-		ushort3 tmp = ((ushort3 *)cgd->indices)[primitive_idx];
+		uchar3 tmp = *((uchar3*)ch_data->indices + primitive_idx);
+		index_triplet.x = tmp.x;
+		index_triplet.y = tmp.y;
+		index_triplet.z = tmp.z;
+	}
+	if (ch_data->indices_format == OPTIX_INDICES_FORMAT_UNSIGNED_SHORT3)
+	{
+		ushort3 tmp = *((ushort3*)ch_data->indices + primitive_idx);
 		index_triplet.x = tmp.x;
 		index_triplet.y = tmp.y;
 		index_triplet.z = tmp.z;
 	}
 	else
 	{
-		index_triplet = ((uint3 *)cgd->indices)[primitive_idx];
+		index_triplet = *((uint3*)ch_data->indices + primitive_idx);
 	}
 
 	float3 normal =
-		 normalize(optixTransformNormalFromObjectToWorldSpace(
-			  cgd->normals[index_triplet.x] * bary_coords.z +
-			  cgd->normals[index_triplet.y] * bary_coords.x +
-			  cgd->normals[index_triplet.z] * bary_coords.y));
+		normalize(optixTransformNormalFromObjectToWorldSpace(
+			ch_data->normals[index_triplet.x] * bary_coords.z +
+			ch_data->normals[index_triplet.y] * bary_coords.x +
+			ch_data->normals[index_triplet.z] * bary_coords.y));
 
-	float2 uv = {0, 0};
+	float2 uv = { 0, 0 };
 
-	if (cgd->uvs > 0)
+	if (ch_data->uvs > 0)
 	{
-		uv = cgd->uvs[index_triplet.x] * bary_coords.z + cgd->uvs[index_triplet.y] * bary_coords.x + cgd->uvs[index_triplet.z] * bary_coords.y;
+		uv = ch_data->uvs[index_triplet.x] * bary_coords.z + ch_data->uvs[index_triplet.y] * bary_coords.x + ch_data->uvs[index_triplet.z] * bary_coords.y;
 	}
 
 	size_t pixel_idx = (launch_index.y * lp.render_width * 4) + (launch_index.x * 4);
@@ -133,52 +142,52 @@ extern "C" __global__ void __closesthit__ch()
 	{
 		if (lp.passes[p].layer.type == EXR_LAYER_TYPE_BASECOLOR)
 		{
-			if (cgd->material_index >= 0)
+			if (ch_data->material_index >= 0)
 			{
-				if (lp.materials[cgd->material_index].base_tex_idx >= 0)
+				if (lp.materials[ch_data->material_index].base_tex_idx >= 0)
 				{
-					float4 color = tex2D<float4>(lp.textures[lp.materials[cgd->material_index].base_tex_idx].d_obj, uv.x, uv.y) *
-										lp.materials[cgd->material_index].base_color_factor;
+					float4 color = tex2D<float4>(lp.textures[lp.materials[ch_data->material_index].base_tex_idx].d_obj, uv.x, uv.y) *
+						lp.materials[ch_data->material_index].base_color_factor;
 
 					write_pixels(p, pixel_idx, color);
 				}
 				else
 				{
-					write_pixels(p, pixel_idx, lp.materials[cgd->material_index].base_color_factor);
+					write_pixels(p, pixel_idx, lp.materials[ch_data->material_index].base_color_factor);
 				}
 			}
 		}
 		else if (lp.passes[p].layer.type == EXR_LAYER_TYPE_METALNESS)
 		{
-			if (cgd->material_index >= 0)
+			if (ch_data->material_index >= 0)
 			{
-				if (lp.materials[cgd->material_index].mr_tex_idx >= 0)
+				if (lp.materials[ch_data->material_index].mr_tex_idx >= 0)
 				{
-					float4 color = tex2D<float4>(lp.textures[lp.materials[cgd->material_index].mr_tex_idx].d_obj, uv.x, uv.y) *
-										lp.materials[cgd->material_index].metalness_factor;
+					float4 color = tex2D<float4>(lp.textures[lp.materials[ch_data->material_index].mr_tex_idx].d_obj, uv.x, uv.y) *
+						lp.materials[ch_data->material_index].metalness_factor;
 
 					write_pixels(p, pixel_idx, make_float4(make_float3(color.z), 1.f));
 				}
 				else
 				{
-					write_pixels(p, pixel_idx, make_float4(make_float3(lp.materials[cgd->material_index].metalness_factor), 1.f));
+					write_pixels(p, pixel_idx, make_float4(make_float3(lp.materials[ch_data->material_index].metalness_factor), 1.f));
 				}
 			}
 		}
 		else if (lp.passes[p].layer.type == EXR_LAYER_TYPE_ROUGHNESS)
 		{
-			if (cgd->material_index >= 0)
+			if (ch_data->material_index >= 0)
 			{
-				if (lp.materials[cgd->material_index].mr_tex_idx >= 0)
+				if (lp.materials[ch_data->material_index].mr_tex_idx >= 0)
 				{
-					float4 color = tex2D<float4>(lp.textures[lp.materials[cgd->material_index].mr_tex_idx].d_obj, uv.x, uv.y) *
-										lp.materials[cgd->material_index].roughness_factor;
+					float4 color = tex2D<float4>(lp.textures[lp.materials[ch_data->material_index].mr_tex_idx].d_obj, uv.x, uv.y) *
+						lp.materials[ch_data->material_index].roughness_factor;
 
 					write_pixels(p, pixel_idx, make_float4(make_float3(color.y), 1.f));
 				}
 				else
 				{
-					write_pixels(p, pixel_idx, make_float4(make_float3(lp.materials[cgd->material_index].roughness_factor), 1.f));
+					write_pixels(p, pixel_idx, make_float4(make_float3(lp.materials[ch_data->material_index].roughness_factor), 1.f));
 				}
 			}
 		}
@@ -195,5 +204,5 @@ extern "C" __global__ void __closesthit__ch()
 
 extern "C" __global__ void __miss__ms()
 {
-	miss_record_data *ms_data = (miss_record_data *)optixGetSbtDataPointer();
+	miss_record_data* ms_data = (miss_record_data*)optixGetSbtDataPointer();
 }

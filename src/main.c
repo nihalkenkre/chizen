@@ -21,7 +21,7 @@ const uint8_t NUM_SAMPLES = 32;
 int main(int argc, char** argv)
 {
 	printf("Hello World\n");
-	CHIZEN_RESULT result = CHIZEN_RESULT_SUCCESS;
+	CHIZEN_RESULT chi_result = CHIZEN_RESULT_SUCCESS;
 	const float RENDER_WIDTH = RENDER_HEIGHT * ASPECT_RATIO;
 
 	exr_pass passes[] =
@@ -31,37 +31,47 @@ int main(int argc, char** argv)
 				.type = EXR_LAYER_TYPE_BASECOLOR,
 				.name = "BaseColor",
 			},
-			.pixels = malloc((size_t)(RENDER_WIDTH * RENDER_HEIGHT * 4 * sizeof(float))),
+			.pixels = calloc(1, (size_t)(RENDER_WIDTH * RENDER_HEIGHT * 4 * sizeof(float))),
 		},
 		{
 			.layer = {
 				.type = EXR_LAYER_TYPE_NORMAL,
 				.name = "Normal",
 			},
-			.pixels = malloc((size_t)(RENDER_WIDTH * RENDER_HEIGHT * 4 * sizeof(float))),
+			.pixels = calloc(1, (size_t)(RENDER_WIDTH * RENDER_HEIGHT * 4 * sizeof(float))),
 		},
 		{
 			.layer = {
 				.type = EXR_LAYER_TYPE_UV,
 				.name = "UV",
 			},
-			.pixels = malloc((size_t)(RENDER_WIDTH * RENDER_HEIGHT * 4 * sizeof(float))),
+			.pixels = calloc(1, (size_t)(RENDER_WIDTH * RENDER_HEIGHT * 4 * sizeof(float))),
 		},
 		{
 			.layer = {
 				.type = EXR_LAYER_TYPE_METALNESS,
 				.name = "Metalness",
 			},
-			.pixels = malloc((size_t)(RENDER_WIDTH * RENDER_HEIGHT * 4 * sizeof(float))),
+			.pixels = calloc(1, (size_t)(RENDER_WIDTH * RENDER_HEIGHT * 4 * sizeof(float))),
 		},
 		{
 			.layer = {
 				.type = EXR_LAYER_TYPE_ROUGHNESS,
 				.name = "Roughness",
 			},
-			.pixels = malloc((size_t)(RENDER_WIDTH * RENDER_HEIGHT * 4 * sizeof(float))),
+			.pixels = calloc(1, (size_t)(RENDER_WIDTH * RENDER_HEIGHT * 4 * sizeof(float))),
 		},
 	};
+
+	for (size_t p = 0; p < _countof(passes); ++p)
+	{
+		if (passes[p].pixels == NULL)
+		{
+			printf("calloc failed for passes[%lld].pixels\n", p);
+			chi_result = CHIZEN_RESULT_NO_MEMORY_ALLOCED;
+			goto cpu_error;
+		}
+	}
 
 	char* file_path = NULL;
 	if (argc == 2)
@@ -71,30 +81,29 @@ int main(int argc, char** argv)
 	else
 	{
 		printf("Usage: chizen.exe <gltf_path>\n");
-		result = CHIZEN_RESULT_USAGE_ERROR;
-		goto shutdown;
+		chi_result = CHIZEN_RESULT_USAGE_ERROR;
+		goto cpu_error;
 	}
 
 	char* ext = PathFindExtensionA(file_path);
 	if (strcmp(ext, ".glb") != 0 && strcmp(ext, ".gltf") != 0)
 	{
 		printf("Only GLTF files supported... Exiting...");
-		result = CHIZEN_RESULT_FILE_TYPE_ERROR;
-		goto shutdown;
+		chi_result = CHIZEN_RESULT_FILE_ERROR;
+		goto cpu_error;
 	}
 
-
-	CHIZEN_RESULT_CHECK(renderer_render_gltf((size_t)RENDER_WIDTH, (size_t)RENDER_HEIGHT, NUM_SAMPLES, file_path, passes, _countof(passes)), result);
+	CHIZEN_RESULT_CHECK("renderer render gltf", renderer_render_gltf((size_t)RENDER_WIDTH, (size_t)RENDER_HEIGHT, NUM_SAMPLES, file_path, passes, _countof(passes)), chi_result);
 
 	char img_path[MAX_PATH];
 	GetModuleFileNameA(GetModuleHandleA(NULL), img_path, MAX_PATH);
 	PathRemoveFileSpecA(img_path);
 	strcat(img_path, "\\test.exr");
 
-	CHIZEN_RESULT_CHECK(write_exr(img_path, (size_t)RENDER_WIDTH, (size_t)RENDER_HEIGHT, passes, _countof(passes)), result);
+	CHIZEN_RESULT_CHECK("write exr", write_exr(img_path, (size_t)RENDER_WIDTH, (size_t)RENDER_HEIGHT, passes, _countof(passes)), chi_result);
 
-shutdown:
-
+cpu_error:
+gpu_error:
 	for (size_t p = 0; p < _countof(passes); ++p)
 	{
 		free(passes[p].pixels);

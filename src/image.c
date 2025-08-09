@@ -4,6 +4,9 @@
 
 image image_create(const cgltf_data* gltf_data, cgltf_image* curr_img)
 {
+	cudaError_t cuda_error = 0;
+	OptixResult optix_result = 0;
+
 	image img = { 0 };
 
 	int num_channels = 0;
@@ -37,20 +40,24 @@ image image_create(const cgltf_data* gltf_data, cgltf_image* curr_img)
 		cfd = cudaCreateChannelDesc(32, 32, 32, 32, cudaChannelFormatKindFloat);
 	}
 
-	CU_CHECK(cudaMallocArray(&img.d_pixel_array, &cfd, img.width, img.height, cudaArrayDefault), img.result);
-	CU_CHECK(cudaMemcpy2DToArray(img.d_pixel_array, 0, 0,
+	CU_CHECK("alloc d_pixel_array", cudaMallocArray(&img.d_pixel_array, &cfd, img.width, img.height, cudaArrayDefault), img.result);
+	CU_CHECK("copy pixels to d_pixel_array", cudaMemcpy2DToArray(img.d_pixel_array, 0, 0,
 		pixels, img.width * num_channels * sizeof(float), img.width * num_channels * sizeof(float), img.height,
 		cudaMemcpyHostToDevice), img.result);
 
-shutdown:
+gpu_error:
 	stbi_image_free(pixels);
 
 	return img;
 }
 
-void image_destroy(image i)
+CHIZEN_RESULT image_destroy(image i)
 {
-	cudaFreeArray(i.d_pixel_array);
+	CHIZEN_RESULT chi_result = CHIZEN_RESULT_SUCCESS;
+	cudaError_t cuda_error = cudaSuccess;
 
-	return;
+	CU_CHECK("free array", cudaFreeArray(i.d_pixel_array), chi_result);
+
+gpu_error:
+	return chi_result;
 }

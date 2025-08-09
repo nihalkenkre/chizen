@@ -7,24 +7,31 @@
 #include "texture.h"
 #include "material.h"
 #include "error.h"
+#include "instances.h"
+#include "common.h"
 
 typedef struct scene
 {
-    camera camera;
+	mesh* meshes;
+	size_t meshes_count;
+	instances instances;
 
-    light* d_lights;
-    texture* d_textures;
-    material* d_materials;
+	camera camera;
 
-    OptixTraversableHandle ias_hnd;
-    CHIZEN_RESULT result;
+	light* d_lights;
+	texture* d_textures;
+	material* d_materials;
+	ch_infos ch_infos;
+
+	OptixTraversableHandle ias_hnd;
+	CHIZEN_RESULT result;
 } scene;
 
 #ifdef __cplusplus
 extern "C" {
 #endif // __cplusplus
-    scene scene_create_from_gltf(cgltf_data* gltf_data, const OptixDeviceContext ctx, const cudaStream_t stream);
-    void scene_destroy(scene s);
+	scene scene_create_from_gltf(cgltf_data* gltf_data, const OptixProgramGroup ch_pg, const OptixModule module, const OptixDeviceContext ctx, const cudaStream_t stream);
+	CHIZEN_RESULT scene_destroy(scene s);
 #ifdef __cplusplus
 }
 #endif // __cplusplus

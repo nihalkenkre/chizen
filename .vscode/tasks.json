@@ -1,0 +1,41 @@
+{
+    "version": "2.0.0",
+    "tasks": [
+        {
+            "label": "Debug MSBuild",
+            "type": "shell",
+            "group": {
+                "kind": "build"
+            },
+            "command": "MSBuild.exe",
+            "args": [
+                "-p:Configuration=Debug",
+                "./projects/chizen/chizen.sln",
+            ],
+        },
+        {
+            "label": "Release MSBuild",
+            "type": "shell",
+            "group": {
+                "kind": "build",
+            },
+            "command": "MSBuild.exe",
+            "args": [
+                "-p:Configuration=Release",
+                "./projects/chizen/chizen.sln",
+            ]
+        },
+        {
+            "label": "Execute Release",
+            "type": "shell",
+            "group": {
+                "kind": "build",
+            },
+            "command": "${workspaceFolder}/projects/chizen/x64/Release/chizen.exe",
+            "args": [
+                "${workspaceFolder}/../sample_scenes/scene.glb",
+            ],
+            "dependsOn": "Release Build",
+        }
+    ]
+}

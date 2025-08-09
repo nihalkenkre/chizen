@@ -5,6 +5,7 @@
 #include <cgltf/cgltf.h>
 #include <optix.h>
 #include <cuda_runtime.h>
+#include "error.h"
 
 typedef struct texture
 {

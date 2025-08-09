@@ -7,7 +7,6 @@ material material_create(const cgltf_data* gltf_data, cgltf_material* curr_mat, 
 	material m = {
 		.base_tex_idx = -1,
 		.mr_tex_idx = -1,
-		.result = CHIZEN_RESULT_SUCCESS,
 	};
 
 	if (curr_mat->has_pbr_metallic_roughness)

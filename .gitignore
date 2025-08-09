@@ -8,9 +8,7 @@ x64*
 *.dll
 *.exe
 *.log
-
-# VS Code
-*.vscode
+build*
 
 # Visual Studio
 *.vs

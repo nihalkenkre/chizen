@@ -4,8 +4,11 @@
 #include <stdlib.h>
 #include <string.h>
 
-primitive primitive_create(const cgltf_data* data, cgltf_primitive* curr_prim, const OptixDeviceContext ctx, const cudaStream_t stream)
+primitive primitive_create(const cgltf_data* gltf_data, cgltf_primitive* curr_prim, const OptixProgramGroup ch_pg, const OptixModule module, const OptixDeviceContext ctx, const cudaStream_t stream, ch_infos* ch_infos)
 {
+	cudaError_t cuda_error = 0;
+	OptixResult optix_result = 0;
+
 	primitive p = { 0 };
 
 	CUdeviceptr tmp_buffer = 0;
@@ -19,17 +22,17 @@ primitive primitive_create(const cgltf_data* data, cgltf_primitive* curr_prim, c
 		{
 			positions_count = curr_attr->data->count;
 			size_t positions_size = curr_attr->data->buffer_view->size;
-			CU_CHECK(cudaMalloc((void**)&p.d_positions, positions_size), p.result);
-			CU_CHECK(cudaMemcpy((void*)p.d_positions, 
-				(void*)((size_t)curr_attr->data->buffer_view->buffer->data + curr_attr->data->buffer_view->offset + curr_attr->data->offset), 
+			CU_CHECK("alloc prim d_positions", cudaMalloc((void**)&p.d_positions, positions_size), p.result);
+			CU_CHECK("copy to prim d_positions", cudaMemcpy((void*)p.d_positions,
+				(void*)((size_t)curr_attr->data->buffer_view->buffer->data + curr_attr->data->buffer_view->offset + curr_attr->data->offset),
 				positions_size, cudaMemcpyHostToDevice), p.result);
 		}
 		else if (strcmp(curr_attr->name, "NORMAL") == 0)
 		{
 			size_t normals_size = curr_attr->data->buffer_view->size;
-			CU_CHECK(cudaMalloc((void**)&p.d_normals, normals_size), p.result);
-			CU_CHECK(cudaMemcpy((void*)p.d_normals, 
-				(void*)((size_t)curr_attr->data->buffer_view->buffer->data + curr_attr->data->buffer_view->offset + curr_attr->data->offset), 
+			CU_CHECK("alloc prim d_normals", cudaMalloc((void**)&p.d_normals, normals_size), p.result);
+			CU_CHECK("copy to prim d_normals", cudaMemcpy((void*)p.d_normals,
+				(void*)((size_t)curr_attr->data->buffer_view->buffer->data + curr_attr->data->buffer_view->offset + curr_attr->data->offset),
 				normals_size, cudaMemcpyHostToDevice), p.result);
 		}
 		else if (strcmp(curr_attr->name, "TEXCOORD_0") == 0)
@@ -37,9 +40,9 @@ primitive primitive_create(const cgltf_data* data, cgltf_primitive* curr_prim, c
 			size_t uvs_size = curr_attr->data->buffer_view->size;
 			if (uvs_size > 0)
 			{
-				CU_CHECK(cudaMalloc((void**)&p.d_uvs, uvs_size), p.result);
-				CU_CHECK(cudaMemcpy((void*)p.d_uvs, 
-					(void*)((size_t)curr_attr->data->buffer_view->buffer->data + curr_attr->data->buffer_view->offset + curr_attr->data->offset), 
+				CU_CHECK("alloc prim d_uvs", cudaMalloc((void**)&p.d_uvs, uvs_size), p.result);
+				CU_CHECK("copy to prim d_uvs", cudaMemcpy((void*)p.d_uvs,
+					(void*)((size_t)curr_attr->data->buffer_view->buffer->data + curr_attr->data->buffer_view->offset + curr_attr->data->offset),
 					uvs_size, cudaMemcpyHostToDevice), p.result);
 			}
 		}
@@ -57,71 +60,79 @@ primitive primitive_create(const cgltf_data* data, cgltf_primitive* curr_prim, c
 		indices_format = OPTIX_INDICES_FORMAT_UNSIGNED_INT3;
 	}
 
-	CU_CHECK(cudaMalloc((void**)&p.d_indices, indices_size), p.result);
-	CU_CHECK(cudaMemcpy((void*)p.d_indices, 
-		(void*)((size_t)curr_prim->indices->buffer_view->buffer->data + curr_prim->indices->buffer_view->offset + curr_prim->indices->offset), 
+	CU_CHECK("alloc prim d_indices", cudaMalloc((void**)&p.d_indices, indices_size), p.result);
+	CU_CHECK("copy to prim d_indices", cudaMemcpy((void*)p.d_indices,
+		(void*)((size_t)curr_prim->indices->buffer_view->buffer->data + curr_prim->indices->buffer_view->offset + curr_prim->indices->offset),
 		indices_size, cudaMemcpyHostToDevice), p.result);
 
-	const unsigned int flags[1] = { 0 };
+	p.build_input.type = OPTIX_BUILD_INPUT_TYPE_TRIANGLES;
+	p.build_input.triangleArray.numVertices = (unsigned int)positions_count;
+	p.build_input.triangleArray.vertexFormat = OPTIX_VERTEX_FORMAT_FLOAT3;
+	p.build_input.triangleArray.indexBuffer = p.d_indices;
+	p.build_input.triangleArray.numIndexTriplets = (unsigned int)(curr_prim->indices->count / 3);
+	p.build_input.triangleArray.indexFormat = indices_format;
+	p.build_input.triangleArray.numSbtRecords = 1;
 
-	const OptixBuildInput build_input = {
-		.type = OPTIX_BUILD_INPUT_TYPE_TRIANGLES,
-		.triangleArray = {
-			.vertexBuffers = &p.d_positions,
-			.numVertices = (unsigned int)positions_count,
-			.vertexFormat = OPTIX_VERTEX_FORMAT_FLOAT3,
-			.indexBuffer = p.d_indices,
-			.numIndexTriplets = (unsigned int)(curr_prim->indices->count / 3),
-			.indexFormat = indices_format,
-			.flags = flags,
-			.numSbtRecords = 1,
-		},
-	};
-
-	const OptixAccelBuildOptions build_options = {
-		.buildFlags = OPTIX_BUILD_FLAG_PREFER_FAST_TRACE | OPTIX_BUILD_FLAG_ALLOW_COMPACTION,
-		.operation = OPTIX_BUILD_OPERATION_BUILD,
-	};
-
-	OptixAccelBufferSizes buffer_sizes = { 0 };
-	OPTIX_CHECK(optixAccelComputeMemoryUsage(ctx, &build_options, &build_input, 1, &buffer_sizes), p.result);
-
-	CU_CHECK(cudaMalloc((void**)&tmp_buffer, buffer_sizes.tempSizeInBytes), p.result);
-	CU_CHECK(cudaMalloc((void**)&p.d_gas_op_buffer, buffer_sizes.outputSizeInBytes + sizeof(custom_gas_data)), p.result);
-
-	int32_t material_index = -1;
-
-	if (curr_prim->material != NULL)
+	if (ch_infos->count == 0)
 	{
-		material_index = (int32_t)cgltf_material_index(data, curr_prim->material);
+		ch_infos->ch_records = calloc(1, sizeof(closest_hit_record));
+		if (ch_infos->ch_records == NULL)
+		{
+			printf("calloc failed for prim ch_records\n");
+			p.result = CHIZEN_RESULT_NO_MEMORY_ALLOCED;
+			goto cpu_error;
+		}
+
+		ch_infos->count = 1;
+	}
+	else
+	{
+		++ch_infos->count;
+
+		void* tmp_ch_records = realloc(ch_infos->ch_records, sizeof(closest_hit_record) * ch_infos->count);
+		if (tmp_ch_records == NULL)
+		{
+			printf("realloc failed for prim ch_records\n");
+			p.result = CHIZEN_RESULT_NO_MEMORY_ALLOCED;
+			goto cpu_error;
+		}
+		ch_infos->ch_records = tmp_ch_records;
 	}
 
-	const custom_gas_data cgd = {
-		.normals = (float3*)p.d_normals,
-		.uvs = (float2*)p.d_uvs,
-		.indices = (uint3*)p.d_indices,
-		.indices_format = indices_format,
-		.material_index = material_index,
-	};
+	closest_hit_record* curr_ch_record = ch_infos->ch_records + (ch_infos->count - 1);
+	OPTIX_CHECK("record pack header", optixSbtRecordPackHeader(ch_pg, curr_ch_record->header), p.result);
 
-	CU_CHECK(cudaMemcpy((void*)p.d_gas_op_buffer, &cgd, sizeof(custom_gas_data), cudaMemcpyHostToDevice), p.result);
+	curr_ch_record->data.indices = (void*)p.d_indices;
+	curr_ch_record->data.indices_format = indices_format;
+	if (curr_prim->material != NULL)
+	{
+		curr_ch_record->data.material_index = (int32_t)cgltf_material_index(gltf_data, curr_prim->material);
+	}
+	else
+	{
+		curr_ch_record->data.material_index = -1;
+	}
+	curr_ch_record->data.normals = (float3*)p.d_normals;
+	curr_ch_record->data.uvs = (float2*)p.d_uvs;
 
-	OPTIX_CHECK(optixAccelBuild(ctx, stream, &build_options, &build_input, 1, tmp_buffer, buffer_sizes.tempSizeInBytes, p.d_gas_op_buffer + sizeof(custom_gas_data), buffer_sizes.outputSizeInBytes, &p.gas_hnd, NULL, 0), p.result);
-	CU_CHECK(cudaStreamSynchronize(stream), p.result);
+cpu_error:
+	CU_CHECK("free primitive tmp buffer", cudaFree((void*)tmp_buffer), p.result);
 
-shutdown:
-	cudaFree((void*)tmp_buffer);
-
+gpu_error:
 	return p;
 }
 
-void primitive_destroy(primitive p)
+CHIZEN_RESULT primitive_destroy(primitive p)
 {
-	cudaFree((void*)p.d_positions);
-	cudaFree((void*)p.d_normals);
-	cudaFree((void*)p.d_uvs);
-	cudaFree((void*)p.d_indices);
-	cudaFree((void*)p.d_gas_op_buffer);
+	CHIZEN_RESULT chi_result = CHIZEN_RESULT_SUCCESS;
+	cudaError_t cuda_error = cudaSuccess;
 
-	return;
+	CU_CHECK("free prim d_positions", cudaFree((void*)p.d_positions), chi_result);
+	CU_CHECK("free prim d_normals", cudaFree((void*)p.d_normals), chi_result);
+	CU_CHECK("free prim d_uvs", cudaFree((void*)p.d_uvs), chi_result);
+	CU_CHECK("free prim d_indices", cudaFree((void*)p.d_indices), chi_result);
+
+gpu_error:
+
+	return chi_result;
 }

@@ -14,4 +14,4 @@ typedef struct image
 } image;
 
 image image_create(const cgltf_data* gltf_data, cgltf_image* curr_img);
-void image_destroy(image i);
+CHIZEN_RESULT image_destroy(image i);

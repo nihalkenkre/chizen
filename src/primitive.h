@@ -1,5 +1,6 @@
 #pragma once
 
+#include "common.h"
 #include <cgltf/cgltf.h>
 #include <cglm/include/cglm/cglm.h>
 #include "material.h"
@@ -21,10 +22,10 @@ typedef struct primitive
 	CUdeviceptr d_normals;
 	CUdeviceptr d_uvs;
 	CUdeviceptr d_indices;
-	OptixTraversableHandle gas_hnd;
-	CUdeviceptr d_gas_op_buffer;
+
+	OptixBuildInput build_input;
 	CHIZEN_RESULT result;
 } primitive;
 
-primitive primitive_create(const cgltf_data* data, cgltf_primitive* curr_prim, const OptixDeviceContext ctx, const cudaStream_t stream);
-void primitive_destroy(primitive p);
+primitive primitive_create(const cgltf_data* gltf_data, cgltf_primitive* curr_prim, const OptixProgramGroup ch_pg, const OptixModule module, const OptixDeviceContext ctx, const cudaStream_t stream, ch_infos* ch_infos);
+CHIZEN_RESULT primitive_destroy(primitive p);
