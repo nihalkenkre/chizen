@@ -12,6 +12,8 @@ typedef enum LIGHT_TYPE
 
 typedef struct light
 {
+	float position[3];
+	float rotation[4];
 	float color[3];
 	float intensity;
 	float range;
@@ -21,5 +23,16 @@ typedef struct light
 	CHIZEN_RESULT result;
 } light;
 
-light light_create(const cgltf_data* data, const cgltf_light* curr_light);
+light light_create(cgltf_node* curr_node);
 void light_destroy(light l);
+
+typedef struct lights
+{
+	light* lights;
+	size_t count;
+	CHIZEN_RESULT result;
+} lights;
+
+lights lights_create(const cgltf_data* data);
+CHIZEN_RESULT lights_destroy(lights l);
+

@@ -60,13 +60,14 @@ instances instances_create(const cgltf_data* gltf_data, mesh* meshes)
 		glm_mat4_transpose_to(xform, xform_xposed);
 
 		size_t mesh_index = cgltf_mesh_index(gltf_data, curr_node->mesh);
+		(i.instances + instance_idx)->instanceId = (unsigned int)instance_idx;
 		(i.instances + instance_idx)->visibilityMask = 0xFF;
 		(i.instances + instance_idx)->traversableHandle = (meshes + mesh_index)->gas_hnd;
 		memcpy((i.instances + instance_idx)->transform, xform_xposed, sizeof(float) * 12);
 
 		for (size_t mesh_idx = 0; mesh_idx < mesh_index; ++mesh_idx)
 		{
-			(i.instances + instance_idx)->sbtOffset += (unsigned int)meshes[mesh_idx].prims_count;
+			(i.instances + instance_idx)->sbtOffset += (unsigned int)meshes[mesh_idx].prims_count * 2;
 		}
 
 		++instance_idx;

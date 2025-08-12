@@ -61,6 +61,20 @@ int main(int argc, char** argv)
 			},
 			.pixels = calloc(1, (size_t)(RENDER_WIDTH * RENDER_HEIGHT * 4 * sizeof(float))),
 		},
+		{
+			.layer = {
+				.type = EXR_LAYER_TYPE_ZDEPTH,
+				.name = "ZDepth",
+			},
+			.pixels = calloc(1, (size_t)(RENDER_WIDTH * RENDER_HEIGHT * 4 * sizeof(float))),
+		},
+		{
+			.layer = {
+				.type = EXR_LAYER_TYPE_IRRADIANCE,
+				.name = "Irradiance"
+			},
+			.pixels = calloc(1, (size_t)(RENDER_WIDTH * RENDER_HEIGHT * 4 * sizeof(float))),
+		},
 	};
 
 	for (size_t p = 0; p < _countof(passes); ++p)

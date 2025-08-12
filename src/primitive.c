@@ -4,7 +4,14 @@
 #include <stdlib.h>
 #include <string.h>
 
-primitive primitive_create(const cgltf_data* gltf_data, cgltf_primitive* curr_prim, const OptixProgramGroup ch_pg, const OptixModule module, const OptixDeviceContext ctx, const cudaStream_t stream, ch_infos* ch_infos)
+CHIZEN_RESULT create_ch_records(const cgltf_data* gltf_data, cgltf_primitive* curr_prim, ch_infos* ch_infos)
+{
+	CHIZEN_RESULT chi_result = CHIZEN_RESULT_SUCCESS;
+
+	return chi_result;
+}
+
+primitive primitive_create(const cgltf_data* gltf_data, cgltf_primitive* curr_prim, const OptixProgramGroup ch_rg_pg, const OptixProgramGroup ch_sr_pg, const OptixDeviceContext ctx, const cudaStream_t stream, ch_infos* ch_infos)
 {
 	cudaError_t cuda_error = 0;
 	OptixResult optix_result = 0;
@@ -75,21 +82,20 @@ primitive primitive_create(const cgltf_data* gltf_data, cgltf_primitive* curr_pr
 
 	if (ch_infos->count == 0)
 	{
-		ch_infos->ch_records = calloc(1, sizeof(closest_hit_record));
+		ch_infos->ch_records = calloc(2, sizeof(ch_record));
 		if (ch_infos->ch_records == NULL)
 		{
 			printf("calloc failed for prim ch_records\n");
 			p.result = CHIZEN_RESULT_NO_MEMORY_ALLOCED;
 			goto cpu_error;
 		}
-
-		ch_infos->count = 1;
+		ch_infos->count = 2;
 	}
 	else
 	{
-		++ch_infos->count;
+		ch_infos->count += 2;
 
-		void* tmp_ch_records = realloc(ch_infos->ch_records, sizeof(closest_hit_record) * ch_infos->count);
+		void* tmp_ch_records = realloc(ch_infos->ch_records, sizeof(ch_record) * ch_infos->count);
 		if (tmp_ch_records == NULL)
 		{
 			printf("realloc failed for prim ch_records\n");
@@ -99,8 +105,8 @@ primitive primitive_create(const cgltf_data* gltf_data, cgltf_primitive* curr_pr
 		ch_infos->ch_records = tmp_ch_records;
 	}
 
-	closest_hit_record* curr_ch_record = ch_infos->ch_records + (ch_infos->count - 1);
-	OPTIX_CHECK("record pack header", optixSbtRecordPackHeader(ch_pg, curr_ch_record->header), p.result);
+	ch_record* curr_ch_record = ch_infos->ch_records + (ch_infos->count - 2);
+	OPTIX_CHECK("record pack header", optixSbtRecordPackHeader(ch_rg_pg, curr_ch_record->header), p.result);
 
 	curr_ch_record->data.indices = (void*)p.d_indices;
 	curr_ch_record->data.indices_format = indices_format;
@@ -114,6 +120,9 @@ primitive primitive_create(const cgltf_data* gltf_data, cgltf_primitive* curr_pr
 	}
 	curr_ch_record->data.normals = (float3*)p.d_normals;
 	curr_ch_record->data.uvs = (float2*)p.d_uvs;
+
+	curr_ch_record = ch_infos->ch_records + (ch_infos->count - 1);
+	OPTIX_CHECK("record pack header", optixSbtRecordPackHeader(ch_sr_pg, curr_ch_record->header), p.result);
 
 cpu_error:
 	CU_CHECK("free primitive tmp buffer", cudaFree((void*)tmp_buffer), p.result);

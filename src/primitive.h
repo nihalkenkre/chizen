@@ -27,5 +27,5 @@ typedef struct primitive
 	CHIZEN_RESULT result;
 } primitive;
 
-primitive primitive_create(const cgltf_data* gltf_data, cgltf_primitive* curr_prim, const OptixProgramGroup ch_pg, const OptixModule module, const OptixDeviceContext ctx, const cudaStream_t stream, ch_infos* ch_infos);
+primitive primitive_create(const cgltf_data* gltf_data, cgltf_primitive* curr_prim, const OptixProgramGroup ch_rg_pg, const OptixProgramGroup ch_sr_pg, const OptixDeviceContext ctx, const cudaStream_t stream, ch_infos* ch_infos);
 CHIZEN_RESULT primitive_destroy(primitive p);

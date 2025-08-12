@@ -9,7 +9,7 @@ CUdeviceptr d_ias_op_buffer = 0;
 static size_t images_count = 0;
 static size_t textures_count = 0;
 
-scene scene_create_from_gltf(cgltf_data* gltf_data, const OptixProgramGroup ch_pg, const OptixModule module, const OptixDeviceContext ctx, const cudaStream_t stream)
+scene scene_create_from_gltf(cgltf_data* gltf_data, const OptixProgramGroup ch_rg_pg, const OptixProgramGroup ch_sr_pg, const OptixDeviceContext ctx, const cudaStream_t stream)
 {
 	CHIZEN_RESULT chi_result = 0;
 	cudaError_t cuda_error = 0;
@@ -19,7 +19,7 @@ scene scene_create_from_gltf(cgltf_data* gltf_data, const OptixProgramGroup ch_p
 	image* images = NULL;
 	texture* textures = NULL;
 	material* materials = NULL;
-	light* lights = NULL;
+	lights lights = { 0 };
 	CUdeviceptr d_instances = 0;
 	CUdeviceptr d_tmp_buffer = 0;
 
@@ -48,7 +48,7 @@ scene scene_create_from_gltf(cgltf_data* gltf_data, const OptixProgramGroup ch_p
 
 		if (!is_persp_cam_found)
 		{
-			printf("Please have at least one perspective camera in the scene.\nExiting...");
+			printf("Please have at least one perspective camera in the scene.\n");
 			s.result = CHIZEN_RESULT_PERSP_CAM_NOT_FOUND;
 			goto cpu_error;
 		}
@@ -108,21 +108,11 @@ scene scene_create_from_gltf(cgltf_data* gltf_data, const OptixProgramGroup ch_p
 	CU_CHECK("alloc scene d_materials", cudaMalloc((void**)&s.d_materials, materials_size), s.result);
 	CU_CHECK("copy to scene d_materials", cudaMemcpy((void*)s.d_materials, materials, materials_size, cudaMemcpyHostToDevice), s.result);
 
-	size_t lights_size = sizeof(light) * gltf_data->lights_count;
-	lights = calloc(1, lights_size);
-
-	if (lights == NULL)
-	{
-		printf("calloc failed for lights\n");
-		s.result = CHIZEN_RESULT_NO_MEMORY_ALLOCED;
-		goto cpu_error;
-	}
-
-	for (size_t l = 0; l < gltf_data->lights_count; ++l)
-	{
-		lights[l] = light_create(gltf_data, gltf_data->lights + l);
-		CHIZEN_RESULT_CHECK("scene light create", lights[l].result, s.result);
-	}
+	lights = lights_create(gltf_data);
+	s.d_lights_count = lights.count;
+	size_t lights_size = lights.count * sizeof(light);
+	CU_CHECK("alloc scene d_lights", cudaMalloc((void**)&s.d_lights, lights_size), s.result);
+	CU_CHECK("copy to scene d_lights", cudaMemcpy((void*)s.d_lights, lights.lights, lights_size, cudaMemcpyHostToDevice), s.result);
 
 	size_t meshes_size = sizeof(mesh) * gltf_data->meshes_count;
 	s.meshes_count = gltf_data->meshes_count;
@@ -137,7 +127,7 @@ scene scene_create_from_gltf(cgltf_data* gltf_data, const OptixProgramGroup ch_p
 
 	for (size_t m = 0; m < gltf_data->meshes_count; ++m)
 	{
-		*(s.meshes + m) = mesh_create(gltf_data, gltf_data->meshes + m, ch_pg, module, ctx, stream, &s.ch_infos);
+		*(s.meshes + m) = mesh_create(gltf_data, gltf_data->meshes + m, ch_rg_pg, ch_sr_pg, ctx, stream, &s.ch_infos);
 		CHIZEN_RESULT_CHECK("scene mesh create", (s.meshes + m)->result, s.result);
 	}
 
@@ -172,14 +162,14 @@ scene scene_create_from_gltf(cgltf_data* gltf_data, const OptixProgramGroup ch_p
 	CU_CHECK("scene stream sync", cudaStreamSynchronize(stream), s.result);
 
 cpu_error:
-	CU_CHECK("free scene d_instancse", cudaFree((void*)d_instances), s.result);
+	CU_CHECK("free scene d_instances", cudaFree((void*)d_instances), s.result);
 	CU_CHECK("free scene tmp buffer", cudaFree((void*)d_tmp_buffer), s.result);
 
 gpu_error:
 	free(images);
 	free(textures);
 	free(materials);
-	free(lights);
+	lights_destroy(lights);
 
 	return s;
 }
@@ -204,11 +194,11 @@ CHIZEN_RESULT scene_destroy(scene s)
 		texture_destroy(tex);
 	}
 
-	CU_CHECK("free scene d_images",cudaFree((void*)d_images), chi_result);
-	CU_CHECK("free scene d_textures",cudaFree((void*)s.d_textures), chi_result);
-	CU_CHECK("free scene d_materials",cudaFree((void*)s.d_materials), chi_result);
-	CU_CHECK("free scene d_lights",cudaFree((void*)s.d_lights), chi_result);
-	CU_CHECK("free scene d_ias_op_buffer",cudaFree((void*)d_ias_op_buffer), chi_result);
+	CU_CHECK("free scene d_images", cudaFree((void*)d_images), chi_result);
+	CU_CHECK("free scene d_lights", cudaFree((void*)s.d_lights), chi_result);
+	CU_CHECK("free scene d_textures", cudaFree((void*)s.d_textures), chi_result);
+	CU_CHECK("free scene d_materials", cudaFree((void*)s.d_materials), chi_result);
+	CU_CHECK("free scene d_ias_op_buffer", cudaFree((void*)d_ias_op_buffer), chi_result);
 
 gpu_error:
 	instances_destroy(s.instances);

@@ -46,16 +46,21 @@ CHIZEN_RESULT renderer_render_gltf(const size_t render_width, const size_t rende
 	OptixModule module = nullptr;
 	OptixPipelineLinkOptions pipeline_link_options = {};
 	OptixProgramGroupDesc rg_pg_desc = {};
-	OptixProgramGroupDesc ms_pg_desc = {};
-	OptixProgramGroupDesc ch_pg_desc = {};
-	OptixProgramGroupOptions ch_pg_options = { 0 };
+	OptixProgramGroupDesc ms_rg_pg_desc = {};
+	OptixProgramGroupDesc ms_sr_pg_desc = {};
+	OptixProgramGroupDesc ch_rg_pg_desc = {};
+	OptixProgramGroupDesc ch_sr_pg_desc = {};
+	OptixProgramGroupOptions pg_options = { 0 };
 	OptixProgramGroup rg_pg = nullptr;
-	OptixProgramGroup ch_pg = nullptr;
-	OptixProgramGroup ms_pg = nullptr;
+	OptixProgramGroup ch_rg_pg = nullptr;
+	OptixProgramGroup ch_sr_pg = nullptr;
+	OptixProgramGroup ms_rg_pg = nullptr;
+	OptixProgramGroup ms_sr_pg = nullptr;
 	vec3 pixel_00_loc = { 0 }, pixel_delta_u = { 0 }, pixel_delta_v = { 0 };
 	ray_gen_record rg_record = {};
-	closest_hit_record* ch_records = nullptr;
-	miss_record ms_record = {};
+	ch_record* ch_records = nullptr;
+	ms_record ms_rg_record = {};
+	ms_record ms_sr_record = {};
 	CUdeviceptr d_rand_states = 0;
 	CUdeviceptr d_rg_record_base = 0;
 	CUdeviceptr d_ch_record_base = 0;
@@ -66,7 +71,7 @@ CHIZEN_RESULT renderer_render_gltf(const size_t render_width, const size_t rende
 	launch_params lp = {};
 	CUdeviceptr d_launch_params = 0;
 	OptixPipeline pipeline = nullptr;
-	OptixProgramGroup pipeline_pgs[3] = {};
+	OptixProgramGroup pipeline_pgs[5] = {};
 	size_t ch_records_size = 0;
 
 	CU_CHECK("init", cudaFree(nullptr), chi_result);
@@ -91,11 +96,10 @@ CHIZEN_RESULT renderer_render_gltf(const size_t render_width, const size_t rende
 		goto cpu_error;
 	}
 
-	CHIZEN_RESULT_CHECK("scene create", s.result, chi_result);
 
 	pipeline_compile_options = {
 		.traversableGraphFlags = OPTIX_TRAVERSABLE_GRAPH_FLAG_ALLOW_SINGLE_LEVEL_INSTANCING,
-		.numPayloadValues = 0,
+		.numPayloadValues = 3,
 		.numAttributeValues = 2,
 		.pipelineLaunchParamsVariableName = "lp",
 		.usesPrimitiveTypeFlags = (unsigned int)OPTIX_PRIMITIVE_TYPE_FLAGS_TRIANGLE,
@@ -140,37 +144,33 @@ CHIZEN_RESULT renderer_render_gltf(const size_t render_width, const size_t rende
 	}
 
 	OPTIX_CHECK("module create", optixModuleCreate(ctx, &module_compile_options, &pipeline_compile_options, (char*)module_data, file_size.QuadPart, nullptr, nullptr, &module), chi_result);
-	rg_pg_desc = {
-		.kind = OPTIX_PROGRAM_GROUP_KIND_RAYGEN,
-		.raygen = {
-			.module = module,
-			.entryFunctionName = "__raygen__rg",
-		},
-	};
 
-	ms_pg_desc = {
-	  .kind = OPTIX_PROGRAM_GROUP_KIND_MISS,
-	  .miss = {
-		  .module = module,
-		  .entryFunctionName = "__miss__ms",
-	  },
-	};
-
-	ch_pg_desc = {
+	ch_rg_pg_desc = {
 		.kind = OPTIX_PROGRAM_GROUP_KIND_HITGROUP,
 		.hitgroup = {
 			.moduleCH = module,
-			.entryFunctionNameCH = "__closesthit__ch",
+			.entryFunctionNameCH = "__closesthit__rg",
 		},
 	};
-	OPTIX_CHECK("ch program group create", optixProgramGroupCreate(ctx, &ch_pg_desc, 1, &ch_pg_options, nullptr, nullptr, &ch_pg), chi_result);
-	s = scene_create_from_gltf(gltf_data, ch_pg, module, ctx, stream);
 
-	pipeline_link_options = {
-		.maxTraceDepth = 31,
+	ch_sr_pg_desc = {
+		.kind = OPTIX_PROGRAM_GROUP_KIND_HITGROUP,
+		.hitgroup = {
+			.moduleCH = module,
+			.entryFunctionNameCH = "__closesthit__sr",
+		},
 	};
 
-	ch_records_size = sizeof(closest_hit_record) * s.ch_infos.count;
+	OPTIX_CHECK("ch program group create", optixProgramGroupCreate(ctx, &ch_rg_pg_desc, 1, &pg_options, nullptr, nullptr, &ch_rg_pg), chi_result);
+	OPTIX_CHECK("ch program group create", optixProgramGroupCreate(ctx, &ch_sr_pg_desc, 1, &pg_options, nullptr, nullptr, &ch_sr_pg), chi_result);
+	s = scene_create_from_gltf(gltf_data, ch_rg_pg, ch_sr_pg, ctx, stream);
+	CHIZEN_RESULT_CHECK("scene create", s.result, chi_result);
+
+	pipeline_link_options = {
+		.maxTraceDepth = 2,
+	};
+
+	ch_records_size = sizeof(ch_record) * s.ch_infos.count;
 	CU_CHECK("alloc d_ch_records", cudaMalloc((void**)&d_ch_record_base, ch_records_size), chi_result);
 	CU_CHECK("copy ch_records to device", cudaMemcpy((void*)d_ch_record_base, s.ch_infos.ch_records, ch_records_size, cudaMemcpyHostToDevice), chi_result);
 
@@ -188,25 +188,52 @@ CHIZEN_RESULT renderer_render_gltf(const size_t render_width, const size_t rende
 		},
 	};
 
-	OPTIX_CHECK("rg program group create", optixProgramGroupCreate(ctx, &rg_pg_desc, 1, &ch_pg_options, nullptr, nullptr, &rg_pg), chi_result);
-	OPTIX_CHECK("ms program group create", optixProgramGroupCreate(ctx, &ms_pg_desc, 1, &ch_pg_options, nullptr, nullptr, &ms_pg), chi_result);
+	rg_pg_desc = {
+		.kind = OPTIX_PROGRAM_GROUP_KIND_RAYGEN,
+		.raygen = {
+			.module = module,
+			.entryFunctionName = "__raygen__rg",
+		},
+	};
+
+	ms_rg_pg_desc = {
+	  .kind = OPTIX_PROGRAM_GROUP_KIND_MISS,
+	  .miss = {
+		  .module = module,
+		  .entryFunctionName = "__miss__rg",
+	  },
+	};
+
+	ms_sr_pg_desc = {
+	  .kind = OPTIX_PROGRAM_GROUP_KIND_MISS,
+	  .miss = {
+		  .module = module,
+		  .entryFunctionName = "__miss__sr",
+	  },
+	};
+
+	OPTIX_CHECK("rg program group create", optixProgramGroupCreate(ctx, &rg_pg_desc, 1, &pg_options, nullptr, nullptr, &rg_pg), chi_result);
+	OPTIX_CHECK("ms rg program group create", optixProgramGroupCreate(ctx, &ms_rg_pg_desc, 1, &pg_options, nullptr, nullptr, &ms_rg_pg), chi_result);
+	OPTIX_CHECK("ms sr program group create", optixProgramGroupCreate(ctx, &ms_sr_pg_desc, 1, &pg_options, nullptr, nullptr, &ms_sr_pg), chi_result);
 
 	OPTIX_CHECK("rg sbt pack header", optixSbtRecordPackHeader(rg_pg, (void*)rg_record.header), chi_result);
-	OPTIX_CHECK("ms sbt pack header", optixSbtRecordPackHeader(ms_pg, (void*)ms_record.header), chi_result);
+	OPTIX_CHECK("ms sbt pack header", optixSbtRecordPackHeader(ms_rg_pg, (void*)ms_rg_record.header), chi_result);
+	OPTIX_CHECK("ms sbt pack header", optixSbtRecordPackHeader(ms_sr_pg, (void*)ms_sr_record.header), chi_result);
 
 	CU_CHECK("alloc rg record", cudaMalloc((void**)&d_rg_record_base, sizeof(ray_gen_record)), chi_result);
 	CU_CHECK("copy rg to device", cudaMemcpy((void*)d_rg_record_base, (void*)&rg_record, sizeof(ray_gen_record), cudaMemcpyHostToDevice), chi_result);
 
-	CU_CHECK("alloc ms record", cudaMalloc((void**)&d_ms_record_base, sizeof(miss_record)), chi_result);
-	CU_CHECK("copy ms to device", cudaMemcpy((void*)d_ms_record_base, (void*)&ms_record, sizeof(miss_record), cudaMemcpyHostToDevice), chi_result);
+	CU_CHECK("alloc ms record", cudaMalloc((void**)&d_ms_record_base, sizeof(ms_record) * 2), chi_result);
+	CU_CHECK("copy ms rg to device", cudaMemcpy((void*)d_ms_record_base, (void*)&ms_rg_record, sizeof(ms_record), cudaMemcpyHostToDevice), chi_result);
+	CU_CHECK("copy ms sr to device", cudaMemcpy((void*)(d_ms_record_base + sizeof(ms_record)), (void*)&ms_sr_record, sizeof(ms_record), cudaMemcpyHostToDevice), chi_result);
 
 	sbt = {
 		.raygenRecord = d_rg_record_base,
 		.missRecordBase = d_ms_record_base,
-		.missRecordStrideInBytes = sizeof(miss_record),
-		.missRecordCount = 1,
+		.missRecordStrideInBytes = sizeof(ms_record),
+		.missRecordCount = 2,
 		.hitgroupRecordBase = d_ch_record_base,
-		.hitgroupRecordStrideInBytes = sizeof(closest_hit_record),
+		.hitgroupRecordStrideInBytes = sizeof(ch_record),
 		.hitgroupRecordCount = (unsigned int)s.ch_infos.count,
 	};
 
@@ -232,8 +259,11 @@ CHIZEN_RESULT renderer_render_gltf(const size_t render_width, const size_t rende
 		.materials = s.d_materials,
 		.passes = (exr_pass*)d_exr_passes,
 		.passes_count = passes_count,
+		.lights = s.d_lights,
+		.lights_count = s.d_lights_count,
 		.render_width = render_width,
 		.render_height = render_height,
+		.trace_depth = 2,
 		.handle = s.ias_hnd,
 	};
 
@@ -241,8 +271,10 @@ CHIZEN_RESULT renderer_render_gltf(const size_t render_width, const size_t rende
 	CU_CHECK("copy lp to device", cudaMemcpy((void*)d_launch_params, &lp, sizeof(launch_params), cudaMemcpyHostToDevice), chi_result);
 
 	pipeline_pgs[0] = rg_pg;
-	pipeline_pgs[1] = ms_pg;
-	pipeline_pgs[2] = ch_pg;
+	pipeline_pgs[1] = ms_rg_pg;
+	pipeline_pgs[2] = ms_sr_pg;
+	pipeline_pgs[3] = ch_rg_pg;
+	pipeline_pgs[4] = ch_sr_pg;
 
 	OPTIX_CHECK("create pipeline", optixPipelineCreate(ctx, &pipeline_compile_options, &pipeline_link_options, pipeline_pgs, _countof(pipeline_pgs), nullptr, nullptr, &pipeline), chi_result);
 
@@ -257,24 +289,27 @@ CHIZEN_RESULT renderer_render_gltf(const size_t render_width, const size_t rende
 	}
 
 cpu_error:
-	CU_CHECK("free rand states",cudaFree((void*)d_rand_states), chi_result);
-	CU_CHECK("free rg record base",cudaFree((void*)d_rg_record_base), chi_result);
-	CU_CHECK("free ms record base",cudaFree((void*)d_ms_record_base), chi_result);
-	CU_CHECK("free ch record base",cudaFree((void*)d_ch_record_base), chi_result);
+	CU_CHECK("free rand states", cudaFree((void*)d_rand_states), chi_result);
+	CU_CHECK("free rg record base", cudaFree((void*)d_rg_record_base), chi_result);
+	CU_CHECK("free ms record base", cudaFree((void*)d_ms_record_base), chi_result);
+	CU_CHECK("free ch record base", cudaFree((void*)d_ch_record_base), chi_result);
 	OPTIX_CHECK("rg pg destroy", optixProgramGroupDestroy(rg_pg), chi_result);
-	OPTIX_CHECK("ms pg destroy", optixProgramGroupDestroy(ms_pg), chi_result);
-	OPTIX_CHECK("ch pg destroy", optixProgramGroupDestroy(ch_pg), chi_result);
+	OPTIX_CHECK("ms pg destroy", optixProgramGroupDestroy(ms_rg_pg), chi_result);
+	OPTIX_CHECK("ch pg destroy", optixProgramGroupDestroy(ch_rg_pg), chi_result);
 	OPTIX_CHECK("module destroy", optixModuleDestroy(module), chi_result);
 	OPTIX_CHECK("pipeline destroy", optixPipelineDestroy(pipeline), chi_result);
 	CU_CHECK("stream destroy", cudaStreamDestroy(stream), chi_result);
 
-	for (size_t p = 0; p < passes_count; ++p)
+	if (d_exr_passes_staging != NULL)
 	{
-		CU_CHECK("free exr d_pixels", cudaFree((void*)((exr_pass*)d_exr_passes_staging)[p].d_pixels), chi_result);
+		for (size_t p = 0; p < passes_count; ++p)
+		{
+			CU_CHECK("free exr d_pixels", cudaFree((void*)d_exr_passes_staging[p].d_pixels), chi_result);
+		}
 	}
 
 	CU_CHECK("free d_exr_passes", cudaFree((void*)d_exr_passes), chi_result);
-	CU_CHECK("free launch params",cudaFree((void*)d_launch_params), chi_result);
+	CU_CHECK("free launch params", cudaFree((void*)d_launch_params), chi_result);
 	OPTIX_CHECK("destroy context", optixDeviceContextDestroy(ctx), chi_result);
 
 gpu_error:

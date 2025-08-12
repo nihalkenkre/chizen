@@ -65,10 +65,26 @@ extern "C" __global__ void __raygen__rg()
 
 	for (size_t s = 0; s < rg_data->num_samples; ++s)
 	{
+		unsigned int p0 = 0, p1 = 0, p2 = 0;
 		float2 offset = { curand_uniform(((curandState*)rg_data->states) + r_idx), curand_uniform(((curandState*)rg_data->states) + r_idx) };
 		ray r = generate_ray(offset, launch_index.x, launch_index.y, rg_data->pixel_00_loc, rg_data->pixel_delta_u, rg_data->pixel_delta_v, rg_data->org);
 
-		optixTrace(lp.handle, r.org, r.dir, 0.f, 1000.f, 0.f, 0xFF, 0, 0, 1, 0);
+		optixTrace(lp.handle, r.org, r.dir, 0.1f, 1000.f, 0.f, 0xFF, 0, RAY_TYPE_PRIMARY, 2, 0, p0, p1, p2);
+
+		if (p0 != 0 || p1 != 0 || p2 != 0)
+		{
+			float3 world_position = float3{	__uint_as_float(p0),
+														__uint_as_float(p1),	
+														__uint_as_float(p2) };
+
+			for (size_t l = 0; l < lp.lights_count; ++l)
+			{
+				float3 ray_org = world_position;
+				float3 ray_dir = normalize(float3{ lp.lights[l].position[0], lp.lights[l].position[1], lp.lights[l].position[2] } - ray_org);
+				unsigned int sr_p0 = l;
+				optixTrace(lp.handle, ray_org, ray_dir, 0.1f, 1000.f, 0.f, 0xFF, OPTIX_RAY_FLAG_TERMINATE_ON_FIRST_HIT, RAY_TYPE_SHADOW, 2, 1, sr_p0);
+			}
+		}
 	}
 
 	size_t pixel_idx = (launch_index.y * lp.render_width * 4) + (launch_index.x * 4);
@@ -90,7 +106,7 @@ __device__ void write_pixels(size_t passes_index, size_t pixel_index, float4 col
 	lp.passes[passes_index].d_pixels[pixel_index + 3] += color.w;
 }
 
-extern "C" __global__ void __closesthit__ch()
+extern "C" __global__ void __closesthit__rg()
 {
 	float2 tmp_bary_coords = optixGetTriangleBarycentrics();
 	float3 bary_coords = {
@@ -102,7 +118,7 @@ extern "C" __global__ void __closesthit__ch()
 
 	unsigned int primitive_idx = optixGetPrimitiveIndex();
 
-	closest_hit_record_data* ch_data = (closest_hit_record_data*)optixGetSbtDataPointer();
+	ch_rg_record_data* ch_data = (ch_rg_record_data*)optixGetSbtDataPointer();
 
 	uint3 index_triplet = {};
 	if (ch_data->indices_format == OPTIX_INDICES_FORMAT_UNSIGNED_BYTE3)
@@ -138,6 +154,11 @@ extern "C" __global__ void __closesthit__ch()
 	}
 
 	size_t pixel_idx = (launch_index.y * lp.render_width * 4) + (launch_index.x * 4);
+	float3 world_position = (optixGetWorldRayOrigin() + optixGetWorldRayDirection() * optixGetRayTmax());
+	optixSetPayload_0(__float_as_uint(world_position.x));
+	optixSetPayload_1(__float_as_uint(world_position.y));
+	optixSetPayload_2(__float_as_uint(world_position.z));
+
 	for (size_t p = 0; p < lp.passes_count; ++p)
 	{
 		if (lp.passes[p].layer.type == EXR_LAYER_TYPE_BASECOLOR)
@@ -199,10 +220,54 @@ extern "C" __global__ void __closesthit__ch()
 		{
 			write_pixels(p, pixel_idx, make_float4(uv, 0, 1.f));
 		}
+		else if (lp.passes[p].layer.type == EXR_LAYER_TYPE_ZDEPTH)
+		{
+			float z_depth = (length(world_position) - optixGetRayTmin()) / 1000.f;
+			write_pixels(p, pixel_idx, make_float4(
+				z_depth,
+				z_depth,
+				z_depth,
+				1.f
+			));
+		}
 	}
 }
 
-extern "C" __global__ void __miss__ms()
+extern "C" __global__ void __closesthit__sr()
 {
-	miss_record_data* ms_data = (miss_record_data*)optixGetSbtDataPointer();
+	uint3 launch_index = optixGetLaunchIndex();
+	size_t pixel_idx = (launch_index.y * lp.render_width * 4) + (launch_index.x * 4);
+
+	for (size_t p = 0; p < lp.passes_count; ++p)
+	{
+		if (lp.passes[p].layer.type == EXR_LAYER_TYPE_IRRADIANCE)
+		{
+			write_pixels(p, pixel_idx, float4{ 0,0,0,1 });
+		}
+	}
+}
+
+extern "C" __global__ void __miss__rg()
+{
+}
+
+extern "C" __global__ void __miss__sr()
+{
+	uint3 launch_index = optixGetLaunchIndex();
+	size_t pixel_idx = (launch_index.y * lp.render_width * 4) + (launch_index.x * 4);
+	size_t light_idx = optixGetPayload_0();
+
+	for (size_t p = 0; p < lp.passes_count; ++p)
+	{
+		if (lp.passes[p].layer.type == EXR_LAYER_TYPE_IRRADIANCE)
+		{
+			float4 color = {
+				lp.lights[light_idx].color[0],
+				lp.lights[light_idx].color[1],
+				lp.lights[light_idx].color[2],
+				1.f
+			};
+			write_pixels(p, pixel_idx, color);
+		}
+	}
 }

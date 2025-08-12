@@ -13,5 +13,5 @@ typedef struct mesh
 	CHIZEN_RESULT result;
 } mesh;
 
-mesh mesh_create(const cgltf_data* data, cgltf_mesh* curr_mesh, const OptixProgramGroup ch_pg, const OptixModule module, const OptixDeviceContext ctx, const cudaStream_t stream, ch_infos* ch_infos);
+mesh mesh_create(const cgltf_data* data, cgltf_mesh* curr_mesh, const OptixProgramGroup ch_rg_pg, const OptixProgramGroup ch_sr_pg, const OptixDeviceContext ctx, const cudaStream_t stream, ch_infos* ch_infos);
 CHIZEN_RESULT mesh_destroy(mesh m);

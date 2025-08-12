@@ -3,7 +3,7 @@
 
 #include <string.h>
 
-mesh mesh_create(const cgltf_data* data, cgltf_mesh* curr_mesh, const OptixProgramGroup ch_pg, const OptixModule module, const OptixDeviceContext ctx, const cudaStream_t stream, ch_infos* ch_infos)
+mesh mesh_create(const cgltf_data* data, cgltf_mesh* curr_mesh, const OptixProgramGroup ch_rg_pg, const OptixProgramGroup ch_sr_pg, const OptixDeviceContext ctx, const cudaStream_t stream, ch_infos* ch_infos)
 {
 	CHIZEN_RESULT chi_result = 0;
 	cudaError_t cuda_error = 0;
@@ -34,7 +34,7 @@ mesh mesh_create(const cgltf_data* data, cgltf_mesh* curr_mesh, const OptixProgr
 
 	for (size_t p = 0; p < m.prims_count; ++p)
 	{
-		m.prims[p] = primitive_create(data, curr_mesh->primitives + p, ch_pg, module, ctx, stream, ch_infos);
+		m.prims[p] = primitive_create(data, curr_mesh->primitives + p, ch_rg_pg, ch_sr_pg, ctx, stream, ch_infos);
 		CHIZEN_RESULT_CHECK("primitive create", m.prims[p].result, m.result);
 
 		build_inputs[p] = m.prims[p].build_input;

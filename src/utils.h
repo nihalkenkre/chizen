@@ -1,12 +1,8 @@
 #pragma once
 
-#include <optix.h>
-#include <cuda_runtime.h>
-#include <stdio.h>
 #include <cgltf/cgltf.h>
 #include <cglm/include/cglm/cglm.h>
 #include "camera.h"
-#include "error.h"
 
 
 #ifdef __cplusplus

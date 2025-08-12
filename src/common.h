@@ -3,6 +3,13 @@
 #include "texture.h"
 #include "material.h"
 #include "exr.h"
+#include "light.h"
+
+typedef enum RAY_TYPE
+{
+	RAY_TYPE_PRIMARY,
+	RAY_TYPE_SHADOW
+} RAY_TYPE;
 
 typedef struct launch_params
 {
@@ -10,8 +17,11 @@ typedef struct launch_params
 	material* materials;
 	exr_pass* passes;
 	size_t passes_count;
+	light* lights;
+	size_t lights_count;
 	size_t render_width;
 	size_t render_height;
+	size_t trace_depth;
 	OptixTraversableHandle handle;
 } launch_params;
 
@@ -32,25 +42,25 @@ typedef struct ray_gen_record
 	ray_gen_record_data data;
 } ray_gen_record;
 
-typedef struct closest_hit_record_data
+typedef struct ch_rg_record_data
 {
 	float3* normals;
 	float2* uvs;
 	void* indices;
 	OptixIndicesFormat indices_format;
 	int32_t material_index;
-} closest_hit_record_data;
+} ch_rg_record_data;
 
-typedef struct closest_hit_record
+typedef struct ch_record
 {
 	__align__(OPTIX_SBT_RECORD_ALIGNMENT)
 		char header[OPTIX_SBT_RECORD_HEADER_SIZE];
-	closest_hit_record_data data;
-} closest_hit_record;
+	ch_rg_record_data data;
+} ch_record;
 
 typedef struct ch_infos
 {
-	closest_hit_record *ch_records;
+	ch_record* ch_records;
 	size_t count;
 } ch_infos;
 
@@ -59,12 +69,12 @@ typedef struct miss_record_data
 	float3 DUMMY;
 } miss_record_data;
 
-typedef struct miss_record
+typedef struct ms_record
 {
 	__align__(OPTIX_SBT_RECORD_ALIGNMENT)
 		char header[OPTIX_SBT_RECORD_HEADER_SIZE];
 	miss_record_data data;
-} miss_record;
+} ms_record;
 
 typedef struct ray
 {
