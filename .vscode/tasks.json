@@ -35,7 +35,7 @@
             "args": [
                 "${workspaceFolder}/../sample_scenes/scene.glb",
             ],
-            "dependsOn": "Release Build",
+            "dependsOn": "Release MSBuild",
         }
     ]
 }

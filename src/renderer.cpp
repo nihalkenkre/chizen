@@ -31,15 +31,15 @@ CHIZEN_RESULT renderer_render_gltf(const size_t render_width, const size_t rende
 	OptixResult optix_result = OPTIX_SUCCESS;
 
 	cudaStream_t stream = nullptr;
-	cgltf_options gltf_options = { };
+	cgltf_options gltf_options = {};
 	cgltf_data* gltf_data = nullptr;
 	OptixDeviceContext ctx = nullptr;
-	OptixDeviceContextOptions ctx_options = { };
+	OptixDeviceContextOptions ctx_options = {};
 	scene s = { };
 	OptixPipelineCompileOptions pipeline_compile_options = {};
 	OptixModuleCompileOptions module_compile_options = {};
 	char curr_dir[MAX_PATH];
-	OFSTRUCT open_file = { };
+	OFSTRUCT open_file = {};
 	HANDLE h_file = nullptr;
 	LARGE_INTEGER file_size = {};
 	void* module_data = nullptr;

@@ -18,12 +18,43 @@
 #include <optix_stack_size.h>
 #include <optix_function_table_definition.h>
 
-typedef struct ray_payload
+typedef struct payload
 {
-	float4 p;
-} ray_payload;
+	float4 base_color;
+	float3 normal;
+	float2 uv;
+	float3 irradiance;
+	float roughness;
+	float metalness;
+	float z_depth;
+	float3 world_position;
+	bool is_hit;
+} payload;
+
+typedef union payload_convert
+{
+	payload* ptr;
+	uint2 data;
+} payload_convert;
 
 extern "C" __constant__ launch_params lp;
+
+__device__ static uint2 split_pointer(payload* p)
+{
+	payload_convert pc = {};
+	pc.ptr = p;
+
+	return pc.data;
+}
+
+__device__ static payload* merge_pointer(unsigned int p0, unsigned int p1)
+{
+	payload_convert pc = {};
+	pc.data.x = p0;
+	pc.data.y = p1;
+
+	return pc.ptr;
+}
 
 __device__ static ray ray_create(float3 org, float3 dir)
 {
@@ -63,36 +94,82 @@ extern "C" __global__ void __raygen__rg()
 
 	curand_init(launch_index.x + launch_index.y, launch_index.x + launch_index.y, 0, ((curandState*)rg_data->states) + r_idx);
 
+	float4 base_color = {};	float2 uv = {}; float3 normal = {}; float metalness = 0; float roughness = 0;
+	float3 irradiance = {};
+
 	for (size_t s = 0; s < rg_data->num_samples; ++s)
 	{
-		unsigned int p0 = 0, p1 = 0, p2 = 0;
 		float2 offset = { curand_uniform(((curandState*)rg_data->states) + r_idx), curand_uniform(((curandState*)rg_data->states) + r_idx) };
 		ray r = generate_ray(offset, launch_index.x, launch_index.y, rg_data->pixel_00_loc, rg_data->pixel_delta_u, rg_data->pixel_delta_v, rg_data->org);
 
-		optixTrace(lp.handle, r.org, r.dir, 0.1f, 1000.f, 0.f, 0xFF, 0, RAY_TYPE_PRIMARY, 2, 0, p0, p1, p2);
+		payload pl = {};
+		uint2 p = split_pointer(&pl);
+		optixTrace(lp.handle, r.org, r.dir, 0.1f, 1000.f, 0.f, 0xFF, 0, RAY_TYPE_PRIMARY, 2, 0, p.x, p.y);
 
-		if (p0 != 0 || p1 != 0 || p2 != 0)
+		if (pl.is_hit)
 		{
-			float3 world_position = float3{ __uint_as_float(p0),
-														__uint_as_float(p1),
-														__uint_as_float(p2) };
-
 			for (size_t l = 0; l < lp.lights_count; ++l)
 			{
-				float3 ray_org = world_position;
+				float3 ray_org = pl.world_position;
 				float3 ray_dir = normalize(float3{ lp.lights[l].position[0], lp.lights[l].position[1], lp.lights[l].position[2] } - ray_org);
 				unsigned int sr_p0 = l;
-				optixTrace(lp.handle, ray_org, ray_dir, 0.1f, 1000.f, 0.f, 0xFF, OPTIX_RAY_FLAG_TERMINATE_ON_FIRST_HIT, RAY_TYPE_SHADOW, 2, 1, sr_p0);
+				optixTrace(lp.handle, ray_org, ray_dir, 0.1f, 1000.f, 0.f, 0xFF, OPTIX_RAY_FLAG_TERMINATE_ON_FIRST_HIT, RAY_TYPE_SHADOW, 2, 1, p.x, p.y, sr_p0);
 			}
 		}
+
+		base_color += pl.base_color;
+		uv += pl.uv;
+		normal += pl.normal;
+		metalness += pl.metalness;
+		roughness += pl.roughness;
+		irradiance += pl.irradiance;
 	}
+
+	base_color /= rg_data->num_samples;
+	uv /= rg_data->num_samples;
+	normal /= rg_data->num_samples;
+	metalness /= rg_data->num_samples;
+	roughness /= rg_data->num_samples;
+	irradiance /= rg_data->num_samples;
 
 	for (size_t p = 0; p < lp.passes_count; ++p)
 	{
-		for (size_t c = 0; c < lp.passes[p].layer.num_channels; ++c)
+		size_t pixel_idx = (launch_index.y * lp.render_width * lp.passes[p].layer.num_channels) + (launch_index.x * lp.passes[p].layer.num_channels);
+
+		if (lp.passes[p].layer.type == EXR_LAYER_TYPE_BASECOLOR)
 		{
-			size_t pixel_idx = (launch_index.y * lp.render_width * lp.passes[p].layer.num_channels) + (launch_index.x * lp.passes[p].layer.num_channels);
-			lp.passes[p].pixels[pixel_idx + c] /= rg_data->num_samples;
+			lp.passes[p].d_pixels[pixel_idx] = base_color.x;
+			lp.passes[p].d_pixels[pixel_idx + 1] = base_color.y;
+			lp.passes[p].d_pixels[pixel_idx + 2] = base_color.z;
+			lp.passes[p].d_pixels[pixel_idx + 3] = base_color.w;
+		}
+		else if (lp.passes[p].layer.type == EXR_LAYER_TYPE_UV)
+		{
+#ifdef _DEBUG // hack to get all the passes pixels correctly
+			printf("Yay\n");
+#endif
+			lp.passes[p].d_pixels[pixel_idx] = uv.x;
+			lp.passes[p].d_pixels[pixel_idx + 1] = uv.y;
+		}
+		else if (lp.passes[p].layer.type == EXR_LAYER_TYPE_NORMAL)
+		{
+			lp.passes[p].d_pixels[pixel_idx] = normal.x;
+			lp.passes[p].d_pixels[pixel_idx + 1] = normal.y;
+			lp.passes[p].d_pixels[pixel_idx + 2] = normal.z;
+		}
+		else if (lp.passes[p].layer.type == EXR_LAYER_TYPE_METALNESS)
+		{
+			lp.passes[p].d_pixels[pixel_idx] = metalness;
+		}
+		else if (lp.passes[p].layer.type == EXR_LAYER_TYPE_ROUGHNESS)
+		{
+			lp.passes[p].d_pixels[pixel_idx] = roughness;
+		}
+		else if (lp.passes[p].layer.type == EXR_LAYER_TYPE_IRRADIANCE)
+		{
+			lp.passes[p].d_pixels[pixel_idx] = irradiance.x;
+			lp.passes[p].d_pixels[pixel_idx + 1] = irradiance.y;
+			lp.passes[p].d_pixels[pixel_idx + 2] = irradiance.z;
 		}
 	}
 }
@@ -153,121 +230,70 @@ extern "C" __global__ void __closesthit__rg()
 		uv = ch_data->uvs[index_triplet.x] * bary_coords.z + ch_data->uvs[index_triplet.y] * bary_coords.x + ch_data->uvs[index_triplet.z] * bary_coords.y;
 	}
 
-	float3 world_position = (optixGetWorldRayOrigin() + optixGetWorldRayDirection() * optixGetRayTmax());
-	optixSetPayload_0(__float_as_uint(world_position.x));
-	optixSetPayload_1(__float_as_uint(world_position.y));
-	optixSetPayload_2(__float_as_uint(world_position.z));
+	payload* pl = merge_pointer(optixGetPayload_0(), optixGetPayload_1());
+	pl->uv = uv;
+	pl->normal = normal;
+	pl->is_hit = true;
+	pl->world_position = (optixGetWorldRayOrigin() + optixGetWorldRayDirection() * optixGetRayTmax());
 
-	for (size_t p = 0; p < lp.passes_count; ++p)
+	if (ch_data->material_index >= 0)
 	{
-		size_t pixel_idx = (launch_index.y * lp.render_width * lp.passes[p].layer.num_channels) + (launch_index.x * lp.passes[p].layer.num_channels);
-		if (lp.passes[p].layer.type == EXR_LAYER_TYPE_BASECOLOR)
+		if (lp.materials[ch_data->material_index].base_tex_idx >= 0)
 		{
-			if (ch_data->material_index >= 0)
-			{
-				if (lp.materials[ch_data->material_index].base_tex_idx >= 0)
-				{
-					float4 color = tex2D<float4>(lp.textures[lp.materials[ch_data->material_index].base_tex_idx].d_obj, uv.x, uv.y) *
-						lp.materials[ch_data->material_index].base_color_factor;
+			float4 color = tex2D<float4>(lp.textures[lp.materials[ch_data->material_index].base_tex_idx].d_obj, uv.x, uv.y) *
+				lp.materials[ch_data->material_index].base_color_factor;
 
-					add_color(p, pixel_idx, color);
-				}
-				else
-				{
-					add_color(p, pixel_idx, lp.materials[ch_data->material_index].base_color_factor);
-				}
-			}
+			pl->base_color = color;
 		}
-		else if (lp.passes[p].layer.type == EXR_LAYER_TYPE_METALNESS)
+		else
 		{
-			if (ch_data->material_index >= 0)
-			{
-				if (lp.materials[ch_data->material_index].mr_tex_idx >= 0)
-				{
-					float4 color = tex2D<float4>(lp.textures[lp.materials[ch_data->material_index].mr_tex_idx].d_obj, uv.x, uv.y) *
-						lp.materials[ch_data->material_index].metalness_factor;
+			pl->base_color = lp.materials[ch_data->material_index].base_color_factor;
+		}
 
-					add_color(p, pixel_idx, make_float4(make_float3(color.z), 1.f));
-				}
-				else
-				{
-					add_color(p, pixel_idx, make_float4(make_float3(lp.materials[ch_data->material_index].metalness_factor), 1.f));
-				}
-			}
-		}
-		else if (lp.passes[p].layer.type == EXR_LAYER_TYPE_ROUGHNESS)
+		if (lp.materials[ch_data->material_index].mr_tex_idx >= 0)
 		{
-			if (ch_data->material_index >= 0)
-			{
-				if (lp.materials[ch_data->material_index].mr_tex_idx >= 0)
-				{
-					float4 color = tex2D<float4>(lp.textures[lp.materials[ch_data->material_index].mr_tex_idx].d_obj, uv.x, uv.y) *
-						lp.materials[ch_data->material_index].roughness_factor;
+			float4 color = tex2D<float4>(lp.textures[lp.materials[ch_data->material_index].mr_tex_idx].d_obj, uv.x, uv.y) *
+				lp.materials[ch_data->material_index].metalness_factor;
 
-					add_color(p, pixel_idx, make_float4(make_float3(color.y), 1.f));
-				}
-				else
-				{
-					add_color(p, pixel_idx, make_float4(make_float3(lp.materials[ch_data->material_index].roughness_factor), 1.f));
-				}
-			}
+			pl->metalness = color.z;
 		}
-		else if (lp.passes[p].layer.type == EXR_LAYER_TYPE_NORMAL)
+		else
 		{
-			add_color(p, pixel_idx, make_float4(normal, 1.f));
+			pl->metalness = lp.materials[ch_data->material_index].metalness_factor;
 		}
-		else if (lp.passes[p].layer.type == EXR_LAYER_TYPE_UV)
+
+		if (lp.materials[ch_data->material_index].mr_tex_idx >= 0)
 		{
-			add_color(p, pixel_idx, make_float4(uv, 0, 1.f));
+			float4 color = tex2D<float4>(lp.textures[lp.materials[ch_data->material_index].mr_tex_idx].d_obj, uv.x, uv.y) *
+				lp.materials[ch_data->material_index].roughness_factor;
+
+			pl->roughness = color.y;
 		}
-		else if (lp.passes[p].layer.type == EXR_LAYER_TYPE_ZDEPTH)
+		else
 		{
-			float z_depth = (length(world_position) - optixGetRayTmin()) / 1000.f;
-			add_color(p, pixel_idx, make_float4(
-				z_depth,
-				z_depth,
-				z_depth,
-				1.f
-			));
+			pl->roughness = lp.materials[ch_data->material_index].roughness_factor;
 		}
 	}
 }
 
 extern "C" __global__ void __closesthit__sr()
 {
-	uint3 launch_index = optixGetLaunchIndex();
-
-	for (size_t p = 0; p < lp.passes_count; ++p)
-	{
-		size_t pixel_idx = (launch_index.y * lp.render_width * lp.passes[p].layer.num_channels) + (launch_index.x * lp.passes[p].layer.num_channels);
-		if (lp.passes[p].layer.type == EXR_LAYER_TYPE_IRRADIANCE)
-		{
-			add_color(p, pixel_idx, float4{ 0,0,0,1 });
-		}
-	}
+	payload* pl = merge_pointer(optixGetPayload_0(), optixGetPayload_1());
+	pl->irradiance = make_float3(0);
+	pl->is_hit = true;
 }
 
 extern "C" __global__ void __miss__rg()
 {
+	payload* pl = merge_pointer(optixGetPayload_0(), optixGetPayload_1());
+	pl->is_hit = false;
 }
 
 extern "C" __global__ void __miss__sr()
 {
-	uint3 launch_index = optixGetLaunchIndex();
-	size_t light_idx = optixGetPayload_0();
+	payload* pl = merge_pointer(optixGetPayload_0(), optixGetPayload_1());
+	unsigned int light_idx = optixGetPayload_2();
 
-	for (size_t p = 0; p < lp.passes_count; ++p)
-	{
-		size_t pixel_idx = (launch_index.y * lp.render_width * lp.passes[p].layer.num_channels) + (launch_index.x * lp.passes[p].layer.num_channels);
-		if (lp.passes[p].layer.type == EXR_LAYER_TYPE_IRRADIANCE)
-		{
-			float4 color = {
-				lp.lights[light_idx].color[0],
-				lp.lights[light_idx].color[1],
-				lp.lights[light_idx].color[2],
-				1.f
-			};
-			add_color(p, pixel_idx, color);
-		}
-	}
+	pl->irradiance = make_float3(lp.lights[light_idx].color[0], lp.lights[light_idx].color[1], lp.lights[light_idx].color[2]);
+	pl->is_hit = false;
 }
