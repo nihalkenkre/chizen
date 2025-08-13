@@ -248,7 +248,7 @@ CHIZEN_RESULT renderer_render_gltf(const size_t render_width, const size_t rende
 	for (size_t p = 0; p < passes_count; ++p)
 	{
 		d_exr_passes_staging[p].layer = passes[p].layer;
-		CU_CHECK("alloc d_pixels for exr staging", cudaMalloc((void**)(&d_exr_passes_staging[p].d_pixels), render_width * render_height * 4 * sizeof(float)), chi_result);
+		CU_CHECK("alloc d_pixels for exr staging", cudaMalloc((void**)(&d_exr_passes_staging[p].d_pixels), render_width * render_height * passes[p].layer.num_channels * sizeof(float)), chi_result);
 	}
 
 	CU_CHECK("alloc d_exr_passes", cudaMalloc((void**)&d_exr_passes, sizeof(exr_pass) * passes_count), chi_result);
@@ -285,7 +285,7 @@ CHIZEN_RESULT renderer_render_gltf(const size_t render_width, const size_t rende
 
 	for (size_t p = 0; p < passes_count; ++p)
 	{
-		CU_CHECK("copy pass pixels to host", cudaMemcpy(passes[p].pixels, (void*)((exr_pass*)d_exr_passes_staging)[p].d_pixels, render_width * render_height * 4 * sizeof(float), cudaMemcpyDeviceToHost), chi_result);
+		CU_CHECK("copy pass pixels to host", cudaMemcpy(passes[p].pixels, (void*)((exr_pass*)d_exr_passes_staging)[p].d_pixels, render_width * render_height * passes[p].layer.num_channels * sizeof(float), cudaMemcpyDeviceToHost), chi_result);
 	}
 
 cpu_error:

@@ -26,7 +26,7 @@ CHIZEN_RESULT write_exr(const char* file_path, const size_t render_width, const 
 
 	for (size_t p = 0; p < passes_count; ++p)
 	{
-		for (size_t c = 0; c < _countof(channel_names); ++c)
+		for (size_t c = 0; c < passes[p].layer.num_channels; ++c)
 		{
 			char layer_channel_name[64];
 			memset(layer_channel_name, 0, 64);
@@ -61,38 +61,46 @@ CHIZEN_RESULT write_exr(const char* file_path, const size_t render_width, const 
 
 		for (int16_t c = 0; c < encoder.channel_count; ++c)
 		{
-			char encoder_channel_name[64];
-			strcpy(encoder_channel_name, (char*)encoder.channels[c].channel_name);
-
-			char* exr_layer_name = strtok(encoder_channel_name, ".");
-
 			for (size_t p = 0; p < passes_count; ++p)
 			{
+				char encoder_channel_name[64];
+				strcpy(encoder_channel_name, (char*)encoder.channels[c].channel_name);
+
+				char* exr_layer_name = strtok(encoder_channel_name, ".");
+
 				if (strcmp(passes[p].layer.name, exr_layer_name) == 0)
 				{
 					char* exr_layer_channel_name = strtok(NULL, ".");
 					if (strcmp(exr_layer_channel_name, "R") == 0)
 					{
-						encoder.channels[c].encode_from_ptr = (uint8_t*)(&passes[p].pixels[(chunk_info.start_y * render_width * 4) + (chunk_info.start_x * 4)]);
+						encoder.channels[c].encode_from_ptr = (uint8_t*)(&passes[p].pixels[(chunk_info.start_y * render_width * passes[p].layer.num_channels) + (chunk_info.start_x * passes[p].layer.num_channels)]);
+						encoder.channels[c].user_data_type = EXR_PIXEL_FLOAT;
+						encoder.channels[c].user_pixel_stride = (int32_t)(sizeof(float) * passes[p].layer.num_channels);
+						encoder.channels[c].user_line_stride = (int32_t)(sizeof(float) * passes[p].layer.num_channels * render_width);
 					}
 					else if (strcmp(exr_layer_channel_name, "G") == 0)
 					{
-						encoder.channels[c].encode_from_ptr = (uint8_t*)(&passes[p].pixels[(chunk_info.start_y * render_width * 4) + (chunk_info.start_x * 4 + 1)]);
+						encoder.channels[c].encode_from_ptr = (uint8_t*)(&passes[p].pixels[(chunk_info.start_y * render_width * passes[p].layer.num_channels) + (chunk_info.start_x * passes[p].layer.num_channels + 1)]);
+						encoder.channels[c].user_data_type = EXR_PIXEL_FLOAT;
+						encoder.channels[c].user_pixel_stride = (int32_t)(sizeof(float) * passes[p].layer.num_channels);
+						encoder.channels[c].user_line_stride = (int32_t)(sizeof(float) * passes[p].layer.num_channels * render_width);
 					}
 					else if (strcmp(exr_layer_channel_name, "B") == 0)
 					{
-						encoder.channels[c].encode_from_ptr = (uint8_t*)(&passes[p].pixels[(chunk_info.start_y * render_width * 4) + (chunk_info.start_x * 4 + 2)]);
+						encoder.channels[c].encode_from_ptr = (uint8_t*)(&passes[p].pixels[(chunk_info.start_y * render_width * passes[p].layer.num_channels) + (chunk_info.start_x * passes[p].layer.num_channels + 2)]);
+						encoder.channels[c].user_data_type = EXR_PIXEL_FLOAT;
+						encoder.channels[c].user_pixel_stride = (int32_t)(sizeof(float) * passes[p].layer.num_channels);
+						encoder.channels[c].user_line_stride = (int32_t)(sizeof(float) * passes[p].layer.num_channels * render_width);
 					}
 					else if (strcmp(exr_layer_channel_name, "A") == 0)
 					{
-						encoder.channels[c].encode_from_ptr = (uint8_t*)(&passes[p].pixels[(chunk_info.start_y * render_width * 4) + (chunk_info.start_x * 4 + 3)]);
+						encoder.channels[c].encode_from_ptr = (uint8_t*)(&passes[p].pixels[(chunk_info.start_y * render_width * passes[p].layer.num_channels) + (chunk_info.start_x * passes[p].layer.num_channels + 3)]);
+						encoder.channels[c].user_data_type = EXR_PIXEL_FLOAT;
+						encoder.channels[c].user_pixel_stride = (int32_t)(sizeof(float) * passes[p].layer.num_channels);
+						encoder.channels[c].user_line_stride = (int32_t)(sizeof(float) * passes[p].layer.num_channels * render_width);
 					}
 				}
 			}
-
-			encoder.channels[c].user_data_type = EXR_PIXEL_FLOAT;
-			encoder.channels[c].user_pixel_stride = (int32_t)(sizeof(float) * 4);
-			encoder.channels[c].user_line_stride = (int32_t)(sizeof(float) * 4 * render_width);
 		}
 
 		if (first)

@@ -18,6 +18,7 @@ typedef enum EXR_LAYER_TYPE
 typedef struct EXR_LAYER
 {
 	EXR_LAYER_TYPE type;
+	size_t num_channels;
 	char name[64];
 } EXR_LAYER;
 

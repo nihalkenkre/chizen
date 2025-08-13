@@ -73,8 +73,8 @@ extern "C" __global__ void __raygen__rg()
 
 		if (p0 != 0 || p1 != 0 || p2 != 0)
 		{
-			float3 world_position = float3{	__uint_as_float(p0),
-														__uint_as_float(p1),	
+			float3 world_position = float3{ __uint_as_float(p0),
+														__uint_as_float(p1),
 														__uint_as_float(p2) };
 
 			for (size_t l = 0; l < lp.lights_count; ++l)
@@ -87,23 +87,23 @@ extern "C" __global__ void __raygen__rg()
 		}
 	}
 
-	size_t pixel_idx = (launch_index.y * lp.render_width * 4) + (launch_index.x * 4);
-
 	for (size_t p = 0; p < lp.passes_count; ++p)
 	{
-		lp.passes[p].pixels[pixel_idx] /= rg_data->num_samples;
-		lp.passes[p].pixels[pixel_idx + 1] /= rg_data->num_samples;
-		lp.passes[p].pixels[pixel_idx + 2] /= rg_data->num_samples;
-		lp.passes[p].pixels[pixel_idx + 3] /= rg_data->num_samples;
+		for (size_t c = 0; c < lp.passes[p].layer.num_channels; ++c)
+		{
+			size_t pixel_idx = (launch_index.y * lp.render_width * lp.passes[p].layer.num_channels) + (launch_index.x * lp.passes[p].layer.num_channels);
+			lp.passes[p].pixels[pixel_idx + c] /= rg_data->num_samples;
+		}
 	}
 }
 
-__device__ void write_pixels(size_t passes_index, size_t pixel_index, float4 color)
+__device__ void add_color(size_t p, size_t pixel_index, float4 color)
 {
-	lp.passes[passes_index].d_pixels[pixel_index] += color.x;
-	lp.passes[passes_index].d_pixels[pixel_index + 1] += color.y;
-	lp.passes[passes_index].d_pixels[pixel_index + 2] += color.z;
-	lp.passes[passes_index].d_pixels[pixel_index + 3] += color.w;
+	float col[4] = { color.x, color.y, color.z, color.w };
+	for (size_t c = 0; c < lp.passes[p].layer.num_channels; ++c)
+	{
+		lp.passes[p].pixels[pixel_index + c] += col[c];
+	}
 }
 
 extern "C" __global__ void __closesthit__rg()
@@ -153,7 +153,6 @@ extern "C" __global__ void __closesthit__rg()
 		uv = ch_data->uvs[index_triplet.x] * bary_coords.z + ch_data->uvs[index_triplet.y] * bary_coords.x + ch_data->uvs[index_triplet.z] * bary_coords.y;
 	}
 
-	size_t pixel_idx = (launch_index.y * lp.render_width * 4) + (launch_index.x * 4);
 	float3 world_position = (optixGetWorldRayOrigin() + optixGetWorldRayDirection() * optixGetRayTmax());
 	optixSetPayload_0(__float_as_uint(world_position.x));
 	optixSetPayload_1(__float_as_uint(world_position.y));
@@ -161,6 +160,7 @@ extern "C" __global__ void __closesthit__rg()
 
 	for (size_t p = 0; p < lp.passes_count; ++p)
 	{
+		size_t pixel_idx = (launch_index.y * lp.render_width * lp.passes[p].layer.num_channels) + (launch_index.x * lp.passes[p].layer.num_channels);
 		if (lp.passes[p].layer.type == EXR_LAYER_TYPE_BASECOLOR)
 		{
 			if (ch_data->material_index >= 0)
@@ -170,11 +170,11 @@ extern "C" __global__ void __closesthit__rg()
 					float4 color = tex2D<float4>(lp.textures[lp.materials[ch_data->material_index].base_tex_idx].d_obj, uv.x, uv.y) *
 						lp.materials[ch_data->material_index].base_color_factor;
 
-					write_pixels(p, pixel_idx, color);
+					add_color(p, pixel_idx, color);
 				}
 				else
 				{
-					write_pixels(p, pixel_idx, lp.materials[ch_data->material_index].base_color_factor);
+					add_color(p, pixel_idx, lp.materials[ch_data->material_index].base_color_factor);
 				}
 			}
 		}
@@ -187,11 +187,11 @@ extern "C" __global__ void __closesthit__rg()
 					float4 color = tex2D<float4>(lp.textures[lp.materials[ch_data->material_index].mr_tex_idx].d_obj, uv.x, uv.y) *
 						lp.materials[ch_data->material_index].metalness_factor;
 
-					write_pixels(p, pixel_idx, make_float4(make_float3(color.z), 1.f));
+					add_color(p, pixel_idx, make_float4(make_float3(color.z), 1.f));
 				}
 				else
 				{
-					write_pixels(p, pixel_idx, make_float4(make_float3(lp.materials[ch_data->material_index].metalness_factor), 1.f));
+					add_color(p, pixel_idx, make_float4(make_float3(lp.materials[ch_data->material_index].metalness_factor), 1.f));
 				}
 			}
 		}
@@ -204,26 +204,26 @@ extern "C" __global__ void __closesthit__rg()
 					float4 color = tex2D<float4>(lp.textures[lp.materials[ch_data->material_index].mr_tex_idx].d_obj, uv.x, uv.y) *
 						lp.materials[ch_data->material_index].roughness_factor;
 
-					write_pixels(p, pixel_idx, make_float4(make_float3(color.y), 1.f));
+					add_color(p, pixel_idx, make_float4(make_float3(color.y), 1.f));
 				}
 				else
 				{
-					write_pixels(p, pixel_idx, make_float4(make_float3(lp.materials[ch_data->material_index].roughness_factor), 1.f));
+					add_color(p, pixel_idx, make_float4(make_float3(lp.materials[ch_data->material_index].roughness_factor), 1.f));
 				}
 			}
 		}
 		else if (lp.passes[p].layer.type == EXR_LAYER_TYPE_NORMAL)
 		{
-			write_pixels(p, pixel_idx, make_float4(normal, 1.f));
+			add_color(p, pixel_idx, make_float4(normal, 1.f));
 		}
 		else if (lp.passes[p].layer.type == EXR_LAYER_TYPE_UV)
 		{
-			write_pixels(p, pixel_idx, make_float4(uv, 0, 1.f));
+			add_color(p, pixel_idx, make_float4(uv, 0, 1.f));
 		}
 		else if (lp.passes[p].layer.type == EXR_LAYER_TYPE_ZDEPTH)
 		{
 			float z_depth = (length(world_position) - optixGetRayTmin()) / 1000.f;
-			write_pixels(p, pixel_idx, make_float4(
+			add_color(p, pixel_idx, make_float4(
 				z_depth,
 				z_depth,
 				z_depth,
@@ -236,13 +236,13 @@ extern "C" __global__ void __closesthit__rg()
 extern "C" __global__ void __closesthit__sr()
 {
 	uint3 launch_index = optixGetLaunchIndex();
-	size_t pixel_idx = (launch_index.y * lp.render_width * 4) + (launch_index.x * 4);
 
 	for (size_t p = 0; p < lp.passes_count; ++p)
 	{
+		size_t pixel_idx = (launch_index.y * lp.render_width * lp.passes[p].layer.num_channels) + (launch_index.x * lp.passes[p].layer.num_channels);
 		if (lp.passes[p].layer.type == EXR_LAYER_TYPE_IRRADIANCE)
 		{
-			write_pixels(p, pixel_idx, float4{ 0,0,0,1 });
+			add_color(p, pixel_idx, float4{ 0,0,0,1 });
 		}
 	}
 }
@@ -254,11 +254,11 @@ extern "C" __global__ void __miss__rg()
 extern "C" __global__ void __miss__sr()
 {
 	uint3 launch_index = optixGetLaunchIndex();
-	size_t pixel_idx = (launch_index.y * lp.render_width * 4) + (launch_index.x * 4);
 	size_t light_idx = optixGetPayload_0();
 
 	for (size_t p = 0; p < lp.passes_count; ++p)
 	{
+		size_t pixel_idx = (launch_index.y * lp.render_width * lp.passes[p].layer.num_channels) + (launch_index.x * lp.passes[p].layer.num_channels);
 		if (lp.passes[p].layer.type == EXR_LAYER_TYPE_IRRADIANCE)
 		{
 			float4 color = {
@@ -267,7 +267,7 @@ extern "C" __global__ void __miss__sr()
 				lp.lights[light_idx].color[2],
 				1.f
 			};
-			write_pixels(p, pixel_idx, color);
+			add_color(p, pixel_idx, color);
 		}
 	}
 }

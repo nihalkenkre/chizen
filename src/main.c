@@ -30,55 +30,56 @@ int main(int argc, char** argv)
 			.layer = {
 				.type = EXR_LAYER_TYPE_BASECOLOR,
 				.name = "BaseColor",
+				.num_channels = 4,
 			},
-			.pixels = calloc(1, (size_t)(RENDER_WIDTH * RENDER_HEIGHT * 4 * sizeof(float))),
 		},
 		{
 			.layer = {
 				.type = EXR_LAYER_TYPE_NORMAL,
 				.name = "Normal",
+				.num_channels = 3,
 			},
-			.pixels = calloc(1, (size_t)(RENDER_WIDTH * RENDER_HEIGHT * 4 * sizeof(float))),
 		},
 		{
 			.layer = {
 				.type = EXR_LAYER_TYPE_UV,
 				.name = "UV",
+				.num_channels = 2,
 			},
-			.pixels = calloc(1, (size_t)(RENDER_WIDTH * RENDER_HEIGHT * 4 * sizeof(float))),
 		},
 		{
 			.layer = {
 				.type = EXR_LAYER_TYPE_METALNESS,
 				.name = "Metalness",
+				.num_channels = 1,
 			},
-			.pixels = calloc(1, (size_t)(RENDER_WIDTH * RENDER_HEIGHT * 4 * sizeof(float))),
 		},
 		{
 			.layer = {
 				.type = EXR_LAYER_TYPE_ROUGHNESS,
 				.name = "Roughness",
+				.num_channels = 1,
 			},
-			.pixels = calloc(1, (size_t)(RENDER_WIDTH * RENDER_HEIGHT * 4 * sizeof(float))),
 		},
 		{
 			.layer = {
 				.type = EXR_LAYER_TYPE_ZDEPTH,
 				.name = "ZDepth",
+				.num_channels = 1,
 			},
-			.pixels = calloc(1, (size_t)(RENDER_WIDTH * RENDER_HEIGHT * 4 * sizeof(float))),
 		},
 		{
 			.layer = {
 				.type = EXR_LAYER_TYPE_IRRADIANCE,
-				.name = "Irradiance"
+				.name = "Irradiance",
+				.num_channels = 1,
 			},
-			.pixels = calloc(1, (size_t)(RENDER_WIDTH * RENDER_HEIGHT * 4 * sizeof(float))),
 		},
 	};
 
 	for (size_t p = 0; p < _countof(passes); ++p)
 	{
+		passes[p].pixels = calloc(1, (size_t)(RENDER_WIDTH * RENDER_HEIGHT * passes[p].layer.num_channels * sizeof(float)));
 		if (passes[p].pixels == NULL)
 		{
 			printf("calloc failed for passes[%lld].pixels\n", p);
