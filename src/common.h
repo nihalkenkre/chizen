@@ -8,7 +8,9 @@
 typedef enum RAY_TYPE
 {
 	RAY_TYPE_PRIMARY,
-	RAY_TYPE_SHADOW
+	RAY_TYPE_BOUNCE,
+	RAY_TYPE_SHADOW,
+	RAY_TYPE_MAX,
 } RAY_TYPE;
 
 typedef struct launch_params
@@ -21,7 +23,7 @@ typedef struct launch_params
 	size_t lights_count;
 	size_t render_width;
 	size_t render_height;
-	size_t trace_depth;
+	size_t max_bounces;
 	OptixTraversableHandle handle;
 } launch_params;
 

@@ -28,6 +28,13 @@ int main(int argc, char** argv)
 	{
 		{
 			.layer = {
+				.type = EXR_LAYER_TYPE_FINALCOLOR,
+				.name = "FinalColor",
+				.num_channels = 4,
+			},
+		},
+		{
+			.layer = {
 				.type = EXR_LAYER_TYPE_BASECOLOR,
 				.name = "BaseColor",
 				.num_channels = 4,

@@ -20,6 +20,7 @@
 
 typedef struct payload
 {
+	float4 final_color;
 	float4 base_color;
 	float3 normal;
 	float2 uv;
@@ -72,7 +73,7 @@ __device__ static ray ray_create(float3 org, float3 dir)
 	return r;
 }
 
-__device__ static ray generate_ray(float2 offset, const size_t x, const size_t y, float3 pixel_00_loc, float3 pixel_delta_u, float3 pixel_delta_v, float3 org)
+__device__ static ray generate_primary_ray(float2 offset, const size_t x, const size_t y, float3 pixel_00_loc, float3 pixel_delta_u, float3 pixel_delta_v, float3 org)
 {
 	float3 pixel_delta_u_x = pixel_delta_u * (float)x;
 	float3 pixel_delta_v_y = pixel_delta_v * (float)y;
@@ -96,8 +97,16 @@ __device__ static void write_pixels(const payload& pl, const size_t num_samples)
 	for (size_t p = 0; p < lp.passes_count; ++p)
 	{
 		size_t pixel_idx = (launch_index.y * lp.render_width * lp.passes[p].layer.num_channels) + (launch_index.x * lp.passes[p].layer.num_channels);
-
-		if (lp.passes[p].layer.type == EXR_LAYER_TYPE_BASECOLOR)
+		
+		if (lp.passes[p].layer.type == EXR_LAYER_TYPE_FINALCOLOR)
+		{
+			float4 final_color = pl.final_color / num_samples;
+			lp.passes[p].d_pixels[pixel_idx] = final_color.x;
+			lp.passes[p].d_pixels[pixel_idx + 1] = final_color.y;
+			lp.passes[p].d_pixels[pixel_idx + 2] = final_color.z;
+			lp.passes[p].d_pixels[pixel_idx + 3] = final_color.w;
+		}
+		else if (lp.passes[p].layer.type == EXR_LAYER_TYPE_BASECOLOR)
 		{
 			float4 base_color = pl.base_color / num_samples;
 			lp.passes[p].d_pixels[pixel_idx] = base_color.x;
@@ -136,7 +145,6 @@ __device__ static void write_pixels(const payload& pl, const size_t num_samples)
 			lp.passes[p].d_pixels[pixel_idx + 2] = irradiance.z;
 		}
 	}
-
 }
 
 extern "C" __global__ void __raygen__rg()
@@ -154,19 +162,33 @@ extern "C" __global__ void __raygen__rg()
 	for (size_t s = 0; s < rg_data->num_samples; ++s)
 	{
 		float2 offset = { curand_uniform(((curandState*)rg_data->states) + r_idx), curand_uniform(((curandState*)rg_data->states) + r_idx) };
-		ray r = generate_ray(offset, launch_index.x, launch_index.y, rg_data->pixel_00_loc, rg_data->pixel_delta_u, rg_data->pixel_delta_v, rg_data->org);
+		ray r = generate_primary_ray(offset, launch_index.x, launch_index.y, rg_data->pixel_00_loc, rg_data->pixel_delta_u, rg_data->pixel_delta_v, rg_data->org);
 
-		optixTrace(lp.handle, r.org, r.dir, 0.1f, 1000.f, 0.f, 0xFF, 0, RAY_TYPE_PRIMARY, 2, 0, p.x, p.y);
+		optixTrace(lp.handle, r.org, r.dir, 0.1f, 1000.f, 0.f, 0xFF, 0, RAY_TYPE_PRIMARY, RAY_TYPE_MAX, RAY_TYPE_PRIMARY, p.x, p.y);
 
 		if (pl.is_hit)
 		{
-			for (size_t l = 0; l < lp.lights_count; ++l)
+			//for (size_t l = 0; l < lp.lights_count; ++l)
+			//{
+			//	float3 ray_org = pl.world_position;
+			//	float3 ray_dir = normalize(float3{ lp.lights[l].position[0], lp.lights[l].position[1], lp.lights[l].position[2] } - ray_org);
+			//	unsigned int sr_p0 = l;
+			//	optixTrace(lp.handle, ray_org, ray_dir, 0.1f, 1000.f, 0.f, 0xFF, OPTIX_RAY_FLAG_TERMINATE_ON_FIRST_HIT, RAY_TYPE_SHADOW, RAY_TYPE_MAX, RAY_TYPE_SHADOW, p.x, p.y, sr_p0);
+			//}
+
+			for (size_t b = 0; b < lp.max_bounces; ++b)
 			{
-				float3 ray_org = pl.world_position;
-				float3 ray_dir = normalize(float3{ lp.lights[l].position[0], lp.lights[l].position[1], lp.lights[l].position[2] } - ray_org);
-				unsigned int sr_p0 = l;
-				optixTrace(lp.handle, ray_org, ray_dir, 0.1f, 1000.f, 0.f, 0xFF, OPTIX_RAY_FLAG_TERMINATE_ON_FIRST_HIT, RAY_TYPE_SHADOW, 2, 1, p.x, p.y, sr_p0);
+				float3 rand_dir = { curand_uniform(((curandState*)rg_data->states) + r_idx), curand_uniform(((curandState*)rg_data->states) + r_idx), curand_uniform(((curandState*)rg_data->states) + r_idx) };
+
+				if (dot(rand_dir, pl.normal) < 0.f)
+				{
+					rand_dir = -rand_dir;
+				}
+
+				optixTrace(lp.handle, pl.world_position, rand_dir, 0.1f, 1000.f, 0.f, 0xFF, 0, RAY_TYPE_BOUNCE, RAY_TYPE_MAX, RAY_TYPE_BOUNCE, p.x, p.y);
 			}
+
+			pl.final_color /= lp.max_bounces;
 		}
 	}
 
@@ -275,14 +297,79 @@ extern "C" __global__ void __closesthit__rg()
 	}
 }
 
+extern "C" __global__ void __closesthit__b()
+{
+	float2 tmp_bary_coords = optixGetTriangleBarycentrics();
+	float3 bary_coords = {
+		 tmp_bary_coords.x,
+		 tmp_bary_coords.y,
+		 1.f - tmp_bary_coords.x - tmp_bary_coords.y,
+	};
+	uint3 launch_index = optixGetLaunchIndex();
+
+	unsigned int primitive_idx = optixGetPrimitiveIndex();
+
+	ch_rg_record_data* ch_data = (ch_rg_record_data*)optixGetSbtDataPointer();
+
+	uint3 index_triplet = {};
+	if (ch_data->indices_format == OPTIX_INDICES_FORMAT_UNSIGNED_BYTE3)
+	{
+		uchar3 tmp = *((uchar3*)ch_data->indices + primitive_idx);
+		index_triplet.x = tmp.x;
+		index_triplet.y = tmp.y;
+		index_triplet.z = tmp.z;
+	}
+	if (ch_data->indices_format == OPTIX_INDICES_FORMAT_UNSIGNED_SHORT3)
+	{
+		ushort3 tmp = *((ushort3*)ch_data->indices + primitive_idx);
+		index_triplet.x = tmp.x;
+		index_triplet.y = tmp.y;
+		index_triplet.z = tmp.z;
+	}
+	else
+	{
+		index_triplet = *((uint3*)ch_data->indices + primitive_idx);
+	}
+
+	float2 uv = { 0, 0 };
+
+	if (ch_data->uvs > 0)
+	{
+		uv = ch_data->uvs[index_triplet.x] * bary_coords.z + ch_data->uvs[index_triplet.y] * bary_coords.x + ch_data->uvs[index_triplet.z] * bary_coords.y;
+	}
+
+	payload* pl = merge_pointer(optixGetPayload_0(), optixGetPayload_1());
+	pl->is_hit = true;
+
+	if (ch_data->material_index >= 0)
+	{
+		if (lp.materials[ch_data->material_index].base_tex_idx >= 0)
+		{
+			float4 color = tex2D<float4>(lp.textures[lp.materials[ch_data->material_index].base_tex_idx].d_obj, uv.x, uv.y) *
+				lp.materials[ch_data->material_index].base_color_factor;
+
+			pl->final_color += pl->base_color + (color / lp.max_bounces);
+		}
+		else
+		{
+			pl->final_color += pl->base_color + (lp.materials[ch_data->material_index].base_color_factor / lp.max_bounces);
+		}
+	}
+}
+
 extern "C" __global__ void __closesthit__sr()
 {
 	payload* pl = merge_pointer(optixGetPayload_0(), optixGetPayload_1());
-	pl->irradiance = make_float3(0);
 	pl->is_hit = true;
 }
 
 extern "C" __global__ void __miss__rg()
+{
+	payload* pl = merge_pointer(optixGetPayload_0(), optixGetPayload_1());
+	pl->is_hit = false;
+}
+
+extern "C" __global__ void __miss__b()
 {
 	payload* pl = merge_pointer(optixGetPayload_0(), optixGetPayload_1());
 	pl->is_hit = false;

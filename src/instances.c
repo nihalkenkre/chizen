@@ -67,7 +67,7 @@ instances instances_create(const cgltf_data* gltf_data, mesh* meshes)
 
 		for (size_t mesh_idx = 0; mesh_idx < mesh_index; ++mesh_idx)
 		{
-			(i.instances + instance_idx)->sbtOffset += (unsigned int)meshes[mesh_idx].prims_count * 2;
+			(i.instances + instance_idx)->sbtOffset += (unsigned int)meshes[mesh_idx].prims_count * RAY_TYPE_MAX;
 		}
 
 		++instance_idx;
