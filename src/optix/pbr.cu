@@ -153,15 +153,15 @@ __device__ static void write_pixels(const payload& pl, const size_t num_samples)
 extern "C" __global__ void __raygen__rg()
 {
 	uint3 launch_index = optixGetLaunchIndex();
-	ray_gen_record_data* rg_data = (ray_gen_record_data*)optixGetSbtDataPointer();
+	
+	unsigned int r_idx = (blockDim.x * blockDim.y * threadIdx.z) + (blockDim.x * threadIdx.y) + threadIdx.x;
 
-	unsigned int r_idx = threadIdx.x + blockIdx.x * blockDim.x;
-
-	curand_init(launch_index.x + launch_index.y, launch_index.x + launch_index.y, 0, ((curandState*)lp.states) + r_idx);
-
+	curand_init(r_idx, 0, 0, ((curandState*)lp.states) + r_idx);
+	
 	payload pl = {};
 	uint2 p = split_pointer(&pl);
-
+	
+	ray_gen_record_data* rg_data = (ray_gen_record_data*)optixGetSbtDataPointer();
 	for (size_t s = 0; s < rg_data->num_samples; ++s)
 	{
 		float2 offset = { curand_uniform(((curandState*)lp.states) + r_idx) * 2.f - 1.f, curand_uniform(((curandState*)lp.states) + r_idx) * 2.f - 1.f};
@@ -178,11 +178,7 @@ extern "C" __global__ void __raygen__rg()
 			for (size_t r = 0; r < NUM_RAND_RAYS; ++r)
 			{
 				float3 rand_dir = { curand_uniform(((curandState*)lp.states) + r_idx) * 2.f - 1.f, curand_uniform(((curandState*)lp.states) + r_idx) * 2.f - 1.f, curand_uniform(((curandState*)lp.states) + r_idx) * 2.f - 1.f };
-
-				if (dot(rand_dir, pl.normal) < 0.f)
-				{
-					rand_dir = -rand_dir;
-				}
+				rand_dir += pl.normal;
 
 				optixTrace(lp.handle, pl.world_position, rand_dir, 0.001f, 1.0f, 0.f, 0xFF, 0, RAY_TYPE_BOUNCE, RAY_TYPE_MAX, RAY_TYPE_BOUNCE, r_p.x, r_p.y);
 			}
@@ -217,14 +213,14 @@ extern "C" __global__ void __closesthit__rg()
 		index_triplet.y = tmp.y;
 		index_triplet.z = tmp.z;
 	}
-	if (ch_data->indices_format == OPTIX_INDICES_FORMAT_UNSIGNED_SHORT3)
+	else if (ch_data->indices_format == OPTIX_INDICES_FORMAT_UNSIGNED_SHORT3)
 	{
 		ushort3 tmp = *((ushort3*)ch_data->indices + primitive_idx);
 		index_triplet.x = tmp.x;
 		index_triplet.y = tmp.y;
 		index_triplet.z = tmp.z;
 	}
-	else
+	else if (ch_data->indices_format == OPTIX_INDICES_FORMAT_UNSIGNED_INT3)
 	{
 		index_triplet = *((uint3*)ch_data->indices + primitive_idx);
 	}
@@ -372,7 +368,7 @@ extern "C" __global__ void __miss__b()
 {
 	payload* pl = merge_pointer(optixGetPayload_0(), optixGetPayload_1());
 	pl->is_hit = false;
-	pl->final_color += float4(1.f, 1.f, 1.f, 1.f);
+	pl->final_color += float4(0.5f, 0.5f, 0.5f, 1.f);
 }
 
 extern "C" __global__ void __miss__sr()
