@@ -24,6 +24,7 @@ typedef struct launch_params
 	size_t render_width;
 	size_t render_height;
 	size_t max_bounces;
+	void* states; // curandState*
 	OptixTraversableHandle handle;
 } launch_params;
 
@@ -34,7 +35,6 @@ typedef struct ray_gen_record_data
 	float3 pixel_delta_v;
 	float3 org;
 	size_t num_samples;
-	void* states; // curandState*
 } ray_gen_record_data;
 
 typedef struct ray_gen_record
@@ -44,20 +44,20 @@ typedef struct ray_gen_record
 	ray_gen_record_data data;
 } ray_gen_record;
 
-typedef struct ch_rg_record_data
+typedef struct ch_record_data
 {
 	float3* normals;
 	float2* uvs;
 	void* indices;
 	OptixIndicesFormat indices_format;
 	int32_t material_index;
-} ch_rg_record_data;
+} ch_record_data;
 
 typedef struct ch_record
 {
 	__align__(OPTIX_SBT_RECORD_ALIGNMENT)
 		char header[OPTIX_SBT_RECORD_HEADER_SIZE];
-	ch_rg_record_data data;
+	ch_record_data data;
 } ch_record;
 
 typedef struct ch_infos

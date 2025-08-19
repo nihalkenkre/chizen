@@ -181,7 +181,7 @@ CHIZEN_RESULT renderer_render_gltf(const size_t render_width, const size_t rende
 	CHIZEN_RESULT_CHECK("scene create", s.result, chi_result);
 
 	pipeline_link_options = {
-		.maxTraceDepth = 2,
+		.maxTraceDepth = 1,
 	};
 
 	ch_records_size = sizeof(ch_record) * s.ch_infos.count;
@@ -189,7 +189,6 @@ CHIZEN_RESULT renderer_render_gltf(const size_t render_width, const size_t rende
 	CU_CHECK("copy ch_records to device", cudaMemcpy((void*)d_ch_record_base, s.ch_infos.ch_records, ch_records_size, cudaMemcpyHostToDevice), chi_result);
 
 	utils_find_pixel_vecs(s.camera, s.camera.fov, (float)render_width, (float)render_height, pixel_00_loc, pixel_delta_u, pixel_delta_v);
-	CU_CHECK("alloc rand states", cudaMalloc((void**)&d_rand_states, render_width * render_height * sizeof(curandState)), chi_result);
 
 	rg_record = {
 		.data = {
@@ -198,7 +197,6 @@ CHIZEN_RESULT renderer_render_gltf(const size_t render_width, const size_t rende
 			.pixel_delta_v = float3(pixel_delta_v[0], pixel_delta_v[1], pixel_delta_v[2]),
 			.org = float3(s.camera.pos[0], s.camera.pos[1], s.camera.pos[2]),
 			.num_samples = num_samples,
-			.states = (void*)d_rand_states,
 		},
 	};
 
@@ -279,6 +277,7 @@ CHIZEN_RESULT renderer_render_gltf(const size_t render_width, const size_t rende
 	CU_CHECK("alloc d_exr_passes", cudaMalloc((void**)&d_exr_passes, sizeof(exr_pass) * passes_count), chi_result);
 	CU_CHECK("copy d_exr staging to final", cudaMemcpy((void*)d_exr_passes, d_exr_passes_staging, sizeof(exr_pass) * passes_count, cudaMemcpyHostToDevice), chi_result);
 
+	CU_CHECK("alloc rand states", cudaMalloc((void**)&d_rand_states, render_width * render_height * sizeof(curandState)), chi_result);
 	lp = {
 		.textures = s.d_textures,
 		.materials = s.d_materials,
@@ -288,7 +287,8 @@ CHIZEN_RESULT renderer_render_gltf(const size_t render_width, const size_t rende
 		.lights_count = s.d_lights_count,
 		.render_width = render_width,
 		.render_height = render_height,
-		.max_bounces = 128,
+		.max_bounces = 5,// pipeline_link_options.maxTraceDepth,
+		.states = (void*)d_rand_states,
 		.handle = s.ias_hnd,
 	};
 
