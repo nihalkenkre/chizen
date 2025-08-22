@@ -24,7 +24,7 @@ static void log_cb(unsigned int level, const char* tag, const char* message, voi
 	printf("%d - %s: %s\n", level, tag, message);
 }
 
-CHIZEN_RESULT renderer_render_gltf(const size_t render_width, const size_t render_height, const uint8_t num_samples, const char* gltf_path, exr_pass* passes, const size_t passes_count)
+CHIZEN_RESULT renderer_render_gltf(const size_t render_width, const size_t render_height, const char* gltf_path, exr_pass* passes, const size_t passes_count)
 {
 	CHIZEN_RESULT chi_result = CHIZEN_RESULT_SUCCESS;
 	cudaError_t cuda_error = cudaSuccess;
@@ -181,7 +181,7 @@ CHIZEN_RESULT renderer_render_gltf(const size_t render_width, const size_t rende
 	CHIZEN_RESULT_CHECK("scene create", s.result, chi_result);
 
 	pipeline_link_options = {
-		.maxTraceDepth = 1,
+		.maxTraceDepth = 10,
 	};
 
 	ch_records_size = sizeof(ch_record) * s.ch_infos.count;
@@ -196,7 +196,6 @@ CHIZEN_RESULT renderer_render_gltf(const size_t render_width, const size_t rende
 			.pixel_delta_u = float3(pixel_delta_u[0], pixel_delta_u[1], pixel_delta_u[2]),
 			.pixel_delta_v = float3(pixel_delta_v[0], pixel_delta_v[1], pixel_delta_v[2]),
 			.org = float3(s.camera.pos[0], s.camera.pos[1], s.camera.pos[2]),
-			.num_samples = num_samples,
 		},
 	};
 
@@ -287,7 +286,7 @@ CHIZEN_RESULT renderer_render_gltf(const size_t render_width, const size_t rende
 		.lights_count = s.d_lights_count,
 		.render_width = render_width,
 		.render_height = render_height,
-		.max_bounces = 5,// pipeline_link_options.maxTraceDepth,
+		.max_bounces = pipeline_link_options.maxTraceDepth,
 		.states = (void*)d_rand_states,
 		.handle = s.ias_hnd,
 	};

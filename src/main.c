@@ -16,7 +16,6 @@
 
 const float RENDER_HEIGHT = 720.f;
 const float ASPECT_RATIO = 16.f / 9.f;
-const uint8_t NUM_SAMPLES = 32;
 
 int main(int argc, char** argv)
 {
@@ -54,34 +53,34 @@ int main(int argc, char** argv)
 				.num_channels = 2,
 			},
 		},
-		{
-			.layer = {
-				.type = EXR_LAYER_TYPE_METALNESS,
-				.name = "Metalness",
-				.num_channels = 1,
-			},
-		},
-		{
-			.layer = {
-				.type = EXR_LAYER_TYPE_ROUGHNESS,
-				.name = "Roughness",
-				.num_channels = 1,
-			},
-		},
-		{
-			.layer = {
-				.type = EXR_LAYER_TYPE_ZDEPTH,
-				.name = "ZDepth",
-				.num_channels = 1,
-			},
-		},
-		{
-			.layer = {
-				.type = EXR_LAYER_TYPE_IRRADIANCE,
-				.name = "Irradiance",
-				.num_channels = 1,
-			},
-		},
+		// {
+		// 	.layer = {
+		// 		.type = EXR_LAYER_TYPE_METALNESS,
+		// 		.name = "Metalness",
+		// 		.num_channels = 1,
+		// 	},
+		// },
+		// {
+		// 	.layer = {
+		// 		.type = EXR_LAYER_TYPE_ROUGHNESS,
+		// 		.name = "Roughness",
+		// 		.num_channels = 1,
+		// 	},
+		// },
+		// {
+		// 	.layer = {
+		// 		.type = EXR_LAYER_TYPE_ZDEPTH,
+		// 		.name = "ZDepth",
+		// 		.num_channels = 1,
+		// 	},
+		// },
+		// {
+		// 	.layer = {
+		// 		.type = EXR_LAYER_TYPE_IRRADIANCE,
+		// 		.name = "Irradiance",
+		// 		.num_channels = 1,
+		// 	},
+		// },
 	};
 
 	for (size_t p = 0; p < _countof(passes); ++p)
@@ -115,7 +114,7 @@ int main(int argc, char** argv)
 		goto cpu_error;
 	}
 
-	CHIZEN_RESULT_CHECK("renderer render gltf", renderer_render_gltf((size_t)RENDER_WIDTH, (size_t)RENDER_HEIGHT, NUM_SAMPLES, file_path, passes, _countof(passes)), chi_result);
+	CHIZEN_RESULT_CHECK("renderer render gltf", renderer_render_gltf((size_t)RENDER_WIDTH, (size_t)RENDER_HEIGHT, file_path, passes, _countof(passes)), chi_result);
 
 	char img_path[MAX_PATH];
 	GetModuleFileNameA(GetModuleHandleA(NULL), img_path, MAX_PATH);
