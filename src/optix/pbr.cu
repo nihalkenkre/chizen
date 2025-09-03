@@ -18,12 +18,12 @@
 #include <optix_stack_size.h>
 #include <optix_function_table_definition.h>
 
-#define NUM_SAMPLES 64
+#define NUM_SAMPLES 256
 #define MAX_BOUNCES 1
 
 typedef struct od_payload
 {
-	float4 base_color;
+	float3 base_color;
 	float3 normal;
 	float3 irradiance;
 	float3 world_position;
@@ -36,11 +36,16 @@ typedef struct od_payload
 
 typedef struct ld_payload
 {
-	ray prev_ray;
-	float4 final_color;
+	ray out_ray;
+	float3 final_color;
+	float3 base_color;
+	float3 emission_color;
+	float roughness;
+	float metalness;
 	float3 hit_pos;
 	float3 hit_normal;
 	float curr_attenuation;
+	unsigned int r_idx;
 	bool is_hit;
 } ld_payload;
 
@@ -85,6 +90,191 @@ __device__ static ray ray_create(float3 org, float3 dir)
 	return r;
 }
 
+__device__ static float3 get_base_color(int32_t material_index, float2 uv)
+{
+	if (material_index >= 0)
+	{
+		if (lp.materials[material_index].base_tex_idx >= 0)
+		{
+			float4 color = tex2D<float4>(lp.textures[lp.materials[material_index].base_tex_idx].d_obj, uv.x, uv.y);
+			return float3(color.x, color.y, color.z) * float3(lp.materials[material_index].base_color_factor.x, lp.materials[material_index].base_color_factor.y, lp.materials[material_index].base_color_factor.z);
+		}
+		else
+		{
+			return float3(lp.materials[material_index].base_color_factor.x, lp.materials[material_index].base_color_factor.y, lp.materials[material_index].base_color_factor.z);
+		}
+	}
+	else
+	{
+		return { 0.f, 0.f, 0.f };
+	}
+}
+
+__device__ static float get_metalness(int32_t material_index, float2 uv)
+{
+	if (material_index >= 0)
+	{
+		if (lp.materials[material_index].mr_tex_idx >= 0)
+		{
+			return tex2D<float4>(lp.textures[lp.materials[material_index].mr_tex_idx].d_obj, uv.x, uv.y).z *
+				lp.materials[material_index].metalness_factor;
+		}
+		else
+		{
+			return lp.materials[material_index].metalness_factor;
+		}
+	}
+	else
+	{
+		return 0.f;
+	}
+}
+
+__device__ static float get_roughness(int32_t material_index, float2 uv)
+{
+	if (material_index >= 0)
+	{
+		if (lp.materials[material_index].mr_tex_idx >= 0)
+		{
+			return tex2D<float4>(lp.textures[lp.materials[material_index].mr_tex_idx].d_obj, uv.x, uv.y).y *
+				lp.materials[material_index].roughness_factor;
+		}
+		else
+		{
+			return lp.materials[material_index].roughness_factor;
+		}
+	}
+	else
+	{
+		return 0.f;
+	}
+}
+
+__device__ static float3 get_emission_color(int32_t material_index, float2 uv)
+{
+	if (material_index >= 0)
+	{
+		if (lp.materials[material_index].emissive_tex_idx >= 0)
+		{
+			float4 value = tex2D<float4>(lp.textures[lp.materials[material_index].emissive_tex_idx].d_obj, uv.x, uv.y);
+			return float3(value.x, value.y, value.z) * lp.materials[material_index].emissive_factor * lp.materials[material_index].emissive_strength;
+		}
+		else
+		{
+			return lp.materials[material_index].emissive_factor * lp.materials[material_index].emissive_strength;
+		}
+	}
+	else
+	{
+		return float3(0.f, 0.f, 0.f);
+	}
+}
+
+__device__ static float3 point_on_unit_sphere(float3 center, unsigned int r_idx)
+{
+	float3 point;
+	
+	do {
+		point = float3(
+			curand_uniform(((curandState*)lp.states) + r_idx) * 2.f - 1.f,
+			curand_uniform(((curandState*)lp.states) + r_idx) * 2.f - 1.f,
+			curand_uniform(((curandState*)lp.states) + r_idx) * 2.f - 1.f
+		);
+	} while (length(point) > 1.f);
+
+	return normalize(point) + center;
+}
+
+__device__ static float dist_d_ggx(float3 n, float3 h, float a2)
+{
+	float n_dot_h = dot(n, h);
+	float n_dot_h_2 = n_dot_h * n_dot_h;
+
+	float num = a2;
+	float denom = (n_dot_h_2 * (a2 - 1.f) + 1.f);
+
+	return (num / (M_PIf * denom * denom));
+}
+
+__device__ static float dist_g_cook_torrance(float3 n, float3 v, float3 h, float3 l)
+{
+	float n_dot_h = dot(n, h);
+	float v_dot_h = dot(v, h);
+	float n_dot_v = dot(n, v);
+	float n_dot_l = dot(n, l);
+
+	float ggx_1 = (2 * n_dot_h * n_dot_v) / v_dot_h;
+	float ggx_2 = (2 * n_dot_h * n_dot_l) / v_dot_h;
+
+	return min(1.f, min(ggx_1, ggx_2));
+}
+
+__device__ static float dist_g_shlickk_ggx(float dot, float roughness)
+{
+	float r = roughness + 1;
+	float k = (r * r) / 8.f;
+
+	float num = dot;
+	float denom = dot * (1.f - k) + k;
+
+	return num / denom;
+}
+
+__device__ static float dist_g_smith(float3 n, float3 v, float3 h, float3 l, float roughness)
+{
+	float n_dot_v = max(dot(n, v), 0.f);
+	float n_dot_l = max(dot(n, l), 0.f);
+
+	float ggx1 = dist_g_shlickk_ggx(n_dot_v, roughness);
+	float ggx2 = dist_g_shlickk_ggx(n_dot_l, roughness);
+
+	return ggx1 * ggx2;
+}
+
+__device__ static float3 dist_f_schlick(float3 h, float3 v, float3 f0)
+{
+	return f0 + (1.f - f0) * powf(1.f - max(dot(v, h), 0.f), 5.f);
+}
+
+__device__ static float3 cook_torrance_brdf(float3 base_color, float3 emission_color, float roughness, float metalness, float3 v, float3 n, float3 hit_pos)
+{
+	float3 ret_val = { 0, 0, 0 };
+
+	for (size_t lt = 0; lt < lp.lights_count; ++lt)
+	{
+		float a2 = roughness * roughness;
+
+		float3 l_hp = lp.lights[lt].position - hit_pos;
+		float3 l = normalize(l_hp);
+		float3 h = normalize(v + l);
+
+		float d = dist_d_ggx(n, h, a2);
+		float g = dist_g_smith(n, v, h, l, roughness);
+		float3 f = dist_f_schlick(h, v, lerp(float3{ 0.04f, 0.04f, 0.04f }, float3{ base_color.x, base_color.y, base_color.z }, metalness));
+
+		float3 num = d * g * f;
+		float denom = (4.f * max(dot(n, v), 0.f) * max(dot(n, l), 0.f)) + 0.0001f;
+
+		float3 specular = num / denom;
+		float3 radiance = (lp.lights[lt].color * lp.lights[lt].intensity) / (length(l_hp) * length(l_hp));
+
+		float3 ks = f;
+		float3 kd = 1 - ks;
+		kd *= (1 - metalness);
+		float3 diffuse = kd * (base_color / M_PIf);
+
+		ret_val += (((diffuse + specular) * max(dot(n, l), 0.f)) * radiance);
+
+		// ret_val += make_float4(dist_g_smith(n, v, h, l, roughness));
+		// ret_val += make_float4(f, 1.f);
+		// ret_val += make_float4(dist_g_cook_torrance(n, v, h, l));
+	}
+
+	ret_val += emission_color;
+
+	return ret_val;
+}
+
 __device__ static ray generate_primary_ray(float2 offset, const size_t x, const size_t y, float3 pixel_00_loc, float3 pixel_delta_u, float3 pixel_delta_v, float3 org)
 {
 	float3 pixel_delta_u_x = pixel_delta_u * (float)x;
@@ -103,7 +293,7 @@ __device__ static ray generate_primary_ray(float2 offset, const size_t x, const 
 	return ray_create(org, dir);
 }
 
-__device__ static void write_od_pixels(const od_payload& pl)//, const size_t num_samples)
+__device__ static void write_od_pixels(const od_payload& pl)
 {
 	uint3 launch_index = optixGetLaunchIndex();
 	for (size_t p = 0; p < lp.passes_count; ++p)
@@ -112,11 +302,11 @@ __device__ static void write_od_pixels(const od_payload& pl)//, const size_t num
 
 		if (lp.passes[p].layer.type == EXR_LAYER_TYPE_BASECOLOR)
 		{
-			float4 base_color = pl.base_color / NUM_SAMPLES;
+			float3 base_color = pl.base_color / NUM_SAMPLES;
 			lp.passes[p].d_pixels[pixel_idx] = base_color.x;
 			lp.passes[p].d_pixels[pixel_idx + 1] = base_color.y;
 			lp.passes[p].d_pixels[pixel_idx + 2] = base_color.z;
-			lp.passes[p].d_pixels[pixel_idx + 3] = base_color.w;
+			lp.passes[p].d_pixels[pixel_idx + 3] = 1;
 		}
 		else if (lp.passes[p].layer.type == EXR_LAYER_TYPE_UV)
 		{
@@ -151,22 +341,35 @@ __device__ static void write_od_pixels(const od_payload& pl)//, const size_t num
 	}
 }
 
-__device__ static void write_ld_pixels(const ld_payload& pl)//, const size_t num_samples)
+__device__ static void write_ld_pixels(const ld_payload& pl, uint3 launch_index)
 {
-	uint3 launch_index = optixGetLaunchIndex();
 	for (size_t p = 0; p < lp.passes_count; ++p)
 	{
 		size_t pixel_idx = (launch_index.y * lp.render_width * lp.passes[p].layer.num_channels) + (launch_index.x * lp.passes[p].layer.num_channels);
 
 		if (lp.passes[p].layer.type == EXR_LAYER_TYPE_FINALCOLOR)
 		{
-			float4 final_color = pl.final_color / NUM_SAMPLES;
-			lp.passes[p].d_pixels[pixel_idx] = final_color.x;
-			lp.passes[p].d_pixels[pixel_idx + 1] = final_color.y;
-			lp.passes[p].d_pixels[pixel_idx + 2] = final_color.z;
-			lp.passes[p].d_pixels[pixel_idx + 3] = final_color.w;
+			lp.passes[p].d_pixels[pixel_idx] += pl.final_color.x;
+			lp.passes[p].d_pixels[pixel_idx + 1] += pl.final_color.y;
+			lp.passes[p].d_pixels[pixel_idx + 2] += pl.final_color.z;
+			lp.passes[p].d_pixels[pixel_idx + 3] += 1;
 		}
 	}
+}
+
+__device__ static void avg_ld_pixels(uint3 launch_index)
+{
+	for (size_t p = 0; p < lp.passes_count; ++p)
+	{
+		size_t pixel_idx = (launch_index.y * lp.render_width * lp.passes[p].layer.num_channels) + (launch_index.x * lp.passes[p].layer.num_channels);
+
+		if (lp.passes[p].layer.type == EXR_LAYER_TYPE_FINALCOLOR)
+		{
+			lp.passes[p].d_pixels[pixel_idx] /= NUM_SAMPLES;
+			lp.passes[p].d_pixels[pixel_idx + 1] /= NUM_SAMPLES;
+			lp.passes[p].d_pixels[pixel_idx + 2] /= NUM_SAMPLES;
+			lp.passes[p].d_pixels[pixel_idx + 3] /= NUM_SAMPLES;
+		}}
 }
 
 extern "C" __global__ void __raygen__rg()
@@ -175,51 +378,56 @@ extern "C" __global__ void __raygen__rg()
 
 	unsigned int r_idx = (blockDim.x * blockDim.y * threadIdx.z) + (blockDim.x * threadIdx.y) + threadIdx.x;
 
-	curand_init(r_idx, 0, 0, ((curandState*)lp.states) + r_idx);
+	curand_init(r_idx + lp.current_time, 0, 0, ((curandState*)lp.states) + r_idx);
 
 	od_payload odpl = {};
-	ld_payload ldpl = {
-		.curr_attenuation = 1.f,
-	};
-	ld_payload ldpls[NUM_SAMPLES] = {};
-
-	for (size_t s = 0; s < NUM_SAMPLES; ++s)
-	{
-		ldpls[s].curr_attenuation = ldpl.curr_attenuation;
-	}
-
+		
 	ray_gen_record_data* rg_data = (ray_gen_record_data*)optixGetSbtDataPointer();
 	for (int16_t s = 0; s < NUM_SAMPLES; ++s)
 	{
 		uint2 p_odpl = split_pointer(&odpl);
-		float2 offset = { curand_uniform(((curandState*)lp.states) + r_idx) * 2.f - 1.f, curand_uniform(((curandState*)lp.states) + r_idx) * 2.f - 1.f };
-		ray ray = generate_primary_ray(offset, launch_index.x, launch_index.y,
-			rg_data->pixel_00_loc, rg_data->pixel_delta_u, rg_data->pixel_delta_v, rg_data->org);
+		float2 offset = {
+			curand_uniform(((curandState*)lp.states) + r_idx) * 2.f - 1.f, 
+			curand_uniform(((curandState*)lp.states) + r_idx) * 2.f - 1.f
+		};
 
-		optixTrace(lp.handle, ray.org, ray.dir, 0.1f, 1000.f, 0.f, 0xFF, 0,
-			RAY_TYPE_PRIMARY, RAY_TYPE_MAX, RAY_TYPE_PRIMARY, p_odpl.x, p_odpl.y);
-
-		uint2 p_ldpls = split_pointer(&ldpls[s]);
-		optixTrace(lp.handle, ray.org, ray.dir, 0.1f, 1000.f, 0.f, 0xFF, 0,
-			RAY_TYPE_BOUNCE, RAY_TYPE_MAX, RAY_TYPE_BOUNCE, p_ldpls.x, p_ldpls.y);
-
-		for (int16_t b = 0; b < MAX_BOUNCES; ++b)
+		ray ray = generate_primary_ray(
+			offset, launch_index.x, launch_index.y,
+			rg_data->pixel_00_loc, 
+			rg_data->pixel_delta_u, rg_data->pixel_delta_v, 
+			rg_data->org
+		);
+			
+		optixTrace(lp.handle, ray.org, ray.dir, 0.01f, 1000.f, 0.f, 0xFF, 0,
+			RAY_TYPE_OBJECT_DATA, RAY_TYPE_MAX, RAY_TYPE_OBJECT_DATA, p_odpl.x, p_odpl.y);
+				
+		ld_payload ldpl = 
 		{
-			if (ldpls[s].is_hit)
+			.final_color = float3(0.f, 0.f, 0.f),
+			.curr_attenuation = 1.f,
+			.r_idx = r_idx,
+		};
+ 		
+		uint2 p_ldpl = split_pointer(&ldpl);
+		optixTrace(lp.handle, ray.org, ray.dir, 0.001f, 1000.f, 0.f, 0xFF, 0,
+			RAY_TYPE_LIGHTING_DATA, RAY_TYPE_MAX, RAY_TYPE_LIGHTING_DATA, p_ldpl.x, p_ldpl.y);
+
+		for (uint16_t b = 0; b < MAX_BOUNCES; ++b)
+		{
+			if (ldpl.is_hit)
 			{
-				float3 rand_dir = { curand_uniform(((curandState*)lp.states) + r_idx) * 2.f - 1.f,
-					curand_uniform(((curandState*)lp.states) + r_idx) * 2.f - 1.f, curand_uniform(((curandState*)lp.states) + r_idx) * 2.f - 1.f };
-				rand_dir += ldpls[s].hit_normal;
-				optixTrace(lp.handle, ldpls[s].hit_pos, rand_dir, 0.001f, 1.f, 0.f, 0xFF, 0,
-					RAY_TYPE_BOUNCE, RAY_TYPE_MAX, RAY_TYPE_BOUNCE, p_ldpls.x, p_ldpls.y);
+				optixTrace(lp.handle, ldpl.out_ray.org, ldpl.out_ray.dir, 0.001f, 1000.f, 0.f, 0xFF, 0,
+					RAY_TYPE_LIGHTING_DATA, RAY_TYPE_MAX, RAY_TYPE_LIGHTING_DATA, p_ldpl.x, p_ldpl.y);
 			}
+
+			ldpl.curr_attenuation *= 0.5f;
 		}
 
-		ldpl.final_color += ldpls[s].final_color;
+		write_ld_pixels(ldpl, launch_index);
 	}
 
 	write_od_pixels(odpl);
-	write_ld_pixels(ldpl);
+	avg_ld_pixels(launch_index);
 }
 
 extern "C" __global__ void __closesthit__rg()
@@ -279,22 +487,17 @@ extern "C" __global__ void __closesthit__rg()
 	{
 		if (lp.materials[ch_data->material_index].base_tex_idx >= 0)
 		{
-			float4 color = tex2D<float4>(lp.textures[lp.materials[ch_data->material_index].base_tex_idx].d_obj, uv.x, uv.y) *
-				lp.materials[ch_data->material_index].base_color_factor;
-
-			pl->base_color += color;
+			float4 color = tex2D<float4>(lp.textures[lp.materials[ch_data->material_index].base_tex_idx].d_obj, uv.x, uv.y);
+			pl->base_color += float3(color.x, color.y, color.z) *	float3(lp.materials[ch_data->material_index].base_color_factor.x, lp.materials[ch_data->material_index].base_color_factor.y, lp.materials[ch_data->material_index].base_color_factor.z);
 		}
 		else
 		{
-			pl->base_color += lp.materials[ch_data->material_index].base_color_factor;
+			pl->base_color += float3(lp.materials[ch_data->material_index].base_color_factor.x, lp.materials[ch_data->material_index].base_color_factor.y, lp.materials[ch_data->material_index].base_color_factor.z);
 		}
 
 		if (lp.materials[ch_data->material_index].mr_tex_idx >= 0)
 		{
-			float4 color = tex2D<float4>(lp.textures[lp.materials[ch_data->material_index].mr_tex_idx].d_obj, uv.x, uv.y) *
-				lp.materials[ch_data->material_index].metalness_factor;
-
-			pl->metalness += color.z;
+			pl->metalness += tex2D<float4>(lp.textures[lp.materials[ch_data->material_index].mr_tex_idx].d_obj, uv.x, uv.y).z *lp.materials[ch_data->material_index].metalness_factor;
 		}
 		else
 		{
@@ -303,10 +506,7 @@ extern "C" __global__ void __closesthit__rg()
 
 		if (lp.materials[ch_data->material_index].mr_tex_idx >= 0)
 		{
-			float4 color = tex2D<float4>(lp.textures[lp.materials[ch_data->material_index].mr_tex_idx].d_obj, uv.x, uv.y) *
-				lp.materials[ch_data->material_index].roughness_factor;
-
-			pl->roughness += color.y;
+			pl->roughness += tex2D<float4>(lp.textures[lp.materials[ch_data->material_index].mr_tex_idx].d_obj, uv.x, uv.y).y * lp.materials[ch_data->material_index].roughness_factor;
 		}
 		else
 		{
@@ -348,7 +548,7 @@ extern "C" __global__ void __closesthit__b()
 		index_triplet = *((uint3*)ch_data->indices + primitive_idx);
 	}
 
-	float3 normal =
+	float3 hit_nrm =
 		normalize(optixTransformNormalFromObjectToWorldSpace(
 			ch_data->normals[index_triplet.x] * bary_coords.z +
 			ch_data->normals[index_triplet.y] * bary_coords.x +
@@ -362,27 +562,30 @@ extern "C" __global__ void __closesthit__b()
 	}
 
 	ld_payload* pl = (ld_payload*)merge_pointer(optixGetPayload_0(), optixGetPayload_1());
-	float3 world_pos = (optixGetWorldRayOrigin() + optixGetWorldRayDirection() * optixGetRayTmax());
+	float3 hit_pos = (optixGetWorldRayOrigin() + optixGetWorldRayDirection() * optixGetRayTmax());
 
-	if (ch_data->material_index >= 0)
-	{
-		if (lp.materials[ch_data->material_index].base_tex_idx >= 0)
-		{
-			// pl->final_color += tex2D<float4>(lp.textures[lp.materials[ch_data->material_index].base_tex_idx].d_obj, uv.x, uv.y) *
-				// lp.materials[ch_data->material_index].base_color_factor * pl->curr_attenuation;
-		}
-		else
-		{
-			// pl->final_color += lp.materials[ch_data->material_index].base_color_factor * pl->curr_attenuation;
-		}
-	}
+	float3 base_color = get_base_color(ch_data->material_index, uv);
+	float3 emission_color = get_emission_color(ch_data->material_index, uv);
+	float roughness = get_roughness(ch_data->material_index, uv);
+	float3 i = optixGetWorldRayDirection();
 
-	pl->final_color += float4(0.f,0.f,0.f,1.f) * pl->curr_attenuation;
+	float ray_dist = optixGetRayTmax() + 1.f;
+	pl->final_color += ((pl->base_color + pl->emission_color) * (emission_color)) * max(dot(pl->hit_normal, i), 0.f) * (1.f / (ray_dist * ray_dist));
 
-	pl->curr_attenuation *= 0.5f;
-	pl->hit_pos = world_pos;
-	pl->hit_normal = normal;
-	pl->prev_ray = ray_create(optixGetWorldRayOrigin(), optixGetWorldRayDirection());
+	float3 out_dir = point_on_unit_sphere(make_float3(0), pl->r_idx);
+	out_dir += hit_nrm;
+	// if (dot(out_dir, hit_nrm) < 0.f)
+	// {
+		// out_dir = -out_dir;
+	// }
+	// out_dir = reflect(optixGetWorldRayDirection(), hit_nrm) + (out_dir * roughness);
+
+	pl->base_color = base_color;
+	pl->emission_color = emission_color;
+	pl->roughness = roughness;
+	pl->hit_pos = hit_pos;
+	pl->hit_normal = hit_nrm;
+	pl->out_ray = ray_create(hit_pos, out_dir);
 	pl->is_hit = true;
 }
 
@@ -399,7 +602,6 @@ extern "C" __global__ void __miss__rg()
 extern "C" __global__ void __miss__b()
 {
 	ld_payload* pl = (ld_payload*)merge_pointer(optixGetPayload_0(), optixGetPayload_1());
-	pl->final_color += (pl->curr_attenuation * float4(1.f, 1.f, 1.f, 1.f));
 	pl->is_hit = false;
 }
 

@@ -1,0 +1,7 @@
+{
+   "files.associations": {
+      "material.h": "c",
+      "vec_math.h": "c",
+      "random": "c"
+   }
+}

@@ -2,6 +2,7 @@
 
 #include <cgltf/cgltf.h>
 #include "error.h"
+#include <vector_types.h>
 
 typedef enum LIGHT_TYPE
 {
@@ -12,9 +13,9 @@ typedef enum LIGHT_TYPE
 
 typedef struct light
 {
-	float position[3];
-	float rotation[4];
-	float color[3];
+	float3 position;
+	float4 rotation;
+	float3 color;
 	float intensity;
 	float range;
 	float spot_inner_cone_angle;

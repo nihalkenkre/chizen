@@ -2,17 +2,17 @@
 
 #include "texture.h"
 #include <cgltf/cgltf.h>
-#include <optix.h>
-#include <cuda_runtime.h>
-#include "error.h"
 
 typedef struct material
 {
 	float4 base_color_factor;
+	float3 emissive_factor;
 	float metalness_factor;
 	float roughness_factor;
-	int32_t base_tex_idx;
-	int32_t mr_tex_idx;
+	float emissive_strength;
+	int16_t emissive_tex_idx;
+	int16_t base_tex_idx;
+	int16_t mr_tex_idx;
 	CHIZEN_RESULT result;
 } material;
 

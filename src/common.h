@@ -7,8 +7,8 @@
 
 typedef enum RAY_TYPE
 {
-	RAY_TYPE_PRIMARY,
-	RAY_TYPE_BOUNCE,
+	RAY_TYPE_OBJECT_DATA,
+	RAY_TYPE_LIGHTING_DATA,
 	RAY_TYPE_SHADOW,
 	RAY_TYPE_MAX,
 } RAY_TYPE;
@@ -24,6 +24,7 @@ typedef struct launch_params
 	size_t render_width;
 	size_t render_height;
 	size_t max_bounces;
+	size_t current_time;
 	void* states; // curandState*
 	OptixTraversableHandle handle;
 } launch_params;

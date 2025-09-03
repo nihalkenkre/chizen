@@ -18,6 +18,7 @@
 #include <optix_function_table_definition.h>
 
 #include <Shlwapi.h>
+#include <ctime>
 
 static void log_cb(unsigned int level, const char* tag, const char* message, void* cbdata)
 {
@@ -287,6 +288,7 @@ CHIZEN_RESULT renderer_render_gltf(const size_t render_width, const size_t rende
 		.render_width = render_width,
 		.render_height = render_height,
 		.max_bounces = pipeline_link_options.maxTraceDepth,
+		.current_time = (size_t)time(NULL),
 		.states = (void*)d_rand_states,
 		.handle = s.ias_hnd,
 	};

@@ -2,6 +2,7 @@
 #include <string.h>
 #include <cglm/include/cglm/cglm.h>
 #include "utils.h"
+// #include <sutil/vec_math.h>
 
 light light_create(cgltf_node* curr_node)
 {
@@ -22,9 +23,18 @@ light light_create(cgltf_node* curr_node)
 		.spot_outer_cone_angle = curr_light->spot_outer_cone_angle,
 	};
 
-	memcpy(l.position, t, sizeof(vec3));
-	memcpy(l.rotation, r, sizeof(versor));
-	memcpy(l.color, curr_light->color, sizeof(vec3));
+	l.position.x = t[0];
+	l.position.y = t[1];
+	l.position.z = t[2];
+
+	l.rotation.x = r_quat[0];
+	l.rotation.y = r_quat[1];
+	l.rotation.z = r_quat[2];
+	l.rotation.w = r_quat[3];
+
+	l.color.x = curr_light->color[0];
+	l.color.y = curr_light->color[1];
+	l.color.z = curr_light->color[2];
 
 	switch (curr_light->type)
 	{
