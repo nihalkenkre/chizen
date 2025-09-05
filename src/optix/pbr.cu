@@ -18,8 +18,9 @@
 #include <optix_stack_size.h>
 #include <optix_function_table_definition.h>
 
-#define NUM_SAMPLES 256
-#define MAX_BOUNCES 1
+#define NUM_SAMPLES 1024
+// #define NUM_DIFF_BOUNCES 4
+// #define MAX_BOUNCES 4
 
 typedef struct od_payload
 {
@@ -36,17 +37,21 @@ typedef struct od_payload
 
 typedef struct ld_payload
 {
-	ray out_ray;
+	ray out_diff_ray;
 	float3 final_color;
+	float3 diffuse;
+	float3 specular;
 	float3 base_color;
 	float3 emission_color;
-	float roughness;
-	float metalness;
 	float3 hit_pos;
-	float3 hit_normal;
-	float curr_attenuation;
+	float3 hit_nrm;
+	float3 curr_attenuation;
+	float metalness;
+	float roughness;
 	unsigned int r_idx;
 	bool is_hit;
+	bool is_camera_ray;
+	uint8_t bounces_left;
 } ld_payload;
 
 typedef union payload_convert
@@ -56,6 +61,15 @@ typedef union payload_convert
 } payload_convert;
 
 extern "C" __constant__ launch_params lp;
+
+__device__ static float3 slerp(float3 a, float3 b, float t)
+{
+	float angle = acosf(dot(a, b));
+	float slerp_a = sin((1 - t) * angle) / sin(angle);
+	float slerp_b = sin(t * angle) / sin(angle);
+
+	return a * slerp_a + b * slerp_b;
+}
 
 __device__ static uint2 split_pointer(void* p)
 {
@@ -170,7 +184,7 @@ __device__ static float3 get_emission_color(int32_t material_index, float2 uv)
 	}
 }
 
-__device__ static float3 point_on_unit_sphere(float3 center, unsigned int r_idx)
+__device__ static float3 point_on_unit_sphere(unsigned int r_idx)
 {
 	float3 point;
 	
@@ -182,7 +196,7 @@ __device__ static float3 point_on_unit_sphere(float3 center, unsigned int r_idx)
 		);
 	} while (length(point) > 1.f);
 
-	return normalize(point) + center;
+	return normalize(point);
 }
 
 __device__ static float dist_d_ggx(float3 n, float3 h, float a2)
@@ -354,6 +368,20 @@ __device__ static void write_ld_pixels(const ld_payload& pl, uint3 launch_index)
 			lp.passes[p].d_pixels[pixel_idx + 2] += pl.final_color.z;
 			lp.passes[p].d_pixels[pixel_idx + 3] += 1;
 		}
+		else if (lp.passes[p].layer.type == EXR_LAYER_TYPE_DIFFUSE)
+		{
+			lp.passes[p].d_pixels[pixel_idx] += pl.diffuse.x;
+			lp.passes[p].d_pixels[pixel_idx + 1] += pl.diffuse.y;
+			lp.passes[p].d_pixels[pixel_idx + 2] += pl.diffuse.z;
+			lp.passes[p].d_pixels[pixel_idx + 3] += 1;
+		}
+		else if (lp.passes[p].layer.type == EXR_LAYER_TYPE_SPECULAR)
+		{
+			lp.passes[p].d_pixels[pixel_idx] += pl.specular.x;
+			lp.passes[p].d_pixels[pixel_idx + 1] += pl.specular.y;
+			lp.passes[p].d_pixels[pixel_idx + 2] += pl.specular.z;
+			lp.passes[p].d_pixels[pixel_idx + 3] += 1;
+		}
 	}
 }
 
@@ -363,13 +391,17 @@ __device__ static void avg_ld_pixels(uint3 launch_index)
 	{
 		size_t pixel_idx = (launch_index.y * lp.render_width * lp.passes[p].layer.num_channels) + (launch_index.x * lp.passes[p].layer.num_channels);
 
-		if (lp.passes[p].layer.type == EXR_LAYER_TYPE_FINALCOLOR)
+		if (lp.passes[p].layer.type == EXR_LAYER_TYPE_FINALCOLOR || 
+			lp.passes[p].layer.type == EXR_LAYER_TYPE_DIFFUSE ||
+			lp.passes[p].layer.type == EXR_LAYER_TYPE_SPECULAR)
 		{
 			lp.passes[p].d_pixels[pixel_idx] /= NUM_SAMPLES;
 			lp.passes[p].d_pixels[pixel_idx + 1] /= NUM_SAMPLES;
 			lp.passes[p].d_pixels[pixel_idx + 2] /= NUM_SAMPLES;
 			lp.passes[p].d_pixels[pixel_idx + 3] /= NUM_SAMPLES;
-		}}
+		}
+	
+	}
 }
 
 extern "C" __global__ void __raygen__rg()
@@ -403,25 +435,27 @@ extern "C" __global__ void __raygen__rg()
 				
 		ld_payload ldpl = 
 		{
-			.final_color = float3(0.f, 0.f, 0.f),
-			.curr_attenuation = 1.f,
+			.final_color = float3(0.f),
+			.curr_attenuation = make_float3(1.f),
 			.r_idx = r_idx,
+			.is_camera_ray = true,
+			.bounces_left = lp.max_bounces,
 		};
  		
 		uint2 p_ldpl = split_pointer(&ldpl);
 		optixTrace(lp.handle, ray.org, ray.dir, 0.001f, 1000.f, 0.f, 0xFF, 0,
 			RAY_TYPE_LIGHTING_DATA, RAY_TYPE_MAX, RAY_TYPE_LIGHTING_DATA, p_ldpl.x, p_ldpl.y);
 
-		for (uint16_t b = 0; b < MAX_BOUNCES; ++b)
-		{
-			if (ldpl.is_hit)
-			{
-				optixTrace(lp.handle, ldpl.out_ray.org, ldpl.out_ray.dir, 0.001f, 1000.f, 0.f, 0xFF, 0,
-					RAY_TYPE_LIGHTING_DATA, RAY_TYPE_MAX, RAY_TYPE_LIGHTING_DATA, p_ldpl.x, p_ldpl.y);
-			}
+		// for (uint16_t b = 0; b < MAX_BOUNCES; ++b)
+		// {
+		// 	if (ldpl.is_hit)
+		// 	{
+		// 		optixTrace(lp.handle, ldpl.out_diff_ray.org, ldpl.out_diff_ray.dir, 0.001f, 1000.f, 0.f, 0xFF, 0,
+		// 			RAY_TYPE_LIGHTING_DATA, RAY_TYPE_MAX, RAY_TYPE_LIGHTING_DATA, p_ldpl.x, p_ldpl.y);
+		// 	}
 
-			ldpl.curr_attenuation *= 0.5f;
-		}
+		// 	ldpl.curr_attenuation *= 0.5f;
+		// }
 
 		write_ld_pixels(ldpl, launch_index);
 	}
@@ -566,27 +600,33 @@ extern "C" __global__ void __closesthit__b()
 
 	float3 base_color = get_base_color(ch_data->material_index, uv);
 	float3 emission_color = get_emission_color(ch_data->material_index, uv);
-	float roughness = get_roughness(ch_data->material_index, uv);
-	float3 i = optixGetWorldRayDirection();
 
-	float ray_dist = optixGetRayTmax() + 1.f;
-	pl->final_color += ((pl->base_color + pl->emission_color) * (emission_color)) * max(dot(pl->hit_normal, i), 0.f) * (1.f / (ray_dist * ray_dist));
+	if (--pl->bounces_left > 0)
+	{
+		if (pl->is_camera_ray)
+		{
+			pl->is_camera_ray = false;
+		}
+		else
+		{
+			pl->curr_attenuation = base_color;
+		}
 
-	float3 out_dir = point_on_unit_sphere(make_float3(0), pl->r_idx);
-	out_dir += hit_nrm;
-	// if (dot(out_dir, hit_nrm) < 0.f)
-	// {
-		// out_dir = -out_dir;
-	// }
-	// out_dir = reflect(optixGetWorldRayDirection(), hit_nrm) + (out_dir * roughness);
+		if (emission_color.x > 0 || emission_color.y > 0 || emission_color.z > 0)
+		{
+			pl->diffuse += emission_color;
+		}
+		else
+		{
+			uint2 p = split_pointer(pl);
+			float3 diff_dir = point_on_unit_sphere(pl->r_idx) + hit_nrm;
+			float3 spec_dir = reflect(optixGetWorldRayDirection(), hit_nrm) + (point_on_unit_sphere(pl->r_idx) * 0.05f);
+			float3 ray_dir = diff_dir;//slerp(spec_dir, diff_dir, get_roughness(ch_data->material_index, uv));
 
-	pl->base_color = base_color;
-	pl->emission_color = emission_color;
-	pl->roughness = roughness;
-	pl->hit_pos = hit_pos;
-	pl->hit_normal = hit_nrm;
-	pl->out_ray = ray_create(hit_pos, out_dir);
-	pl->is_hit = true;
+			optixTrace(lp.handle, hit_pos, ray_dir, 0.001f, 1000.f, 0.f, 0xFF, 0, RAY_TYPE_LIGHTING_DATA, RAY_TYPE_MAX, RAY_TYPE_LIGHTING_DATA, p.x, p.y);
+			pl->diffuse *= base_color;
+		}
+	}
 }
 
 extern "C" __global__ void __closesthit__sr()
@@ -602,6 +642,8 @@ extern "C" __global__ void __miss__rg()
 extern "C" __global__ void __miss__b()
 {
 	ld_payload* pl = (ld_payload*)merge_pointer(optixGetPayload_0(), optixGetPayload_1());
+
+	// pl->diffuse += make_float3(0.25f);
 	pl->is_hit = false;
 }
 
