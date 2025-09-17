@@ -51,7 +51,7 @@ mesh mesh_create(const cgltf_data* data, cgltf_mesh* curr_mesh, const OptixProgr
 	OPTIX_CHECK("compute prim memory usage", optixAccelComputeMemoryUsage(ctx, &accel_options, build_inputs, (unsigned int)m.prims_count, &buffer_sizes), m.result);
 
 	CU_CHECK("alloc prim tmp buffer", cudaMalloc((void**)&tmp_buffer, buffer_sizes.tempSizeInBytes), m.result);
-	CU_CHECK("alloc prim op buffer", cudaMalloc((void**)&m.d_op_gas_buffer, buffer_sizes.outputSizeInBytes + sizeof(custom_gas_data)), m.result);
+	CU_CHECK("alloc prim op buffer", cudaMalloc((void**)&m.d_op_gas_buffer, buffer_sizes.outputSizeInBytes), m.result);
 
 	OPTIX_CHECK("prim accel build", optixAccelBuild(ctx, stream, &accel_options, build_inputs, (unsigned int)m.prims_count, tmp_buffer, buffer_sizes.tempSizeInBytes, m.d_op_gas_buffer, buffer_sizes.outputSizeInBytes, &m.gas_hnd, NULL, 0), m.result);
 	CU_CHECK("prim stream sync", cudaStreamSynchronize(stream), m.result);

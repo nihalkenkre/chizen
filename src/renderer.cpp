@@ -48,25 +48,25 @@ CHIZEN_RESULT renderer_render_gltf(const size_t render_width, const size_t rende
 	OptixPipelineLinkOptions pipeline_link_options = {};
 	OptixProgramGroupDesc rg_pg_desc = {};
 	OptixProgramGroupDesc ms_rg_pg_desc = {};
-	OptixProgramGroupDesc ms_b_pg_desc = {};
-	OptixProgramGroupDesc ms_sr_pg_desc = {};
+	OptixProgramGroupDesc ms_diff_pg_desc = {};
+	OptixProgramGroupDesc ms_spec_pg_desc = {};
 	OptixProgramGroupDesc ch_rg_pg_desc = {};
-	OptixProgramGroupDesc ch_b_pg_desc = {};
-	OptixProgramGroupDesc ch_sr_pg_desc = {};
+	OptixProgramGroupDesc ch_diff_pg_desc = {};
+	OptixProgramGroupDesc ch_spec_pg_desc = {};
 	OptixProgramGroupOptions pg_options = { 0 };
 	OptixProgramGroup rg_pg = nullptr;
 	OptixProgramGroup ch_rg_pg = nullptr;
-	OptixProgramGroup ch_b_pg = nullptr;
-	OptixProgramGroup ch_sr_pg = nullptr;
+	OptixProgramGroup ch_diff_pg = nullptr;
+	OptixProgramGroup ch_spec_pg = nullptr;
 	OptixProgramGroup ms_rg_pg = nullptr;
-	OptixProgramGroup ms_b_pg = nullptr;
-	OptixProgramGroup ms_sr_pg = nullptr;
+	OptixProgramGroup ms_diff_pg = nullptr;
+	OptixProgramGroup ms_spec_pg = nullptr;
 	vec3 pixel_00_loc = { 0 }, pixel_delta_u = { 0 }, pixel_delta_v = { 0 };
 	ray_gen_record rg_record = {};
 	ch_record* ch_records = nullptr;
 	ms_record ms_rg_record = {};
-	ms_record ms_b_record = {};
-	ms_record ms_sr_record = {};
+	ms_record ms_diff_record = {};
+	ms_record ms_spec_record = {};
 	CUdeviceptr d_rand_states = 0;
 	CUdeviceptr d_rg_record_base = 0;
 	CUdeviceptr d_ch_record_base = 0;
@@ -159,26 +159,26 @@ CHIZEN_RESULT renderer_render_gltf(const size_t render_width, const size_t rende
 		},
 	};
 
-	ch_b_pg_desc = {
+	ch_diff_pg_desc = {
 		.kind = OPTIX_PROGRAM_GROUP_KIND_HITGROUP,
 		.hitgroup = {
 			.moduleCH = module,
-			.entryFunctionNameCH = "__closesthit__b",
+			.entryFunctionNameCH = "__closesthit__diff",
 		},
 	};
 
-	ch_sr_pg_desc = {
+	ch_spec_pg_desc = {
 		.kind = OPTIX_PROGRAM_GROUP_KIND_HITGROUP,
 		.hitgroup = {
 			.moduleCH = module,
-			.entryFunctionNameCH = "__closesthit__sr",
+			.entryFunctionNameCH = "__closesthit__spec",
 		},
 	};
 
 	OPTIX_CHECK("ch program group create", optixProgramGroupCreate(ctx, &ch_rg_pg_desc, 1, &pg_options, nullptr, nullptr, &ch_rg_pg), chi_result);
-	OPTIX_CHECK("ch program group create", optixProgramGroupCreate(ctx, &ch_b_pg_desc, 1, &pg_options, nullptr, nullptr, &ch_b_pg), chi_result);
-	OPTIX_CHECK("ch program group create", optixProgramGroupCreate(ctx, &ch_sr_pg_desc, 1, &pg_options, nullptr, nullptr, &ch_sr_pg), chi_result);
-	s = scene_create_from_gltf(gltf_data, ch_rg_pg, ch_b_pg, ch_sr_pg, ctx, stream);
+	OPTIX_CHECK("ch program group create", optixProgramGroupCreate(ctx, &ch_diff_pg_desc, 1, &pg_options, nullptr, nullptr, &ch_diff_pg), chi_result);
+	OPTIX_CHECK("ch program group create", optixProgramGroupCreate(ctx, &ch_spec_pg_desc, 1, &pg_options, nullptr, nullptr, &ch_spec_pg), chi_result);
+	s = scene_create_from_gltf(gltf_data, ch_rg_pg, ch_diff_pg, ch_spec_pg, ctx, stream);
 	CHIZEN_RESULT_CHECK("scene create", s.result, chi_result);
 
 	pipeline_link_options = {
@@ -216,39 +216,39 @@ CHIZEN_RESULT renderer_render_gltf(const size_t render_width, const size_t rende
 	  },
 	};
 
-	ms_b_pg_desc = {
+	ms_diff_pg_desc = {
 	  .kind = OPTIX_PROGRAM_GROUP_KIND_MISS,
 	  .miss = {
 		  .module = module,
-		  .entryFunctionName = "__miss__b",
+		  .entryFunctionName = "__miss__diff",
 	  },
 	};
 
-	ms_sr_pg_desc = {
+	ms_spec_pg_desc = {
 	  .kind = OPTIX_PROGRAM_GROUP_KIND_MISS,
 	  .miss = {
 		  .module = module,
-		  .entryFunctionName = "__miss__sr",
+		  .entryFunctionName = "__miss__spec",
 	  },
 	};
 
 	OPTIX_CHECK("rg program group create", optixProgramGroupCreate(ctx, &rg_pg_desc, 1, &pg_options, nullptr, nullptr, &rg_pg), chi_result);
 	OPTIX_CHECK("ms rg program group create", optixProgramGroupCreate(ctx, &ms_rg_pg_desc, 1, &pg_options, nullptr, nullptr, &ms_rg_pg), chi_result);
-	OPTIX_CHECK("ms rg program group create", optixProgramGroupCreate(ctx, &ms_b_pg_desc, 1, &pg_options, nullptr, nullptr, &ms_b_pg), chi_result);
-	OPTIX_CHECK("ms sr program group create", optixProgramGroupCreate(ctx, &ms_sr_pg_desc, 1, &pg_options, nullptr, nullptr, &ms_sr_pg), chi_result);
+	OPTIX_CHECK("ms rg program group create", optixProgramGroupCreate(ctx, &ms_diff_pg_desc, 1, &pg_options, nullptr, nullptr, &ms_diff_pg), chi_result);
+	OPTIX_CHECK("ms sr program group create", optixProgramGroupCreate(ctx, &ms_spec_pg_desc, 1, &pg_options, nullptr, nullptr, &ms_spec_pg), chi_result);
 
 	OPTIX_CHECK("rg sbt pack header", optixSbtRecordPackHeader(rg_pg, (void*)rg_record.header), chi_result);
 	OPTIX_CHECK("ms sbt pack header", optixSbtRecordPackHeader(ms_rg_pg, (void*)ms_rg_record.header), chi_result);
-	OPTIX_CHECK("ms sbt pack header", optixSbtRecordPackHeader(ms_b_pg, (void*)ms_b_record.header), chi_result);
-	OPTIX_CHECK("ms sbt pack header", optixSbtRecordPackHeader(ms_sr_pg, (void*)ms_sr_record.header), chi_result);
+	OPTIX_CHECK("ms sbt pack header", optixSbtRecordPackHeader(ms_diff_pg, (void*)ms_diff_record.header), chi_result);
+	OPTIX_CHECK("ms sbt pack header", optixSbtRecordPackHeader(ms_spec_pg, (void*)ms_spec_record.header), chi_result);
 
 	CU_CHECK("alloc rg record", cudaMalloc((void**)&d_rg_record_base, sizeof(ray_gen_record)), chi_result);
 	CU_CHECK("copy rg to device", cudaMemcpy((void*)d_rg_record_base, (void*)&rg_record, sizeof(ray_gen_record), cudaMemcpyHostToDevice), chi_result);
 
 	CU_CHECK("alloc ms record", cudaMalloc((void**)&d_ms_record_base, sizeof(ms_record) * RAY_TYPE_MAX), chi_result);
 	CU_CHECK("copy ms rg to device", cudaMemcpy((void*)d_ms_record_base, (void*)&ms_rg_record, sizeof(ms_record), cudaMemcpyHostToDevice), chi_result);
-	CU_CHECK("copy ms b to device", cudaMemcpy((void*)(d_ms_record_base + sizeof(ms_record)), (void*)&ms_b_record, sizeof(ms_record), cudaMemcpyHostToDevice), chi_result);
-	CU_CHECK("copy ms sr to device", cudaMemcpy((void*)(d_ms_record_base + (sizeof(ms_record) * 2)), (void*)&ms_sr_record, sizeof(ms_record), cudaMemcpyHostToDevice), chi_result);
+	CU_CHECK("copy ms b to device", cudaMemcpy((void*)(d_ms_record_base + sizeof(ms_record)), (void*)&ms_diff_record, sizeof(ms_record), cudaMemcpyHostToDevice), chi_result);
+	CU_CHECK("copy ms sr to device", cudaMemcpy((void*)(d_ms_record_base + (sizeof(ms_record) * 2)), (void*)&ms_spec_record, sizeof(ms_record), cudaMemcpyHostToDevice), chi_result);
 
 	sbt = {
 		.raygenRecord = d_rg_record_base,
@@ -298,11 +298,11 @@ CHIZEN_RESULT renderer_render_gltf(const size_t render_width, const size_t rende
 
 	pipeline_pgs[0] = rg_pg;
 	pipeline_pgs[1] = ms_rg_pg;
-	pipeline_pgs[2] = ms_b_pg;
-	pipeline_pgs[3] = ms_sr_pg;
+	pipeline_pgs[2] = ms_diff_pg;
+	pipeline_pgs[3] = ms_spec_pg;
 	pipeline_pgs[4] = ch_rg_pg;
-	pipeline_pgs[5] = ch_b_pg;
-	pipeline_pgs[6] = ch_sr_pg;
+	pipeline_pgs[5] = ch_diff_pg;
+	pipeline_pgs[6] = ch_spec_pg;
 
 	OPTIX_CHECK("create pipeline", optixPipelineCreate(ctx, &pipeline_compile_options, &pipeline_link_options, pipeline_pgs, _countof(pipeline_pgs), nullptr, nullptr, &pipeline), chi_result);
 

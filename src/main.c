@@ -32,20 +32,27 @@ int main(int argc, char** argv)
 				.num_channels = 4,
 			},
 		},
-		{
-			.layer = {
-				.type = EXR_LAYER_TYPE_SPECULAR,
-				.name = "Specular",
-				.num_channels = 4,
-			},
-		},
-		{
-			.layer = {
-				.type = EXR_LAYER_TYPE_BASECOLOR,
-				.name = "BaseColor",
-				.num_channels = 4,
-			},
-		},
+		// {
+		// 	.layer = {
+		// 		.type = EXR_LAYER_TYPE_SPECULAR,
+		// 		.name = "Specular",
+		// 		.num_channels = 4,
+		// 	},
+		// },
+		// {
+		// 	.layer = {
+		// 		.type = EXR_LAYER_TYPE_FINALCOLOR,
+		// 		.name = "FinalColor",
+		// 		.num_channels = 4,
+		// 	},
+		// },
+		// {
+		// 	.layer = {
+		// 		.type = EXR_LAYER_TYPE_BASECOLOR,
+		// 		.name = "BaseColor",
+		// 		.num_channels = 4,
+		// 	},
+		// },
 		{
 			.layer = {
 				.type = EXR_LAYER_TYPE_NORMAL,
@@ -55,11 +62,25 @@ int main(int argc, char** argv)
 		},
 		{
 			.layer = {
-				.type = EXR_LAYER_TYPE_UV,
-				.name = "UV",
-				.num_channels = 2,
+				.type = EXR_LAYER_TYPE_TANGENT,
+				.name = "Tangent",
+				.num_channels = 3,
 			},
 		},
+		{
+			.layer = {
+				.type = EXR_LAYER_TYPE_BINORMAL,
+				.name = "Binormal",
+				.num_channels = 3,
+			},
+		},
+		// {
+		// 	.layer = {
+		// 		.type = EXR_LAYER_TYPE_UV,
+		// 		.name = "UV",
+		// 		.num_channels = 2,
+		// 	},
+		// },
 		// {
 		// 	.layer = {
 		// 		.type = EXR_LAYER_TYPE_METALNESS,
@@ -92,7 +113,7 @@ int main(int argc, char** argv)
 
 	for (size_t p = 0; p < _countof(passes); ++p)
 	{
-		passes[p].pixels = calloc(1, (size_t)(RENDER_WIDTH * RENDER_HEIGHT * passes[p].layer.num_channels * sizeof(float)));
+		passes[p].pixels = calloc((size_t)(RENDER_WIDTH * RENDER_HEIGHT * passes[p].layer.num_channels), sizeof(float));
 		if (passes[p].pixels == NULL)
 		{
 			printf("calloc failed for passes[%lld].pixels\n", p);

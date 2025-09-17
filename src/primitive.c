@@ -11,7 +11,7 @@ CHIZEN_RESULT create_ch_records(const cgltf_data* gltf_data, cgltf_primitive* cu
 	return chi_result;
 }
 
-primitive primitive_create(const cgltf_data* gltf_data, cgltf_primitive* curr_prim, const OptixProgramGroup ch_rg_pg, const OptixProgramGroup ch_b_pg, const OptixProgramGroup ch_sr_pg, const OptixDeviceContext ctx, const cudaStream_t stream, ch_infos* ch_infos)
+primitive primitive_create(const cgltf_data* gltf_data, cgltf_primitive* curr_prim, const OptixProgramGroup ch_rg_pg, const OptixProgramGroup ch_diff_pg, const OptixProgramGroup ch_spec_pg, const OptixDeviceContext ctx, const cudaStream_t stream, ch_infos* ch_infos)
 {
 	cudaError_t cuda_error = 0;
 	OptixResult optix_result = 0;
@@ -122,9 +122,9 @@ primitive primitive_create(const cgltf_data* gltf_data, cgltf_primitive* curr_pr
 	curr_ch_record->data.normals = (float3*)p.d_normals;
 	curr_ch_record->data.uvs = (float2*)p.d_uvs;
 
-	// b ch_record
+	// diff ch_record
 	curr_ch_record = ch_infos->ch_records + (ch_infos->count - (RAY_TYPE_MAX - 1));
-	OPTIX_CHECK("record pack header", optixSbtRecordPackHeader(ch_b_pg, curr_ch_record->header), p.result);
+	OPTIX_CHECK("record pack header", optixSbtRecordPackHeader(ch_diff_pg, curr_ch_record->header), p.result);
 
 	curr_ch_record->data.indices = (void*)p.d_indices;
 	curr_ch_record->data.indices_format = indices_format;
@@ -139,9 +139,22 @@ primitive primitive_create(const cgltf_data* gltf_data, cgltf_primitive* curr_pr
 	curr_ch_record->data.normals = (float3*)p.d_normals;
 	curr_ch_record->data.uvs = (float2*)p.d_uvs;
 
-	// sr ch_record
+	// spec ch_record
 	curr_ch_record = ch_infos->ch_records + (ch_infos->count - (RAY_TYPE_MAX - 2));
-	OPTIX_CHECK("record pack header", optixSbtRecordPackHeader(ch_sr_pg, curr_ch_record->header), p.result);
+	OPTIX_CHECK("record pack header", optixSbtRecordPackHeader(ch_spec_pg, curr_ch_record->header), p.result);
+
+	curr_ch_record->data.indices = (void*)p.d_indices;
+	curr_ch_record->data.indices_format = indices_format;
+	if (curr_prim->material != NULL)
+	{
+		curr_ch_record->data.material_index = (int32_t)cgltf_material_index(gltf_data, curr_prim->material);
+	}
+	else
+	{
+		curr_ch_record->data.material_index = -1;
+	}
+	curr_ch_record->data.normals = (float3*)p.d_normals;
+	curr_ch_record->data.uvs = (float2*)p.d_uvs;
 
 cpu_error:
 	CU_CHECK("free primitive tmp buffer", cudaFree((void*)tmp_buffer), p.result);
@@ -161,6 +174,5 @@ CHIZEN_RESULT primitive_destroy(primitive p)
 	CU_CHECK("free prim d_indices", cudaFree((void*)p.d_indices), chi_result);
 
 gpu_error:
-
 	return chi_result;
 }
