@@ -21,6 +21,13 @@
 #define NUM_SAMPLES 1024
 #define NUM_DIFF_BOUNCES 8
 
+typedef struct bsdf_sample
+{
+	float3 ray_dir;
+	float bsdf;
+	float pdf;
+} bsdf_sample;
+
 typedef struct od_payload
 {
 	float3 base_color;
@@ -225,13 +232,13 @@ __device__ static float3 point_in_unit_sphere(unsigned int r_idx, float3 center)
 	return (point + center);
 }
 
-__device__ static float lambert_bsdf(float3 onb[3], float3 v, unsigned int r_idx)
+__device__ static bsdf_sample sample_uniform(float3 onb[3], float3 v, unsigned int r_idx)
 {
 	float random_u = curand_uniform(((curandState*)lp.states) + r_idx);
 	float random_v = curand_uniform(((curandState*)lp.states) + r_idx);
 	
-	float theta = asinf(sqrtf(random_u));
-	float phi = 2 * CGLM_PI * random_v;
+	float theta = acosf(1 - random_u);
+	float phi = 2 * M_PIf * random_v;
 	
 	float3 r = float3{
 		cosf(phi) * sinf(theta),
@@ -241,7 +248,38 @@ __device__ static float lambert_bsdf(float3 onb[3], float3 v, unsigned int r_idx
 	
 	r = (r.x * onb[0]) + (r.y * onb[1]) + (r.z * onb[2]);
 
-	return max(dot(r, onb[2]), 0.f);
+	bsdf_sample bs = {
+		.ray_dir = r,
+		.bsdf = max(dot(r, onb[2]), 0.f),
+		.pdf = 1.f / (2 * M_PIf),
+	};
+
+	return bs;
+}
+
+__device__ static bsdf_sample sample_lambert(float3 onb[3], float3 v, unsigned int r_idx)
+{
+	float random_u = curand_uniform(((curandState*)lp.states) + r_idx);
+	float random_v = curand_uniform(((curandState*)lp.states) + r_idx);
+	
+	float theta = asinf(sqrtf(random_u));
+	float phi = 2 * M_PIf * random_v;
+	
+	float3 r = float3{
+		cosf(phi) * sinf(theta),
+		sinf(phi) * sinf(theta),
+		cosf(theta)
+	};
+	
+	r = (r.x * onb[0]) + (r.y * onb[1]) + (r.z * onb[2]);
+
+	bsdf_sample bs = {
+		.ray_dir = r,
+		.bsdf = max(dot(r, onb[2]), 0.f) / M_PIf,
+		.pdf = max(dot(r, onb[2]), 0.f) / M_PIf,
+	};
+
+	return bs;
 }
 
 __device__ static float dist_d_ggx(float3 n, float3 h, float a2)
@@ -458,6 +496,11 @@ __device__ static void avg_ld_pixels(uint3 launch_index)
 			lp.passes[p].d_pixels[pixel_idx + 1] /= NUM_SAMPLES;
 			lp.passes[p].d_pixels[pixel_idx + 2] /= NUM_SAMPLES;
 			lp.passes[p].d_pixels[pixel_idx + 3] /= NUM_SAMPLES;
+
+			lp.passes[p].d_pixels[pixel_idx] = powf(lp.passes[p].d_pixels[pixel_idx], 0.454545f);
+			lp.passes[p].d_pixels[pixel_idx + 1] = powf(lp.passes[p].d_pixels[pixel_idx + 1], 0.454545f);
+			lp.passes[p].d_pixels[pixel_idx + 2] = powf(lp.passes[p].d_pixels[pixel_idx + 2], 0.454545f);
+			lp.passes[p].d_pixels[pixel_idx + 3] = powf(lp.passes[p].d_pixels[pixel_idx + 3], 0.454545f);
 		}
 	}
 }
@@ -688,14 +731,16 @@ extern "C" __global__ void __closesthit__diff()
 	if (pl->is_camera_ray)
 		pl->is_camera_ray = false;
 
-	float ray_dist = optixGetRayTmax() + 1.f;
 	pl->is_hit = true;
-	pl->diffuse += pl->throughput * emission_color;// * (1.f / (ray_dist * ray_dist));
+	pl->diffuse += pl->throughput * emission_color;
 
 	float3 pt_in_sphere = point_in_unit_sphere(pl->r_idx, hit_pos + hit_nrm) - hit_pos;
-	pl->out_diff_ray.dir = normalize(pt_in_sphere - hit_pos);
 	pl->out_diff_ray.org = hit_pos;
-	pl->throughput *= lambert_bsdf(onb, -optixGetWorldRayDirection(), pl->r_idx) * base_color;
+
+	bsdf_sample bs = sample_lambert(onb, -optixGetWorldRayDirection(), pl->r_idx);
+
+	pl->out_diff_ray.dir = bs.ray_dir;
+	pl->throughput *= (bs.bsdf * base_color) / bs.pdf;
 }
 
 extern "C" __global__ void __closesthit__spec()
