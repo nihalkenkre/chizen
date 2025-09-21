@@ -35,7 +35,9 @@ material material_create(const cgltf_data* gltf_data, cgltf_material* curr_mat, 
 
 	if (curr_mat->has_emissive_strength)
 	{
-		m.emissive_strength = curr_mat->emissive_strength.emissive_strength;
+		m.emissive_factor.x += (curr_mat->emissive_strength.emissive_strength - m.emissive_factor.x);
+		m.emissive_factor.y += (curr_mat->emissive_strength.emissive_strength - m.emissive_factor.y);
+		m.emissive_factor.z += (curr_mat->emissive_strength.emissive_strength - m.emissive_factor.z);
 	}
 
 	return m;

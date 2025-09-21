@@ -182,7 +182,7 @@ CHIZEN_RESULT renderer_render_gltf(const size_t render_width, const size_t rende
 	CHIZEN_RESULT_CHECK("scene create", s.result, chi_result);
 
 	pipeline_link_options = {
-		.maxTraceDepth = 31,
+		.maxTraceDepth = 1,
 	};
 
 	ch_records_size = sizeof(ch_record) * s.ch_infos.count;

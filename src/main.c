@@ -53,27 +53,27 @@ int main(int argc, char** argv)
 		// 		.num_channels = 4,
 		// 	},
 		// },
-		{
-			.layer = {
-				.type = EXR_LAYER_TYPE_NORMAL,
-				.name = "Normal",
-				.num_channels = 3,
-			},
-		},
-		{
-			.layer = {
-				.type = EXR_LAYER_TYPE_TANGENT,
-				.name = "Tangent",
-				.num_channels = 3,
-			},
-		},
-		{
-			.layer = {
-				.type = EXR_LAYER_TYPE_BINORMAL,
-				.name = "Binormal",
-				.num_channels = 3,
-			},
-		},
+		// {
+		// 	.layer = {
+		// 		.type = EXR_LAYER_TYPE_NORMAL,
+		// 		.name = "Normal",
+		// 		.num_channels = 3,
+		// 	},
+		// },
+		// {
+		// 	.layer = {
+		// 		.type = EXR_LAYER_TYPE_TANGENT,
+		// 		.name = "Tangent",
+		// 		.num_channels = 3,
+		// 	},
+		// },
+		// {
+		// 	.layer = {
+		// 		.type = EXR_LAYER_TYPE_BINORMAL,
+		// 		.name = "Binormal",
+		// 		.num_channels = 3,
+		// 	},
+		// },
 		// {
 		// 	.layer = {
 		// 		.type = EXR_LAYER_TYPE_UV,
