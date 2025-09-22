@@ -32,20 +32,20 @@ int main(int argc, char** argv)
 				.num_channels = 4,
 			},
 		},
-		// {
-		// 	.layer = {
-		// 		.type = EXR_LAYER_TYPE_SPECULAR,
-		// 		.name = "Specular",
-		// 		.num_channels = 4,
-		// 	},
-		// },
-		// {
-		// 	.layer = {
-		// 		.type = EXR_LAYER_TYPE_FINALCOLOR,
-		// 		.name = "FinalColor",
-		// 		.num_channels = 4,
-		// 	},
-		// },
+		{
+			.layer = {
+				.type = EXR_LAYER_TYPE_SPECULAR,
+				.name = "Specular",
+				.num_channels = 4,
+			},
+		},
+		{
+			.layer = {
+				.type = EXR_LAYER_TYPE_FINALCOLOR,
+				.name = "FinalColor",
+				.num_channels = 4,
+			},
+		},
 		// {
 		// 	.layer = {
 		// 		.type = EXR_LAYER_TYPE_BASECOLOR,
