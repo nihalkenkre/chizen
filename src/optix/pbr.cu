@@ -18,9 +18,9 @@
 #include <optix_stack_size.h>
 #include <optix_function_table_definition.h>
 
-#define NUM_SAMPLES 1024
-#define NUM_DIFF_BOUNCES 8
-#define NUM_SPEC_BOUNCES 8
+#define NUM_SAMPLES 512
+#define NUM_DIFF_BOUNCES 4
+#define NUM_SPEC_BOUNCES 4
 
 typedef struct bsdf_sample
 {
@@ -40,7 +40,8 @@ typedef struct od_payload
 	float2 uv;
 	float roughness;
 	float metalness;
-	float z_depth;
+	float eta;
+	bool is_inside_object;
 	bool is_hit;
 } od_payload;
 
@@ -138,7 +139,7 @@ __device__ static float3 get_base_color(int32_t material_index, float2 uv)
 	}
 	else
 	{
-		return { 0.f, 0.f, 0.f };
+		return make_float3(0.f);
 	}
 }
 
@@ -198,7 +199,39 @@ __device__ static float3 get_emission_color(int32_t material_index, float2 uv)
 	}
 	else
 	{
-		return float3(0.f, 0.f, 0.f);
+		return make_float3(0.f);
+	}
+}
+
+__device__ static float get_transmission(int32_t material_index, float2 uv)
+{
+	if (material_index >= 0)
+	{
+		if (lp.materials[material_index].trans_tex_idx >= 0)
+		{
+			float value = tex2D<float4>(lp.textures[lp.materials[material_index].trans_tex_idx].d_obj, uv.x, uv.y).x;
+			return value * lp.materials[material_index].transmission_factor;
+		}
+		else
+		{
+			return lp.materials[material_index].transmission_factor;
+		}
+	}
+	else
+	{
+		return 0;
+	}
+}
+
+__device__ static float get_ior(int32_t material_index)
+{
+	if (material_index >= 0)
+	{
+		return lp.materials[material_index].ior;
+	}
+	else
+	{
+		return 1.5f;
 	}
 }
 
@@ -232,24 +265,24 @@ __device__ static float3 point_in_unit_sphere(unsigned int r_idx, float3 center)
 	return (point + center);
 }
 
-__device__ static bsdf_sample sample_phong(/*float3* onb, */float3 nrm, float3 v, unsigned int r_idx)
+__device__ static bsdf_sample sample_phong(float3 nrm, float3 v, unsigned int r_idx)
 {
 	float random_u = curand_uniform(((curandState*)lp.states) + r_idx);
 	float random_v = curand_uniform(((curandState*)lp.states) + r_idx);
-	float n = 500;
-	
+	float n = 300;
+
 	float alpha = acosf(powf(random_u, 1.f / n));
 	float phi = 2.f * M_PIf * random_v;
 
-	float3 r = float3 {
+	float3 r = float3{
 		cosf(phi) * sinf(alpha),
 		sinf(phi) * sinf(alpha),
 		cosf(alpha),
 	};
 
 	nrm = reflect(v, nrm);
-	float3 a = abs(nrm.x) > 0.9f ? float3{ 0,1,0 } : float3{ 1,0,0 };
-	float3 t =  cross(nrm, a);
+	float3 a = abs(nrm.z) > 0.9f ? float3{ 0,1,0 } : float3{ 0,0,1 };
+	float3 t = normalize(cross(nrm, a));
 
 	float3 onb[3] = {
 		cross(nrm, t),
@@ -286,14 +319,14 @@ __device__ static bsdf_sample sample_uniform(float3* onb, float3 v, unsigned int
 
 	bsdf_sample bs = {
 		.ray_dir = r,
-		.brdf = dot(r, onb[2]) / M_PIf,
+		.brdf = max(dot(r, onb[2]), 0.f) / M_PIf,
 		.pdf = 1.f / (2.f * M_PIf),
 	};
 
 	return bs;
 }
 
-__device__ static bsdf_sample sample_lambert(float3* onb, float3 v, unsigned int r_idx)
+__device__ static bsdf_sample sample_lambert_reflectance(float3* onb, float3 v, unsigned int r_idx)
 {
 	float random_u = curand_uniform(((curandState*)lp.states) + r_idx);
 	float random_v = curand_uniform(((curandState*)lp.states) + r_idx);
@@ -311,8 +344,52 @@ __device__ static bsdf_sample sample_lambert(float3* onb, float3 v, unsigned int
 
 	bsdf_sample bs = {
 		.ray_dir = r,
-		.brdf = dot(r, onb[2]) / M_PIf,
-		.pdf = dot(r, onb[2]) / M_PIf,
+		.brdf = max(dot(r, onb[2]), 0.f) / M_PIf,
+		.pdf = max(dot(r, onb[2]), 0.f) / M_PIf,
+	};
+
+	return bs;
+}
+
+__device__ static bsdf_sample sample_uniform_transmission(float3* onb, float3 v, float roughness, float ior, unsigned int r_idx)
+{
+	// float random_u = curand_uniform(((curandState*)lp.states) + r_idx);
+	// float random_v = curand_uniform(((curandState*)lp.states) + r_idx);
+
+	// float theta = acos(random_u);
+	// float phi = 2 * M_PIf * random_v;
+
+	// float3 r = float3{
+	// 	cosf(phi) * sinf(theta),
+	// 	sinf(phi) * sinf(theta),
+	// 	cosf(theta)
+	// };
+
+	// r = (r.x * onb[0]) + (r.y * onb[1]) + (r.z * onb[2]);
+
+	float3 n = onb[2];
+	float cos_theta_i = dot(v, n);
+	float eta = ior;
+	if (cos_theta_i < 0.f)
+	{
+		n = -n;
+		cos_theta_i = -cos_theta_i;
+		eta = 1.f / ior;
+	}
+	
+	float sin_2_theta_i = 1.f - powf(cos_theta_i, 2);
+	float sin_2_theta_t = sin_2_theta_i / powf(eta, 2);
+
+	bsdf_sample bs;
+
+	float cos_theta_t = sqrtf(1.f - sin_2_theta_t);
+	
+	float3 r = -v / eta + (cos_theta_i / eta - cos_theta_t) * n;
+	
+	bs = {
+		.ray_dir = r,
+		.brdf = 1,
+		.pdf = 1,
 	};
 
 	return bs;
@@ -437,7 +514,7 @@ __device__ static void avg_ld_pixels(uint3 launch_index)
 		if (lp.passes[p].layer.type == EXR_LAYER_TYPE_DIFFUSE ||
 			lp.passes[p].layer.type == EXR_LAYER_TYPE_SPECULAR ||
 			lp.passes[p].layer.type == EXR_LAYER_TYPE_FINALCOLOR
-		)
+			)
 		{
 			lp.passes[p].d_pixels[pixel_idx] /= NUM_SAMPLES;
 			lp.passes[p].d_pixels[pixel_idx + 1] /= NUM_SAMPLES;
@@ -501,7 +578,7 @@ extern "C" __global__ void __raygen__rg()
 			}
 		}
 
-		ld_payload ldpl_spec = 
+		ld_payload ldpl_spec =
 		{
 			.throughput = make_float3(1.f),
 			.r_idx = r_idx,
@@ -672,33 +749,47 @@ extern "C" __global__ void __closesthit__diff()
 	if (pl->is_camera_ray)
 		pl->is_camera_ray = false;
 
-	if (dot(hit_nrm, -optixGetWorldRayDirection()) < 0.f)
-	{
-		pl->is_hit = false;
-		return;
-	}
-
 	if (emission_color > 0.f)
 	{
 		pl->is_hit = false;
 		pl->diffuse += pl->throughput * emission_color;
 		return;
 	}
-
-	float3 a = abs(hit_nrm.z) > 0.9f ? float3{ 0,1,0 } : float3{ 0,0,1 };
-	float3 hit_tngt = normalize(cross(hit_nrm, a));
-
-	float3 onb[3] = {
-		cross(hit_nrm, hit_tngt),
-		hit_tngt,
-		hit_nrm,
-	};
-
+	
 	float3 hit_pos = (optixGetWorldRayOrigin() + optixGetWorldRayDirection() * optixGetRayTmax());
 	float3 base_color = get_base_color(ch_data->material_index, uv);
 	float metalness = get_metalness(ch_data->material_index, uv);
+	float roughness = get_roughness(ch_data->material_index, uv);
+	float transmission = get_transmission(ch_data->material_index, uv);
+	float ior = get_ior(ch_data->material_index);
+	
+	bsdf_sample bs;
+	if (curand_uniform(((curandState*)lp.states) + pl->r_idx) <= transmission)
+	{
+		float3 a = abs(hit_nrm.z) > 0.9f ? float3{ 0,1,0 } : float3{ 0,0,1 };
+		float3 hit_tngt = normalize(cross(hit_nrm, a));
+	
+		float3 onb[3] = {
+			cross(hit_nrm, hit_tngt),
+			hit_tngt,
+			hit_nrm,
+		};
 
-	bsdf_sample bs = sample_lambert(onb, -optixGetWorldRayDirection(), pl->r_idx);
+		bs = sample_uniform_transmission(onb, -optixGetWorldRayDirection(), roughness, ior, pl->r_idx);
+	}
+	else 
+	{
+		float3 a = abs(hit_nrm.x) > 0.9f ? float3{ 0,1,0 } : float3{ 1,0,0 };
+		float3 hit_tngt = normalize(cross(hit_nrm, a));
+	
+		float3 onb[3] = {
+			cross(hit_nrm, hit_tngt),
+			hit_tngt,
+			hit_nrm,
+		};
+
+		bs = sample_lambert_reflectance(onb, -optixGetWorldRayDirection(), pl->r_idx);
+	}
 
 	pl->is_hit = true;
 	pl->out_ray.org = hit_pos;
@@ -773,7 +864,6 @@ extern "C" __global__ void __closesthit__spec()
 		pl->specular += pl->throughput * emission_color;
 		return;
 	}
-	
 
 	bsdf_sample bs = sample_phong(hit_nrm, optixGetWorldRayDirection(), pl->r_idx);
 

@@ -7,11 +7,14 @@ typedef struct material
 {
 	float4 base_color_factor;
 	float3 emissive_factor; // gtlf emissive_factor and emissive_strength combined
+	float transmission_factor;
 	float metalness_factor;
 	float roughness_factor;
+	float ior;
 	int16_t emissive_tex_idx;
 	int16_t base_tex_idx;
 	int16_t mr_tex_idx;
+	int16_t trans_tex_idx;
 	CHIZEN_RESULT result;
 } material;
 
