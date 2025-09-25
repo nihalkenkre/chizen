@@ -19,7 +19,7 @@
 #include <optix_function_table_definition.h>
 
 #define NUM_SAMPLES 512
-#define NUM_DIFF_BOUNCES 4
+#define NUM_DIFF_BOUNCES 8
 #define NUM_SPEC_BOUNCES 4
 
 typedef struct bsdf_sample
@@ -382,15 +382,25 @@ __device__ static bsdf_sample sample_uniform_transmission(float3* onb, float3 v,
 
 	bsdf_sample bs;
 
-	float cos_theta_t = sqrtf(1.f - sin_2_theta_t);
-	
-	float3 r = -v / eta + (cos_theta_i / eta - cos_theta_t) * n;
-	
-	bs = {
-		.ray_dir = r,
-		.brdf = 1,
-		.pdf = 1,
-	};
+	if (sin_2_theta_t >= 1)
+	{
+		bs = {
+			.ray_dir = reflect(-v, n),
+			.brdf = 1,
+			.pdf = 1,
+		};
+	}
+	else
+	{
+		float cos_theta_t = sqrtf(1.f - sin_2_theta_t);
+		
+		float3 r = -v / eta + (cos_theta_i / eta - cos_theta_t) * n;
+		bs = {
+			.ray_dir = r,
+			.brdf = 1,
+			.pdf = 1,
+		};
+	}
 
 	return bs;
 }
