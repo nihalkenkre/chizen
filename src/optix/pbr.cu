@@ -816,7 +816,7 @@ extern "C" __global__ void __closesthit__diff()
 		bs.brdf = 1;
 		bs.pdf = 1;
 		pl->is_hit = true;
-		pl->throughput *= bs.brdf / bs.pdf;
+		pl->throughput *= (bs.brdf * base_color) / bs.pdf;
 	}
 	else
 	{
@@ -833,6 +833,7 @@ extern "C" __global__ void __closesthit__diff()
 				bs = sample_uniform_transmission(onb, optixGetWorldRayDirection(), roughness, ior, pl->r_idx);
 				pl->is_hit = true;
 			}
+			pl->throughput *= (bs.brdf * base_color) / bs.pdf;
 		}
 		else
 		{
@@ -840,8 +841,8 @@ extern "C" __global__ void __closesthit__diff()
 			bs.brdf = 1;
 			bs.pdf = 1;
 			pl->is_hit = true;
+			pl->throughput *= (bs.brdf) / bs.pdf;
 		}
-		pl->throughput *= (bs.brdf * base_color) / bs.pdf;
 	}
 		
 	pl->out_ray.org = hit_pos;
