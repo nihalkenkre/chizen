@@ -19,8 +19,8 @@
 #include <optix_function_table_definition.h>
 
 #define NUM_SAMPLES 1024
-#define NUM_DIFF_BOUNCES 8
-#define NUM_SPEC_BOUNCES 8
+#define NUM_DIFF_BOUNCES 12
+#define NUM_SPEC_BOUNCES 4
 
 typedef struct bsdf_sample
 {
@@ -291,8 +291,9 @@ __device__ static float calculate_fresnel_dielectric(float3 in_dir, float3 n, fl
 	return 0.5f * (powf(r_parl, 2) + powf(r_perp, 2));
 }
 
-__device__ static bsdf_sample sample_phong(float3 nrm, float3 v, unsigned int r_idx)
+__device__ static bsdf_sample sample_phong(float3 nrm, float3 in_dir, unsigned int r_idx)
 {
+	float3 v = in_dir;
 	float random_u = curand_uniform(((curandState*)lp.states) + r_idx);
 	float random_v = curand_uniform(((curandState*)lp.states) + r_idx);
 	float n = 300;

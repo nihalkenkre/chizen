@@ -50,11 +50,11 @@ material material_create(const cgltf_data* gltf_data, cgltf_material* curr_mat, 
 		{
 			m.trans_tex_idx = (int16_t)cgltf_texture_index(gltf_data, curr_mat->transmission.transmission_texture.texture);
 		}
-
-		if (curr_mat->has_ior)
-		{
-			m.ior = curr_mat->ior.ior;
-		}
+	}
+	
+	if (curr_mat->has_ior)
+	{
+		m.ior = curr_mat->ior.ior;
 	}
 
 	return m;
