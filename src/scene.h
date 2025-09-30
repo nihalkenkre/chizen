@@ -31,7 +31,7 @@ typedef struct scene
 #ifdef __cplusplus
 extern "C" {
 #endif // __cplusplus
-	scene scene_create_from_gltf(cgltf_data* gltf_data, const OptixProgramGroup ch_rg_pg, const OptixProgramGroup ch_b_pg, const OptixProgramGroup ch_sr_pg, const OptixDeviceContext ctx, const cudaStream_t stream);
+	scene scene_create_from_gltf(cgltf_data* gltf_data, const OptixProgramGroup ch_od_pg, const OptixProgramGroup ch_ld_pg, const OptixDeviceContext ctx, const cudaStream_t stream);
 	CHIZEN_RESULT scene_destroy(scene s);
 #ifdef __cplusplus
 }

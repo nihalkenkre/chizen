@@ -25,20 +25,20 @@ int main(int argc, char** argv)
 
 	exr_pass passes[] =
 	{
-		{
-			.layer = {
-				.type = EXR_LAYER_TYPE_DIFFUSE,
-				.name = "Diffuse",
-				.num_channels = 4,
-			},
-		},
-		{
-			.layer = {
-				.type = EXR_LAYER_TYPE_SPECULAR,
-				.name = "Specular",
-				.num_channels = 4,
-			},
-		},
+		// {
+		// 	.layer = {
+		// 		.type = EXR_LAYER_TYPE_DIFFUSE,
+		// 		.name = "Diffuse",
+		// 		.num_channels = 4,
+		// 	},
+		// },
+		// {
+		// 	.layer = {
+		// 		.type = EXR_LAYER_TYPE_SPECULAR,
+		// 		.name = "Specular",
+		// 		.num_channels = 4,
+		// 	},
+		// },
 		{
 			.layer = {
 				.type = EXR_LAYER_TYPE_FINALCOLOR,

@@ -9,7 +9,7 @@ CUdeviceptr d_ias_op_buffer = 0;
 static size_t images_count = 0;
 static size_t textures_count = 0;
 
-scene scene_create_from_gltf(cgltf_data* gltf_data, const OptixProgramGroup ch_rg_pg, const OptixProgramGroup ch_b_pg, const OptixProgramGroup ch_sr_pg, const OptixDeviceContext ctx, const cudaStream_t stream)
+scene scene_create_from_gltf(cgltf_data* gltf_data, const OptixProgramGroup ch_od_pg, const OptixProgramGroup ch_ld_pg, const OptixDeviceContext ctx, const cudaStream_t stream)
 {
 	CHIZEN_RESULT chi_result = 0;
 	cudaError_t cuda_error = 0;
@@ -127,7 +127,7 @@ scene scene_create_from_gltf(cgltf_data* gltf_data, const OptixProgramGroup ch_r
 
 	for (size_t m = 0; m < gltf_data->meshes_count; ++m)
 	{
-		*(s.meshes + m) = mesh_create(gltf_data, gltf_data->meshes + m, ch_rg_pg, ch_b_pg, ch_sr_pg, ctx, stream, &s.ch_infos);
+		*(s.meshes + m) = mesh_create(gltf_data, gltf_data->meshes + m, ch_od_pg, ch_ld_pg, ctx, stream, &s.ch_infos);
 		CHIZEN_RESULT_CHECK("scene mesh create", (s.meshes + m)->result, s.result);
 	}
 
