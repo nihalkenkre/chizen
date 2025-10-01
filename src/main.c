@@ -149,6 +149,7 @@ int main(int argc, char** argv)
 	PathRemoveFileSpecA(img_path);
 	strcat(img_path, "\\test.exr");
 
+	printf("writing exr...\n");
 	CHIZEN_RESULT_CHECK("write exr", write_exr(img_path, (size_t)RENDER_WIDTH, (size_t)RENDER_HEIGHT, passes, _countof(passes)), chi_result);
 
 cpu_error:

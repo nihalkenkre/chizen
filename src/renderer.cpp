@@ -34,7 +34,6 @@ CHIZEN_RESULT renderer_render_gltf(const uint32_t render_width, const uint32_t r
 	cudaError_t cuda_error = cudaSuccess;
 	OptixResult optix_result = OPTIX_SUCCESS;
 
-	cudaStream_t stream = nullptr;
 	cgltf_options gltf_options = {};
 	cgltf_data* gltf_data = nullptr;
 	OptixDeviceContext ctx = nullptr;
@@ -90,7 +89,6 @@ CHIZEN_RESULT renderer_render_gltf(const uint32_t render_width, const uint32_t r
 	};
 
 	OPTIX_CHECK("ctx create", optixDeviceContextCreate(0, &ctx_options, &ctx), chi_result);
-	CU_CHECK("stream create", cudaStreamCreate(&stream), chi_result);
 
 	if (cgltf_parse_file(&gltf_options, gltf_path, &gltf_data) != cgltf_result_success ||
 		cgltf_validate(gltf_data) != cgltf_result_success ||
@@ -166,7 +164,7 @@ CHIZEN_RESULT renderer_render_gltf(const uint32_t render_width, const uint32_t r
 
 	OPTIX_CHECK("ch program group create", optixProgramGroupCreate(ctx, &ch_od_pg_desc, 1, &pg_options, nullptr, nullptr, &ch_od_pg), chi_result);
 	OPTIX_CHECK("ch program group create", optixProgramGroupCreate(ctx, &ch_ld_pg_desc, 1, &pg_options, nullptr, nullptr, &ch_ld_pg), chi_result);
-	s = scene_create_from_gltf(gltf_data, ch_od_pg, ch_ld_pg, ctx, stream);
+	s = scene_create_from_gltf(gltf_data, ch_od_pg, ch_ld_pg, ctx, 0);
 	CHIZEN_RESULT_CHECK("scene create", s.result, chi_result);
 
 	pipeline_link_options = {
@@ -281,20 +279,22 @@ CHIZEN_RESULT renderer_render_gltf(const uint32_t render_width, const uint32_t r
 
 	OPTIX_CHECK("create pipeline", optixPipelineCreate(ctx, &pipeline_compile_options, &pipeline_link_options, pipeline_pgs, _countof(pipeline_pgs), nullptr, nullptr, &pipeline), chi_result);
 
-	init_random_states(lp.states, render_width, render_height, stream);
+	init_random_states(lp.states, render_width, render_height, 0);
 
 	for (uint32_t s = 0; s < NUM_SAMPLES; ++s)
 	{
 		printf("\rProcess sample %u...", s+1);
-		OPTIX_CHECK("launch", optixLaunch(pipeline, stream, d_launch_params, sizeof(launch_params), &sbt, (unsigned int)render_width, (unsigned int)render_height, 1), chi_result);
+		OPTIX_CHECK("launch", optixLaunch(pipeline, 0, d_launch_params, sizeof(launch_params), &sbt, (unsigned int)render_width, (unsigned int)render_height, 1), chi_result);
 	}
 	printf("\n");
 	
-	avg_ld_pixels((void*)d_exr_passes, passes_count, render_width, render_height, NUM_SAMPLES, stream);
+	printf("averaging pixels...\n");
+	avg_ld_pixels((void*)d_exr_passes, passes_count, render_width, render_height, NUM_SAMPLES, 0);
 
 	CU_CHECK("get last error", cudaGetLastError(), chi_result);
-	CU_CHECK("stream sync", cudaStreamSynchronize(stream), chi_result);
+	CU_CHECK("stream sync", cudaStreamSynchronize(0), chi_result);
 
+	printf("copying pixels to host...\n");
 	for (size_t p = 0; p < passes_count; ++p)
 	{
 		CU_CHECK("copy pass pixels to host", cudaMemcpy(passes[p].pixels, (void*)((exr_pass*)d_exr_passes_staging)[p].d_pixels, render_width * render_height * passes[p].layer.num_channels * sizeof(float), cudaMemcpyDeviceToHost), chi_result);
@@ -310,7 +310,6 @@ cpu_error:
 	OPTIX_CHECK("ch pg destroy", optixProgramGroupDestroy(ch_od_pg), chi_result);
 	OPTIX_CHECK("module destroy", optixModuleDestroy(module), chi_result);
 	OPTIX_CHECK("pipeline destroy", optixPipelineDestroy(pipeline), chi_result);
-	CU_CHECK("stream destroy", cudaStreamDestroy(stream), chi_result);
 
 	if (d_exr_passes_staging != NULL)
 	{

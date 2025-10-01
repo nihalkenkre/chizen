@@ -34,16 +34,13 @@ instances instances_create(const cgltf_data* gltf_data, mesh* meshes)
 			++i.count;
 	}
 
-	size_t instances_size = sizeof(OptixInstance) * i.count;
-	i.instances = calloc(1, instances_size);
+	i.instances = calloc(i.count, sizeof(OptixInstance));
 	if (i.instances == NULL)
 	{
 		printf("calloc error instances\n");
 		i.result = CHIZEN_RESULT_NO_MEMORY_ALLOCED;
 		goto shutdown;
 	}
-
-	size_t indices_size = sizeof(size_t) * i.count;
 
 	size_t instance_idx = 0;
 	size_t sbt_offset = 0;
