@@ -15,6 +15,7 @@
 #ifdef max
 #undef max
 #endif
+
 #include <optix_stack_size.h>
 #include <optix_function_table_definition.h>
 
@@ -235,7 +236,7 @@ CHIZEN_RESULT renderer_render_gltf(const uint32_t render_width, const uint32_t r
 		.hitgroupRecordCount = (unsigned int)s.ch_infos.count,
 	};
 
-	d_exr_passes_staging = (exr_pass*)calloc(1, sizeof(exr_pass) * passes_count);
+	d_exr_passes_staging = (exr_pass*)calloc(passes_count, sizeof(exr_pass));
 	if (d_exr_passes_staging == nullptr)
 	{
 		printf("calloc failed for d_exr_passes_staging\n");

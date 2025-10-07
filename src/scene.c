@@ -55,7 +55,7 @@ scene scene_create_from_gltf(cgltf_data* gltf_data, const OptixProgramGroup ch_o
 	}
 
 	size_t images_size = sizeof(image) * gltf_data->images_count;
-	images = calloc(1, images_size);
+	images = calloc(gltf_data->images_count, sizeof(image));
 	if (images == NULL)
 	{
 		printf("calloc failed for images\n");
@@ -73,7 +73,7 @@ scene scene_create_from_gltf(cgltf_data* gltf_data, const OptixProgramGroup ch_o
 	CU_CHECK("copy to scene d_images", cudaMemcpy((void*)d_images, images, images_size, cudaMemcpyHostToDevice), s.result);
 
 	size_t texture_size = sizeof(texture) * gltf_data->textures_count;
-	textures = calloc(1, texture_size);
+	textures = calloc(gltf_data->textures_count, sizeof(texture));
 	if (textures == NULL)
 	{
 		printf("calloc failed for textures\n");
@@ -91,7 +91,7 @@ scene scene_create_from_gltf(cgltf_data* gltf_data, const OptixProgramGroup ch_o
 	CU_CHECK("copy to scene d_textures", cudaMemcpy((void*)s.d_textures, textures, texture_size, cudaMemcpyHostToDevice), s.result);
 
 	size_t materials_size = sizeof(material) * gltf_data->materials_count;
-	materials = calloc(1, materials_size);
+	materials = calloc(gltf_data->materials_count, sizeof(material));
 	if (materials == NULL)
 	{
 		printf("calloc failed for materials\n");
@@ -114,9 +114,8 @@ scene scene_create_from_gltf(cgltf_data* gltf_data, const OptixProgramGroup ch_o
 	CU_CHECK("alloc scene d_lights", cudaMalloc((void**)&s.d_lights, lights_size), s.result);
 	CU_CHECK("copy to scene d_lights", cudaMemcpy((void*)s.d_lights, lights.lights, lights_size, cudaMemcpyHostToDevice), s.result);
 
-	size_t meshes_size = sizeof(mesh) * gltf_data->meshes_count;
 	s.meshes_count = gltf_data->meshes_count;
-	s.meshes = calloc(1, meshes_size);
+	s.meshes = calloc(gltf_data->meshes_count, sizeof(mesh));
 
 	if (s.meshes == NULL)
 	{
