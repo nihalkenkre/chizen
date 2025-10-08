@@ -21,7 +21,7 @@ __global__ void init_random_states_kernel(void* states, size_t seed, uint32_t re
 	curand_init(pixel_idx + seed, 0, 0, ((curandState*)states) + pixel_idx);
 }
 
-void init_random_states(void* states, uint32_t render_width, uint32_t render_height, cudaStream_t stream)
+void generate_random_states(void* states, uint32_t render_width, uint32_t render_height, cudaStream_t stream)
 {
 	// tx * ty < 1024 (max threads per block)
 	uint32_t tx = min(render_width, 32);

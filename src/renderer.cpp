@@ -163,8 +163,8 @@ CHIZEN_RESULT renderer_render_gltf(const uint32_t render_width, const uint32_t r
 		},
 	};
 
-	OPTIX_CHECK("ch program group create", optixProgramGroupCreate(ctx, &ch_od_pg_desc, 1, &pg_options, nullptr, nullptr, &ch_od_pg), chi_result);
-	OPTIX_CHECK("ch program group create", optixProgramGroupCreate(ctx, &ch_ld_pg_desc, 1, &pg_options, nullptr, nullptr, &ch_ld_pg), chi_result);
+	OPTIX_CHECK("ch od program group create", optixProgramGroupCreate(ctx, &ch_od_pg_desc, 1, &pg_options, nullptr, nullptr, &ch_od_pg), chi_result);
+	OPTIX_CHECK("ch ld program group create", optixProgramGroupCreate(ctx, &ch_ld_pg_desc, 1, &pg_options, nullptr, nullptr, &ch_ld_pg), chi_result);
 	s = scene_create_from_gltf(gltf_data, ch_od_pg, ch_ld_pg, ctx, 0);
 	CHIZEN_RESULT_CHECK("scene create", s.result, chi_result);
 
@@ -280,7 +280,8 @@ CHIZEN_RESULT renderer_render_gltf(const uint32_t render_width, const uint32_t r
 
 	OPTIX_CHECK("create pipeline", optixPipelineCreate(ctx, &pipeline_compile_options, &pipeline_link_options, pipeline_pgs, _countof(pipeline_pgs), nullptr, nullptr, &pipeline), chi_result);
 
-	init_random_states(lp.states, render_width, render_height, 0);
+	printf("generating random states...\n");
+	generate_random_states(lp.states, render_width, render_height, 0);
 
 	for (uint32_t s = 0; s < NUM_SAMPLES; ++s)
 	{

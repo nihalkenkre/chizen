@@ -80,6 +80,7 @@ primitive primitive_create(const cgltf_data* gltf_data, cgltf_primitive* curr_pr
 	p.build_input.triangleArray.indexFormat = indices_format;
 	p.build_input.triangleArray.numSbtRecords = 1;
 
+	size_t curr_ch_info_count = ch_infos->count;
 	if (ch_infos->count == 0)
 	{
 		ch_infos->ch_records = calloc(RAY_TYPE_MAX, sizeof(ch_record));
@@ -106,7 +107,7 @@ primitive primitive_create(const cgltf_data* gltf_data, cgltf_primitive* curr_pr
 	}
 
 	// od ch_record
-	ch_record* curr_ch_record = ch_infos->ch_records + (ch_infos->count - RAY_TYPE_MAX);
+	ch_record* curr_ch_record = ch_infos->ch_records + curr_ch_info_count;
 	OPTIX_CHECK("record pack header", optixSbtRecordPackHeader(ch_od_pg, curr_ch_record->header), p.result);
 
 	curr_ch_record->data.indices = (void*)p.d_indices;
@@ -123,7 +124,7 @@ primitive primitive_create(const cgltf_data* gltf_data, cgltf_primitive* curr_pr
 	curr_ch_record->data.uvs = (float2*)p.d_uvs;
 
 	// ld ch_record
-	curr_ch_record = ch_infos->ch_records + (ch_infos->count - (RAY_TYPE_MAX - 1));
+	curr_ch_record = ch_infos->ch_records + (curr_ch_info_count + 1);
 	OPTIX_CHECK("record pack header", optixSbtRecordPackHeader(ch_ld_pg, curr_ch_record->header), p.result);
 
 	curr_ch_record->data.indices = (void*)p.d_indices;

@@ -14,7 +14,7 @@ mesh mesh_create(const cgltf_data* data, cgltf_mesh* curr_mesh, const OptixProgr
 	CUdeviceptr tmp_buffer = 0;
 
 	m.prims_count = curr_mesh->primitives_count;
-	m.prims = calloc(1, sizeof(primitive) * m.prims_count);
+	m.prims = calloc(m.prims_count, sizeof(primitive));
 	if (m.prims == NULL)
 	{
 		printf("calloc failed for m.prims\n");
@@ -22,7 +22,7 @@ mesh mesh_create(const cgltf_data* data, cgltf_mesh* curr_mesh, const OptixProgr
 		goto cpu_error;
 	}
 
-	build_inputs = calloc(1, sizeof(OptixBuildInput) * m.prims_count);
+	build_inputs = calloc(m.prims_count, sizeof(OptixBuildInput));
 	if (build_inputs == NULL)
 	{
 		printf("calloc failed for mesh build inputs\n");
