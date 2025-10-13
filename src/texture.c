@@ -66,9 +66,14 @@ gpu_error:
 	return t;
 }
 
-void texture_destroy(texture t)
+CHIZEN_RESULT texture_destroy(texture t)
 {
-	cudaDestroyTextureObject(t.d_obj);
+	CHIZEN_RESULT chi_result = CHIZEN_RESULT_SUCCESS;
+	cudaError_t cuda_error = cudaSuccess;
 
-	return;
+	CU_CHECK("free texture object", cudaDestroyTextureObject(t.d_obj), chi_result);
+
+gpu_error:
+
+	return chi_result;
 }

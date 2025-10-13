@@ -96,6 +96,7 @@ cpu_error:
 CHIZEN_RESULT lights_destroy(lights l)
 {
 	CHIZEN_RESULT chi_result = CHIZEN_RESULT_SUCCESS;
+
 	free(l.lights);
 	l.lights = NULL;
 	l.count = 0;

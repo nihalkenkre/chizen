@@ -59,8 +59,8 @@ static DWORD render_scene(LPVOID parameter)
 	printf("done\n");
 	KillTimer(*(HWND*)parameter, render_timer);
 
+	
 	free(parameter);
-
 cpu_error:
 gpu_error:
 

@@ -14,4 +14,4 @@ typedef struct texture
 } texture;
 
 texture texture_create(const cgltf_data* gltf_data, const cgltf_texture* curr_tex, const image* images);
-void texture_destroy(texture t);
+CHIZEN_RESULT texture_destroy(texture t);

@@ -205,6 +205,11 @@ gpu_error:
 	s.ch_infos.ch_records = NULL;
 	s.ch_infos.count = 0;
 
+	for (size_t m = 0; m < s.meshes_count; ++m)
+	{
+		mesh_destroy(s.meshes[m]);
+	}
+	
 	free(s.meshes);
 	s.meshes = NULL;
 	s.meshes_count = 0;
