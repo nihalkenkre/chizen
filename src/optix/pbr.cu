@@ -18,7 +18,21 @@
 #include <optix_stack_size.h>
 #include <optix_function_table_definition.h>
 
-#define NUM_LD_BOUNCES 8
+#define NUM_LD_BOUNCES 12
+
+typedef struct hit_data
+{
+	float3 onb[3];
+	float3 pos;
+	float3 nrm;
+	float3 base_color;
+	float3 emission_color;
+	float2 uv;
+	float metalness;
+	float roughness;
+	float transmission;
+	float ior;
+} hit_data;
 
 typedef struct bsdf_sample
 {
@@ -428,6 +442,67 @@ __device__ static bsdf_sample sample_uniform_transmission(float3* onb, float3 in
 	return bs;
 }
 
+__device__ static hit_data get_hit_data(ch_record_data* ch_data, unsigned int primitive_idx)
+{
+	hit_data hd = {};
+
+	float2 tmp_bary_coords = optixGetTriangleBarycentrics();
+	float3 bary_coords = {
+		 tmp_bary_coords.x,
+		 tmp_bary_coords.y,
+		 1.f - tmp_bary_coords.x - tmp_bary_coords.y,
+	};
+
+	uint3 index_triplet = {};
+	if (ch_data->indices_format == OPTIX_INDICES_FORMAT_UNSIGNED_BYTE3)
+	{
+		uchar3 tmp = *((uchar3*)ch_data->indices + primitive_idx);
+		index_triplet.x = tmp.x;
+		index_triplet.y = tmp.y;
+		index_triplet.z = tmp.z;
+	}
+	if (ch_data->indices_format == OPTIX_INDICES_FORMAT_UNSIGNED_SHORT3)
+	{
+		ushort3 tmp = *((ushort3*)ch_data->indices + primitive_idx);
+		index_triplet.x = tmp.x;
+		index_triplet.y = tmp.y;
+		index_triplet.z = tmp.z;
+	}
+	else
+	{
+		index_triplet = *((uint3*)ch_data->indices + primitive_idx);
+	}
+
+	hd.nrm =
+		normalize(optixTransformNormalFromObjectToWorldSpace(
+			ch_data->normals[index_triplet.x] * bary_coords.z +
+			ch_data->normals[index_triplet.y] * bary_coords.x +
+			ch_data->normals[index_triplet.z] * bary_coords.y)
+		);
+
+	if (ch_data->uvs > 0)
+	{
+		hd.uv = ch_data->uvs[index_triplet.x] * bary_coords.z + ch_data->uvs[index_triplet.y] * bary_coords.x + ch_data->uvs[index_triplet.z] * bary_coords.y;
+	}
+
+	float3 a = abs(hd.nrm.z) > 0.9f ? float3{ 0,1,0 } : float3{ 0,0,1 };
+	float3 hit_tngt = normalize(cross(hd.nrm, a));
+	
+	hd.onb[0] = cross(hd.nrm, hit_tngt);
+	hd.onb[1] = hit_tngt;
+	hd.onb[2] = hd.nrm;
+
+	hd.pos = (optixGetWorldRayOrigin() + optixGetWorldRayDirection() * optixGetRayTmax());
+	hd.base_color = get_base_color(ch_data->material_index, hd.uv);
+	hd.metalness = get_metalness(ch_data->material_index, hd.uv);
+	hd.roughness = get_roughness(ch_data->material_index, hd.uv);
+	hd.transmission = get_transmission(ch_data->material_index, hd.uv);
+	hd.ior = get_ior(ch_data->material_index);
+	hd.emission_color = get_emission_color(ch_data->material_index, hd.uv);
+
+	return hd;
+}
+
 __device__ static ray generate_primary_ray(float2 offset, const size_t x, const size_t y, float3 pixel_00_loc, float3 pixel_delta_u, float3 pixel_delta_v, float3 org)
 {
 	float3 pixel_delta_u_x = pixel_delta_u * (float)x;
@@ -499,7 +574,7 @@ __device__ static void write_ld_pixels(const ld_payload& pl, uint3 launch_index)
 			lp.passes[p].d_pixels[pixel_idx] += pl.final_color.x;
 			lp.passes[p].d_pixels[pixel_idx + 1] += pl.final_color.y;
 			lp.passes[p].d_pixels[pixel_idx + 2] += pl.final_color.z;
-			lp.passes[p].d_pixels[pixel_idx + 3] += 1;
+			lp.passes[p].d_pixels[pixel_idx + 3] += 1; 
 		}
 	}
 }
@@ -644,109 +719,54 @@ extern "C" __global__ void __closesthit__od()
 
 extern "C" __global__ void __closesthit__ld()
 {
-	float2 tmp_bary_coords = optixGetTriangleBarycentrics();
-	float3 bary_coords = {
-		 tmp_bary_coords.x,
-		 tmp_bary_coords.y,
-		 1.f - tmp_bary_coords.x - tmp_bary_coords.y,
-	};
-
 	uint3 launch_index = optixGetLaunchIndex();
 	unsigned int primitive_idx = optixGetPrimitiveIndex();
 	ch_record_data* ch_data = (ch_record_data*)optixGetSbtDataPointer();
 
-	uint3 index_triplet = {};
-	if (ch_data->indices_format == OPTIX_INDICES_FORMAT_UNSIGNED_BYTE3)
-	{
-		uchar3 tmp = *((uchar3*)ch_data->indices + primitive_idx);
-		index_triplet.x = tmp.x;
-		index_triplet.y = tmp.y;
-		index_triplet.z = tmp.z;
-	}
-	if (ch_data->indices_format == OPTIX_INDICES_FORMAT_UNSIGNED_SHORT3)
-	{
-		ushort3 tmp = *((ushort3*)ch_data->indices + primitive_idx);
-		index_triplet.x = tmp.x;
-		index_triplet.y = tmp.y;
-		index_triplet.z = tmp.z;
-	}
-	else
-	{
-		index_triplet = *((uint3*)ch_data->indices + primitive_idx);
-	}
+	hit_data hd = get_hit_data(ch_data, primitive_idx);
 
-	float3 hit_nrm =
-		normalize(optixTransformNormalFromObjectToWorldSpace(
-			ch_data->normals[index_triplet.x] * bary_coords.z +
-			ch_data->normals[index_triplet.y] * bary_coords.x +
-			ch_data->normals[index_triplet.z] * bary_coords.y)
-		);
-
-	float2 uv = { 0, 0 };
-
-	if (ch_data->uvs > 0)
-	{
-		uv = ch_data->uvs[index_triplet.x] * bary_coords.z + ch_data->uvs[index_triplet.y] * bary_coords.x + ch_data->uvs[index_triplet.z] * bary_coords.y;
-	}
-
-	float3 emission_color = get_emission_color(ch_data->material_index, uv);
 	ld_payload* pl = (ld_payload*)merge_pointer(optixGetPayload_0(), optixGetPayload_1());
 
 	if (pl->is_camera_ray)
 		pl->is_camera_ray = false;
 
-	if (emission_color > 0.f)
+	if (hd.emission_color > 0.f)
 	{
 		pl->is_hit = false;
-		pl->final_color += pl->throughput * emission_color;
+		pl->final_color += pl->throughput * hd.emission_color;
 		return;
 	}
 	
-	float3 hit_pos = (optixGetWorldRayOrigin() + optixGetWorldRayDirection() * optixGetRayTmax());
-	float3 base_color = get_base_color(ch_data->material_index, uv);
-	float metalness = get_metalness(ch_data->material_index, uv);
-	float roughness = get_roughness(ch_data->material_index, uv);
-	float transmission = get_transmission(ch_data->material_index, uv);
-	float ior = get_ior(ch_data->material_index);
-
-	float3 a = abs(hit_nrm.z) > 0.9f ? float3{ 0,1,0 } : float3{ 0,0,1 };
-	float3 hit_tngt = normalize(cross(hit_nrm, a));
-	
-	float3 onb[3] = {
-		cross(hit_nrm, hit_tngt),
-		hit_tngt,
-		hit_nrm,
-	};
 	bsdf_sample bs = {};
 
-	if (metalness == 1)
+	if (hd.metalness == 1)
 	{
-		bs.ray_dir = reflect(optixGetWorldRayDirection(), hit_nrm);
+		bs.ray_dir = reflect(optixGetWorldRayDirection(), hd.nrm);
 		bs.brdf = 1;
 		bs.pdf = 1;
 		pl->is_hit = true;
-		pl->throughput *= (bs.brdf * base_color) / bs.pdf;
+		pl->throughput *= (bs.brdf * hd.base_color) / bs.pdf;
 	}
 	else
 	{
-		float fresnel = calculate_fresnel_dielectric(optixGetWorldRayDirection(), hit_nrm, ior);
+		float fresnel = calculate_fresnel_dielectric(optixGetWorldRayDirection(), hd.nrm, hd.ior);
 		if (curand_uniform(((curandState*)lp.states) + pl->r_idx) > fresnel)
 		{
-			if (curand_uniform(((curandState*)lp.states) + pl->r_idx) > transmission)
+			if (curand_uniform(((curandState*)lp.states) + pl->r_idx) > hd.transmission)
 			{
-				bs = sample_lambert_reflectance(onb, optixGetWorldRayDirection(), pl->r_idx);
+				bs = sample_lambert_reflectance(hd.onb, optixGetWorldRayDirection(), pl->r_idx);
 				pl->is_hit = true;
 			}
 			else
 			{
-				bs = sample_uniform_transmission(onb, optixGetWorldRayDirection(), roughness, ior, pl->r_idx);
+				bs = sample_uniform_transmission(hd.onb, optixGetWorldRayDirection(), hd.roughness, hd.ior, pl->r_idx);
 				pl->is_hit = true;
 			}
-			pl->throughput *= (bs.brdf * base_color) / bs.pdf;
+			pl->throughput *= (bs.brdf * hd.base_color) / bs.pdf;
 		}
 		else
 		{
-			bs.ray_dir = reflect(optixGetWorldRayDirection(), hit_nrm);
+			bs.ray_dir = reflect(optixGetWorldRayDirection(), hd.nrm);
 			bs.brdf = 1;
 			bs.pdf = 1;
 			pl->is_hit = true;
@@ -754,7 +774,7 @@ extern "C" __global__ void __closesthit__ld()
 		}
 	}
 		
-	pl->out_ray.org = hit_pos;
+	pl->out_ray.org = hd.pos;
 	pl->out_ray.dir = bs.ray_dir;
 }
 

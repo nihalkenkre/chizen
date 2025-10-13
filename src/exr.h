@@ -29,13 +29,28 @@ typedef struct EXR_LAYER
 
 typedef struct exr_pass
 {
-	union {
-		// CPU pixels
-		float* pixels;
-		// GPU pixels
-		float* d_pixels;
-	};
+	// CPU pixels
+	float* pixels;
+
+	// CPU display pixels
+	uint8_t* display_pixels;
+
+	// GPU display pixels
+	uint8_t* d_display_pixels;
+
+	// GPU pixels
+	float* d_pixels;
+
+	// GPU avg pixels;
+	float* d_avg_pixels;
+	
 	EXR_LAYER layer;
 } exr_pass;
 
-CHIZEN_RESULT write_exr(const char* file_path, const size_t render_width, const size_t render_height, const exr_pass* passes, const size_t passes_count);
+#ifdef __cplusplus
+extern "C" {
+#endif
+	CHIZEN_RESULT write_exr(const char* file_path, const size_t render_width, const size_t render_height, const exr_pass* passes, const size_t passes_count);
+#ifdef __cplusplus
+}
+#endif

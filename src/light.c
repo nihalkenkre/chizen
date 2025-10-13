@@ -2,7 +2,6 @@
 #include <string.h>
 #include <cglm/include/cglm/cglm.h>
 #include "utils.h"
-// #include <sutil/vec_math.h>
 
 light light_create(cgltf_node* curr_node)
 {

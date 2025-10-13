@@ -9,9 +9,6 @@
             "type": "cppvsdbg",
             "request": "launch",
             "program": "${workspaceRoot}/projects/chizen/x64/Debug/chizen.exe",
-            "args": [
-                "${workspaceFolder}/../sample_scenes/scene.glb",
-            ],
             "stopAtEntry": false,
             "cwd": "${fileDirname}",
             "environment": [],

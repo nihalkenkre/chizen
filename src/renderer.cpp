@@ -20,16 +20,15 @@
 #include <optix_function_table_definition.h>
 
 #include <Shlwapi.h>
-#include <ctime>
 
-#define NUM_SAMPLES 2048
+#define NUM_SAMPLES 1024
 
 static void log_cb(unsigned int level, const char* tag, const char* message, void* cbdata)
 {
 	printf("%d - %s: %s\n", level, tag, message);
 }
 
-CHIZEN_RESULT renderer_render_gltf(const uint32_t render_width, const uint32_t render_height, const char* gltf_path, exr_pass* passes, const uint32_t passes_count)
+CHIZEN_RESULT renderer_render_gltf(const uint32_t render_width, const uint32_t render_height, const char* gltf_path, passes_info* pi)
 {
 	CHIZEN_RESULT chi_result = CHIZEN_RESULT_SUCCESS;
 	cudaError_t cuda_error = cudaSuccess;
@@ -236,7 +235,7 @@ CHIZEN_RESULT renderer_render_gltf(const uint32_t render_width, const uint32_t r
 		.hitgroupRecordCount = (unsigned int)s.ch_infos.count,
 	};
 
-	d_exr_passes_staging = (exr_pass*)calloc(passes_count, sizeof(exr_pass));
+	d_exr_passes_staging = (exr_pass*)calloc(pi->passes_count, sizeof(exr_pass));
 	if (d_exr_passes_staging == nullptr)
 	{
 		printf("calloc failed for d_exr_passes_staging\n");
@@ -244,22 +243,23 @@ CHIZEN_RESULT renderer_render_gltf(const uint32_t render_width, const uint32_t r
 		goto cpu_error;
 	}
 
-	for (size_t p = 0; p < passes_count; ++p)
+	for (size_t p = 0; p < pi->passes_count; ++p)
 	{
-		d_exr_passes_staging[p].layer = passes[p].layer;
-		CU_CHECK("alloc d_pixels for exr staging", cudaMalloc((void**)(&d_exr_passes_staging[p].d_pixels), render_width * render_height * passes[p].layer.num_channels * sizeof(float)), chi_result);
+		d_exr_passes_staging[p].layer = pi->passes[p].layer;
+		CU_CHECK("alloc d_pixels for exr staging", cudaMalloc((void**)(&d_exr_passes_staging[p].d_pixels), render_width * render_height * pi->passes[p].layer.num_channels * sizeof(float)), chi_result);
+		CU_CHECK("alloc d_avg_pixels for exr staging", cudaMalloc((void**)(&d_exr_passes_staging[p].d_avg_pixels), render_width * render_height * pi->passes[p].layer.num_channels * sizeof(float)), chi_result);
+		CU_CHECK("alloc d_display_pixels for exr staging", cudaMalloc((void**)(&d_exr_passes_staging[p].d_display_pixels), render_width * render_height * 4 * sizeof(uint8_t)), chi_result);
 	}
 
-	CU_CHECK("alloc d_exr_passes", cudaMalloc((void**)&d_exr_passes, sizeof(exr_pass) * passes_count), chi_result);
-	CU_CHECK("copy d_exr staging to final", cudaMemcpy((void*)d_exr_passes, d_exr_passes_staging, sizeof(exr_pass) * passes_count, cudaMemcpyHostToDevice), chi_result);
+	CU_CHECK("alloc d_exr_passes", cudaMalloc((void**)&d_exr_passes, sizeof(exr_pass) * pi->passes_count), chi_result);
+	CU_CHECK("copy d_exr staging to final", cudaMemcpy((void*)d_exr_passes, d_exr_passes_staging, sizeof(exr_pass) * pi->passes_count, cudaMemcpyHostToDevice), chi_result);
 
-	srand((unsigned int)time(NULL));
 	CU_CHECK("alloc rand states", cudaMalloc((void**)&d_rand_states, render_width * render_height * sizeof(curandState)), chi_result);
 	lp = {
 		.textures = s.d_textures,
 		.materials = s.d_materials,
 		.passes = (exr_pass*)d_exr_passes,
-		.passes_count = passes_count,
+		.passes_count = pi->passes_count,
 		.lights = s.d_lights,
 		.lights_count = s.d_lights_count,
 		.render_width = render_width,
@@ -280,27 +280,33 @@ CHIZEN_RESULT renderer_render_gltf(const uint32_t render_width, const uint32_t r
 
 	OPTIX_CHECK("create pipeline", optixPipelineCreate(ctx, &pipeline_compile_options, &pipeline_link_options, pipeline_pgs, _countof(pipeline_pgs), nullptr, nullptr, &pipeline), chi_result);
 
-	printf("generating random states...\n");
+	printf("generating random states...");
 	generate_random_states(lp.states, render_width, render_height, 0);
-
+	printf("done.\n");
+	
 	for (uint32_t s = 0; s < NUM_SAMPLES; ++s)
 	{
-		printf("\rProcess sample %u...", s+1);
+		printf("\rProcessing sample %u...", s + 1);
 		OPTIX_CHECK("launch", optixLaunch(pipeline, 0, d_launch_params, sizeof(launch_params), &sbt, (unsigned int)render_width, (unsigned int)render_height, 1), chi_result);
+		
+		avg_and_display_ld_pixels((void*)d_exr_passes, pi->passes_count, render_width, render_height, s + 1, 0);
+		for (size_t p = 0; p < pi->passes_count; ++p)
+		{
+			CU_CHECK("copy display pixels to host", cudaMemcpy(pi->passes[p].display_pixels, (void*)((exr_pass*)d_exr_passes_staging)[p].d_display_pixels, render_width * render_height * 4 * sizeof(uint8_t), cudaMemcpyDeviceToHost), chi_result);
+		}
 	}
-	printf("\n");
 	
-	printf("averaging pixels...\n");
-	avg_ld_pixels((void*)d_exr_passes, passes_count, render_width, render_height, NUM_SAMPLES, 0);
-
+	printf("done.\n");
+	
 	CU_CHECK("get last error", cudaGetLastError(), chi_result);
 	CU_CHECK("stream sync", cudaStreamSynchronize(0), chi_result);
 
-	printf("copying pixels to host...\n");
-	for (size_t p = 0; p < passes_count; ++p)
+	printf("copying pixels to host...");
+	for (size_t p = 0; p < pi->passes_count; ++p)
 	{
-		CU_CHECK("copy pass pixels to host", cudaMemcpy(passes[p].pixels, (void*)((exr_pass*)d_exr_passes_staging)[p].d_pixels, render_width * render_height * passes[p].layer.num_channels * sizeof(float), cudaMemcpyDeviceToHost), chi_result);
+		CU_CHECK("copy pass pixels to host", cudaMemcpy(pi->passes[p].pixels, (void*)((exr_pass*)d_exr_passes_staging)[p].d_avg_pixels, render_width * render_height * pi->passes[p].layer.num_channels * sizeof(float), cudaMemcpyDeviceToHost), chi_result);
 	}
+	printf("done.\n");
 
 cpu_error:
 	CU_CHECK("free rand states", cudaFree((void*)d_rand_states), chi_result);
@@ -315,9 +321,10 @@ cpu_error:
 
 	if (d_exr_passes_staging != NULL)
 	{
-		for (size_t p = 0; p < passes_count; ++p)
+		for (size_t p = 0; p < pi->passes_count; ++p)
 		{
 			CU_CHECK("free exr d_pixels", cudaFree((void*)d_exr_passes_staging[p].d_pixels), chi_result);
+			CU_CHECK("free exr d_avg_pixels", cudaFree((void*)d_exr_passes_staging[p].d_avg_pixels), chi_result);
 		}
 	}
 

@@ -34,16 +34,16 @@ void generate_random_states(void* states, uint32_t render_width, uint32_t render
 	init_random_states_kernel<<<blocks, threads, 0, stream>>>(states, rand(), render_width, render_height);
 }
 
-__global__ void avg_ld_pixels_kernel(exr_pass* passes, uint32_t passes_count, uint32_t render_width, uint32_t render_height, uint32_t samples_count)
+__global__ void avg_and_display_ld_pixels_kernel(exr_pass* passes, uint32_t passes_count, uint32_t render_width, uint32_t render_height, uint32_t samples_count)
 {
+	size_t x = blockIdx.x * blockDim.x + threadIdx.x;
+	size_t y = blockIdx.y * blockDim.y + threadIdx.y;
+	
+	if (x > render_width || y > render_height)
+		return;
+
 	for (size_t p = 0; p < passes_count; ++p)
 	{
-		size_t x = blockIdx.x * blockDim.x + threadIdx.x;
-		size_t y = blockIdx.y * blockDim.y + threadIdx.y;
-		
-		if (x > render_width || y > render_height)
-			continue;
-
 		size_t pixel_idx = (y * render_width * passes[p].layer.num_channels) + (x * passes[p].layer.num_channels);
 		
 		if (passes[p].layer.type == EXR_LAYER_TYPE_DIFFUSE ||
@@ -51,19 +51,20 @@ __global__ void avg_ld_pixels_kernel(exr_pass* passes, uint32_t passes_count, ui
 			passes[p].layer.type == EXR_LAYER_TYPE_FINALCOLOR
 		)
 		{
-			passes[p].d_pixels[pixel_idx] /= samples_count;
-			passes[p].d_pixels[pixel_idx + 1] /= samples_count;
-			passes[p].d_pixels[pixel_idx + 2] /= samples_count;
-			passes[p].d_pixels[pixel_idx + 3] /= samples_count;
+			passes[p].d_avg_pixels[pixel_idx] = powf(passes[p].d_pixels[pixel_idx] / samples_count, 0.454545f);
+			passes[p].d_avg_pixels[pixel_idx + 1] = powf(passes[p].d_pixels[pixel_idx + 1] / samples_count, 0.454545f);
+			passes[p].d_avg_pixels[pixel_idx + 2] = powf(passes[p].d_pixels[pixel_idx + 2] / samples_count, 0.454545f);
+			passes[p].d_avg_pixels[pixel_idx + 3] = passes[p].d_pixels[pixel_idx + 3] / samples_count;
+			
 
-			passes[p].d_pixels[pixel_idx] = powf(passes[p].d_pixels[pixel_idx], 0.454545f);
-			passes[p].d_pixels[pixel_idx + 1] = powf(passes[p].d_pixels[pixel_idx + 1], 0.454545f);
-			passes[p].d_pixels[pixel_idx + 2] = powf(passes[p].d_pixels[pixel_idx + 2], 0.454545f);
+			passes[p].d_display_pixels[pixel_idx] = min(passes[p].d_avg_pixels[pixel_idx + 2], 1.f) * 255;
+			passes[p].d_display_pixels[pixel_idx + 1] = min(passes[p].d_avg_pixels[pixel_idx + 1], 1.f) * 255;;
+			passes[p].d_display_pixels[pixel_idx + 2] = min(passes[p].d_avg_pixels[pixel_idx], 1.f) * 255;;
 		}
 	}
 }
 
-void avg_ld_pixels(void* passes, uint32_t passes_count, uint32_t render_width, uint32_t render_height, uint32_t samples_count, cudaStream_t stream)
+void avg_and_display_ld_pixels(void* passes, uint32_t passes_count, uint32_t render_width, uint32_t render_height, uint32_t samples_count, cudaStream_t stream)
 {
 	// tx * ty < 1024 (max threads per block)
 	uint32_t tx = min(render_width, 32);
@@ -72,5 +73,35 @@ void avg_ld_pixels(void* passes, uint32_t passes_count, uint32_t render_width, u
 	dim3 blocks((render_width / tx) + 1, (render_height / ty) + 1);
 	dim3 threads(tx, ty);
 
-	avg_ld_pixels_kernel<<<blocks, threads, 0, stream>>>((exr_pass*)passes, passes_count, render_width, render_height, samples_count);
+	avg_and_display_ld_pixels_kernel<<<blocks, threads, 0, stream>>>((exr_pass*)passes, passes_count, render_width, render_height, samples_count);
+}
+
+__global__ void convert_float_to_uint_kernel(exr_pass* passes, uint32_t passes_count, uint32_t render_width, uint32_t render_height)
+{
+	size_t x = blockIdx.x * blockDim.x + threadIdx.x;
+	size_t y = blockIdx.y * blockDim.y + threadIdx.y;
+	
+	if (x > render_width || y > render_height)
+		return;
+
+	for (size_t p = 0; p < passes_count; ++p)
+	{
+		size_t pixel_idx = (y * render_width * passes[p].layer.num_channels) + (x * passes[p].layer.num_channels);
+		
+		passes[p].display_pixels[pixel_idx + 1] = (uint8_t)max(passes[p].d_avg_pixels[pixel_idx + 2], 1.f) * 255;
+		passes[p].display_pixels[pixel_idx + 2] = (uint8_t)max(passes[p].d_avg_pixels[pixel_idx + 1], 1.f) * 255;
+		passes[p].display_pixels[pixel_idx + 3] = (uint8_t)max(passes[p].d_avg_pixels[pixel_idx], 1.f) * 255;
+	}
+}
+
+void convert_float_to_uint_pixels(void* passes, uint32_t passes_count, uint32_t render_width, uint32_t render_height, cudaStream_t stream)
+{
+	// tx * ty < 1024 (max threads per block)
+	uint32_t tx = min(render_width, 32);
+	uint32_t ty = min(render_height, 32);
+
+	dim3 blocks((render_width / tx) + 1, (render_height / ty) + 1);
+	dim3 threads(tx, ty);
+
+	convert_float_to_uint_kernel<<<blocks, threads, 0, stream>>>((exr_pass*)passes, passes_count, render_width, render_height);
 }
