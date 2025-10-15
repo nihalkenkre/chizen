@@ -24,7 +24,6 @@ const float ASPECT_RATIO = 16.f / 9.f;
 #define RENDER_UPDATE_INTERVAL_MSECS 500
 
 static UINT_PTR render_timer = 0;
-static PTP_WORK render_work = NULL;
 static bool can_update = FALSE;
 HANDLE render_thread = NULL;
 
@@ -59,8 +58,8 @@ static DWORD render_scene(LPVOID parameter)
 	printf("done\n");
 	KillTimer(*(HWND*)parameter, render_timer);
 
-	
 	free(parameter);
+
 cpu_error:
 gpu_error:
 

@@ -773,7 +773,7 @@ extern "C" __global__ void __closesthit__ld()
 			pl->throughput *= (bs.brdf) / bs.pdf;
 		}
 	}
-		
+
 	pl->out_ray.org = hd.pos;
 	pl->out_ray.dir = bs.ray_dir;
 }
