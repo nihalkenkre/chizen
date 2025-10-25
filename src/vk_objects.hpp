@@ -424,6 +424,58 @@ namespace vk_device
 		}
 	}
 }
+
+namespace vk_semaphore
+{
+	struct data
+	{
+		VkSemaphore semaphore = VK_NULL_HANDLE;
+		VkSemaphoreType type = VK_SEMAPHORE_TYPE_BINARY;
+	};
+
+	vk_semaphore::data create(const VkDevice device, const VkSemaphoreType semaphore_type, const std::string& name)
+	{
+		const VkSemaphoreTypeCreateInfo t_ci = {
+			.sType = VK_STRUCTURE_TYPE_SEMAPHORE_TYPE_CREATE_INFO,
+			.semaphoreType = semaphore_type,
+			.initialValue = 0,
+		};
+
+		const VkSemaphoreCreateInfo create_info = {
+			.sType = VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO,
+			.pNext = &t_ci,
+		};
+
+		data d = {
+			.type = semaphore_type,
+		};
+
+		VK_CHECK("create semaphore", vkCreateSemaphore(device, &create_info, nullptr, &d.semaphore));
+		std::string s = name;
+
+#ifdef _DEBUG
+		const VkDebugUtilsObjectNameInfoEXT name_info = {
+			.sType = VK_STRUCTURE_TYPE_DEBUG_UTILS_OBJECT_NAME_INFO_EXT,
+			.objectType = VK_OBJECT_TYPE_SEMAPHORE,
+			.objectHandle = reinterpret_cast<uint64_t>(d.semaphore),
+			.pObjectName = name.c_str(),
+		};
+		VK_CHECK("set semaphore name", vkSetDebugUtilsObjectNameEXT(device, &name_info));
+#endif // _DEBUG
+
+		return d;
+	}
+
+	void destroy(const VkSemaphore semaphore, const VkDevice device)
+	{
+		if (semaphore != VK_NULL_HANDLE && device != VK_NULL_HANDLE)
+		{
+			vkDestroySemaphore(device, semaphore, nullptr);
+		}
+	}
+}
+
+
 namespace vk_swapchain
 {
 	struct data
@@ -436,6 +488,9 @@ namespace vk_swapchain
 		std::vector<VkCommandBuffer> cmd_buffs;
 		std::vector<VkSemaphore> rndr_semaphores;
 		std::vector<VkFence> present_fences;
+		vk_semaphore::data acq_wait_sem;
+		vk_semaphore::data acq_sig_sem;
+		uint64_t acq_wait_sem_val = 0;
 		uint32_t images_count = 0;
 		uint32_t curr_img_idx = 0;
 	};
@@ -522,6 +577,17 @@ namespace vk_swapchain
 			VK_CHECK("create fence", vkCreateFence(device, &fence_ci, nullptr, &d.present_fences[i]));
 		}
 
+		d.acq_sig_sem = vk_semaphore::create(device, VK_SEMAPHORE_TYPE_BINARY, "acq sig sem");
+		d.acq_wait_sem = vk_semaphore::create(device, VK_SEMAPHORE_TYPE_TIMELINE, "acq wait sem");
+
+		// signalling so that the render function does not stall on vkAcquireNextImage the first time
+		const VkSemaphoreSignalInfo sem_sig_info = {
+			.sType = VK_STRUCTURE_TYPE_SEMAPHORE_SIGNAL_INFO,
+			.semaphore = d.acq_wait_sem.semaphore,
+			.value = ++d.acq_wait_sem_val,
+		};
+		VK_CHECK("signal acq wait sem", vkSignalSemaphore(device, &sem_sig_info));
+
 #ifdef _DEBUG
 		VkDebugUtilsObjectNameInfoEXT name_info = {
 			.sType = VK_STRUCTURE_TYPE_DEBUG_UTILS_OBJECT_NAME_INFO_EXT,
@@ -576,6 +642,9 @@ namespace vk_swapchain
 
 	void destroy(vk_swapchain::data data, const VkDevice device)
 	{
+		//VK_CHECK("wait for present fence", vkWaitForFences(device, 1, &data.present_fences[data.curr_img_idx], VK_TRUE, UINT64_MAX));
+		//VK_CHECK("reset present fence", vkResetFences(device, 1, &data.present_fences[data.curr_img_idx]));
+
 		vkDestroyCommandPool(device, data.cmd_pool, nullptr);
 
 		for (uint32_t i = 0; i < data.images_count; ++i)
@@ -589,6 +658,9 @@ namespace vk_swapchain
 		{
 			vkDestroySwapchainKHR(device, data.swapchain, nullptr);
 		}
+
+		vk_semaphore::destroy(data.acq_sig_sem.semaphore, device);
+		vk_semaphore::destroy(data.acq_wait_sem.semaphore, device);
 	}
 };
 
@@ -680,56 +752,6 @@ namespace vk_command_buffer
 #endif // _DEBUG
 
 		return cmd_buff;
-	}
-}
-
-namespace vk_semaphore
-{
-	struct data
-	{
-		VkSemaphore semaphore = VK_NULL_HANDLE;
-		VkSemaphoreType type = VK_SEMAPHORE_TYPE_BINARY;
-	};
-
-	vk_semaphore::data create(const VkDevice device, const VkSemaphoreType semaphore_type, const std::string& name)
-	{
-		const VkSemaphoreTypeCreateInfo t_ci = {
-			.sType = VK_STRUCTURE_TYPE_SEMAPHORE_TYPE_CREATE_INFO,
-			.semaphoreType = semaphore_type,
-			.initialValue = 0,
-		};
-
-		const VkSemaphoreCreateInfo create_info = {
-			.sType = VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO,
-			.pNext = &t_ci,
-		};
-
-		data d = {
-			.type = semaphore_type,
-		};
-
-		VK_CHECK("create semaphore", vkCreateSemaphore(device, &create_info, nullptr, &d.semaphore));
-		std::string s = name;
-
-#ifdef _DEBUG
-		const VkDebugUtilsObjectNameInfoEXT name_info = {
-			.sType = VK_STRUCTURE_TYPE_DEBUG_UTILS_OBJECT_NAME_INFO_EXT,
-			.objectType = VK_OBJECT_TYPE_SEMAPHORE,
-			.objectHandle = reinterpret_cast<uint64_t>(d.semaphore),
-			.pObjectName = name.c_str(),
-		};
-		VK_CHECK("set semaphore name", vkSetDebugUtilsObjectNameEXT(device, &name_info));
-#endif // _DEBUG
-
-		return d;
-	}
-
-	void destroy(const VkSemaphore semaphore, const VkDevice device)
-	{
-		if (semaphore != VK_NULL_HANDLE && device != VK_NULL_HANDLE)
-		{
-			vkDestroySemaphore(device, semaphore, nullptr);
-		}
 	}
 }
 
