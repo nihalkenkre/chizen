@@ -12,7 +12,7 @@ VKAPI_ATTR VkResult VKAPI_CALL vkSetDebugUtilsObjectNameEXT(
 #define VK_CHECK(action, result)					\
 	if (result < VK_SUCCESS)						\
 	{														\
-		std::println("{} {}", action, std::format("%d", static_cast<int32_t>(result)));\
+		std::printf("%s %d\n", action, result);	\
 	}
 
 inline static VkDeviceSize ALIGNED_SIZE(VkDeviceSize value, VkDeviceSize alignment)
@@ -601,20 +601,22 @@ namespace vk_command_pool
 
 	data create(const VkDevice device, const uint32_t q_fly_idx, const uint32_t cmd_buffs_count, const std::string& name)
 	{
-		VkCommandPoolCreateInfo cmd_pool_ci = {};
-		cmd_pool_ci.sType = VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO;
-		cmd_pool_ci.flags = VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT;
-		cmd_pool_ci.queueFamilyIndex = q_fly_idx;
+		const VkCommandPoolCreateInfo cmd_pool_ci = {
+			.sType = VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO,
+			.flags = VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT,
+			.queueFamilyIndex = q_fly_idx,
+		};
 
 		vk_command_pool::data d;
 
 		VK_CHECK("create command pool", vkCreateCommandPool(device, &cmd_pool_ci, nullptr, &d.cmd_pool));
 
-		VkCommandBufferAllocateInfo allocate_info = {};
-		allocate_info.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO;
-		allocate_info.commandPool = d.cmd_pool;
-		allocate_info.level = VK_COMMAND_BUFFER_LEVEL_PRIMARY;
-		allocate_info.commandBufferCount = cmd_buffs_count;
+		const VkCommandBufferAllocateInfo allocate_info = {
+			.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO,
+			.commandPool = d.cmd_pool,
+			.level = VK_COMMAND_BUFFER_LEVEL_PRIMARY,
+			.commandBufferCount = cmd_buffs_count,
+		};
 
 		d.cmd_buffs.resize(cmd_buffs_count);
 
@@ -656,11 +658,12 @@ namespace vk_command_buffer
 {
 	VkCommandBuffer allocate(const VkDevice device, const VkCommandPool cmd_pool, const std::string& name)
 	{
-		VkCommandBufferAllocateInfo allocate_info = {};
-		allocate_info.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO;
-		allocate_info.commandPool = cmd_pool;
-		allocate_info.level = VK_COMMAND_BUFFER_LEVEL_PRIMARY;
-		allocate_info.commandBufferCount = 1;
+		const VkCommandBufferAllocateInfo allocate_info = {
+			.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO,
+			.commandPool = cmd_pool,
+			.level = VK_COMMAND_BUFFER_LEVEL_PRIMARY,
+			.commandBufferCount = 1,
+		};
 
 		VkCommandBuffer cmd_buff = VK_NULL_HANDLE;
 		VK_CHECK("allocate command buffer", vkAllocateCommandBuffers(device, &allocate_info, &cmd_buff));
@@ -690,14 +693,16 @@ namespace vk_semaphore
 
 	vk_semaphore::data create(const VkDevice device, const VkSemaphoreType semaphore_type, const std::string& name)
 	{
-		VkSemaphoreTypeCreateInfo t_ci = {};
-		t_ci.sType = VK_STRUCTURE_TYPE_SEMAPHORE_TYPE_CREATE_INFO;
-		t_ci.initialValue = 0;
-		t_ci.semaphoreType = semaphore_type;
+		const VkSemaphoreTypeCreateInfo t_ci = {
+			.sType = VK_STRUCTURE_TYPE_SEMAPHORE_TYPE_CREATE_INFO,
+			.semaphoreType = semaphore_type,
+			.initialValue = 0,
+		};
 
-		VkSemaphoreCreateInfo create_info = {};
-		create_info.sType = VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO;
-		create_info.pNext = &t_ci;
+		const VkSemaphoreCreateInfo create_info = {
+			.sType = VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO,
+			.pNext = &t_ci,
+		};
 
 		data d = {
 			.type = semaphore_type,
@@ -732,9 +737,10 @@ namespace vk_fence
 {
 	VkFence create(const VkDevice device, const VkFenceCreateFlags flags, const std::string& name)
 	{
-		VkFenceCreateInfo create_info = {};
-		create_info.sType = VK_STRUCTURE_TYPE_FENCE_CREATE_INFO;
-		create_info.flags = flags;
+		const VkFenceCreateInfo create_info = {
+			.sType = VK_STRUCTURE_TYPE_FENCE_CREATE_INFO,
+			.flags = flags,
+		};
 
 		VkFence fence = VK_NULL_HANDLE;
 
@@ -767,10 +773,11 @@ namespace vk_buffer
 {
 	VkBuffer create(const VkDevice device, const VkDeviceSize size, const VkBufferUsageFlags usage, const std::string& name)
 	{
-		VkBufferCreateInfo create_info = {};
-		create_info.sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
-		create_info.size = size;
-		create_info.usage = usage;
+		const VkBufferCreateInfo create_info = {
+			.sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO,
+			.size = size,
+			.usage = usage,
+		};
 
 		VkBuffer buffer = VK_NULL_HANDLE;
 		VK_CHECK("create buffer", vkCreateBuffer(device, &create_info, nullptr, &buffer));
@@ -802,10 +809,11 @@ namespace vk_device_memory
 {
 	VkDeviceMemory allocate(const VkDevice device, const VkDeviceSize size, const uint32_t type_id, const std::string& name)
 	{
-		VkMemoryAllocateInfo alloc_info = {};
-		alloc_info.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO;
-		alloc_info.allocationSize = size;
-		alloc_info.memoryTypeIndex = type_id;
+		const VkMemoryAllocateInfo alloc_info = {
+			.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO,
+			.allocationSize = size,
+			.memoryTypeIndex = type_id,
+		};
 
 		VkDeviceMemory memory = VK_NULL_HANDLE;
 		VK_CHECK("allocate memory", vkAllocateMemory(device, &alloc_info, nullptr, &memory));
@@ -1004,21 +1012,24 @@ namespace host_buffer_memory
 		host_buffer_memory::data d;
 
 		d.buffer = vk_buffer::create(device, data.size(), usage, name + " buffer");
-		VkBufferMemoryRequirementsInfo2 buff_mem_info = {};
-		buff_mem_info.sType = VK_STRUCTURE_TYPE_BUFFER_MEMORY_REQUIREMENTS_INFO_2;
-		buff_mem_info.buffer = d.buffer;
+		const VkBufferMemoryRequirementsInfo2 buff_mem_info = {
+			.sType = VK_STRUCTURE_TYPE_BUFFER_MEMORY_REQUIREMENTS_INFO_2,
+			.buffer = d.buffer,
+		};
 
-		VkMemoryRequirements2 mem_reqs = {};
-		mem_reqs.sType = VK_STRUCTURE_TYPE_MEMORY_REQUIREMENTS_2;
+		VkMemoryRequirements2 mem_reqs = {
+			.sType = VK_STRUCTURE_TYPE_MEMORY_REQUIREMENTS_2,
+		};
 
 		vkGetBufferMemoryRequirements2(device, &buff_mem_info, &mem_reqs);
 		uint32_t mem_types = VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_CACHED_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT;
 
 		if (usage & VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT)
 		{
-			VkMemoryAllocateFlagsInfo flags_info = {};
-			flags_info.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_FLAGS_INFO;
-			flags_info.flags = VK_MEMORY_ALLOCATE_DEVICE_ADDRESS_BIT;
+			const VkMemoryAllocateFlagsInfo flags_info = {
+				.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_FLAGS_INFO,
+				.flags = VK_MEMORY_ALLOCATE_DEVICE_ADDRESS_BIT,
+			};
 
 			d.memory = vk_device_memory::allocate(device, mem_reqs.memoryRequirements.size, get_memory_type_id(mem_props, mem_reqs, mem_types), flags_info, name + " memory");
 		}
@@ -1031,9 +1042,10 @@ namespace host_buffer_memory
 
 		if (usage & VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT)
 		{
-			VkBufferDeviceAddressInfo info = {};
-			info.sType = VK_STRUCTURE_TYPE_BUFFER_DEVICE_ADDRESS_INFO;
-			info.buffer = d.buffer;
+			const VkBufferDeviceAddressInfo info = {
+				.sType = VK_STRUCTURE_TYPE_BUFFER_DEVICE_ADDRESS_INFO,
+				.buffer = d.buffer,
+			};
 
 			d.addr = vkGetBufferDeviceAddress(device, &info);
 			d.usage = usage;
@@ -1042,11 +1054,12 @@ namespace host_buffer_memory
 		VK_CHECK("map memory", vkMapMemory(device, d.memory, offset, data.size(), 0, &d.map));
 
 		memcpy(d.map, data.data(), data.size());
-		VkMappedMemoryRange mem_range = {};
-		mem_range.sType = VK_STRUCTURE_TYPE_MAPPED_MEMORY_RANGE;
-		mem_range.memory = d.memory;
-		mem_range.offset = offset;
-		mem_range.size = data.size();
+		const VkMappedMemoryRange mem_range = {
+			.sType = VK_STRUCTURE_TYPE_MAPPED_MEMORY_RANGE,
+			.memory = d.memory,
+			.offset = offset,
+			.size = data.size(),
+		};
 		VK_CHECK("flush memory", vkFlushMappedMemoryRanges(device, 1, &mem_range));
 
 		return d;
@@ -1057,21 +1070,24 @@ namespace host_buffer_memory
 		host_buffer_memory::data d;
 
 		d.buffer = vk_buffer::create(device, size, usage, name + " buffer");
-		VkBufferMemoryRequirementsInfo2 buff_mem_info = {};
-		buff_mem_info.sType = VK_STRUCTURE_TYPE_BUFFER_MEMORY_REQUIREMENTS_INFO_2;
-		buff_mem_info.buffer = d.buffer;
+		const VkBufferMemoryRequirementsInfo2 buff_mem_info = {
+			.sType = VK_STRUCTURE_TYPE_BUFFER_MEMORY_REQUIREMENTS_INFO_2,
+			.buffer = d.buffer,
+		};
 
-		VkMemoryRequirements2 mem_reqs = {};
-		mem_reqs.sType = VK_STRUCTURE_TYPE_MEMORY_REQUIREMENTS_2;
+		VkMemoryRequirements2 mem_reqs = {
+			.sType = VK_STRUCTURE_TYPE_MEMORY_REQUIREMENTS_2,
+		};
 
 		vkGetBufferMemoryRequirements2(device, &buff_mem_info, &mem_reqs);
 		uint32_t mem_types = VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT;
 
 		if (usage & VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT)
 		{
-			VkMemoryAllocateFlagsInfo flags_info = {};
-			flags_info.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_FLAGS_INFO;
-			flags_info.flags = VK_MEMORY_ALLOCATE_DEVICE_ADDRESS_BIT;
+			const VkMemoryAllocateFlagsInfo flags_info = {
+				.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_FLAGS_INFO,
+				.flags = VK_MEMORY_ALLOCATE_DEVICE_ADDRESS_BIT,
+			};
 
 			d.memory = vk_device_memory::allocate(device, mem_reqs.memoryRequirements.size, get_memory_type_id(mem_props, mem_reqs, mem_types), flags_info, name + " memory");
 		}
@@ -1084,9 +1100,10 @@ namespace host_buffer_memory
 
 		if (usage & VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT)
 		{
-			VkBufferDeviceAddressInfo info = {};
-			info.sType = VK_STRUCTURE_TYPE_BUFFER_DEVICE_ADDRESS_INFO;
-			info.buffer = d.buffer;
+			const VkBufferDeviceAddressInfo info = {
+				.sType = VK_STRUCTURE_TYPE_BUFFER_DEVICE_ADDRESS_INFO,
+				.buffer = d.buffer,
+			};
 
 			d.addr = vkGetBufferDeviceAddress(device, &info);
 			d.usage = usage;
@@ -1124,18 +1141,19 @@ namespace device_buffer_memory
 		buff_mem_info.sType = VK_STRUCTURE_TYPE_BUFFER_MEMORY_REQUIREMENTS_INFO_2;
 		buff_mem_info.buffer = d.buffer;
 
-		VkMemoryRequirements2 mem_reqs = {};
-		mem_reqs.sType = VK_STRUCTURE_TYPE_MEMORY_REQUIREMENTS_2;
+		VkMemoryRequirements2 mem_reqs = {
+			.sType = VK_STRUCTURE_TYPE_MEMORY_REQUIREMENTS_2,
+		};
 
 		vkGetBufferMemoryRequirements2(device, &buff_mem_info, &mem_reqs);
 		uint32_t mem_types = VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT;
 
 		if (usage & VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT)
 		{
-			VkMemoryAllocateFlagsInfo flags_info = {};
-			flags_info.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_FLAGS_INFO;
-			flags_info.flags = VK_MEMORY_ALLOCATE_DEVICE_ADDRESS_BIT;
-
+			const VkMemoryAllocateFlagsInfo flags_info = {
+				.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_FLAGS_INFO,
+				.flags = VK_MEMORY_ALLOCATE_DEVICE_ADDRESS_BIT,
+			};
 			d.memory = vk_device_memory::allocate(device, mem_reqs.memoryRequirements.size, get_memory_type_id(mem_props, mem_reqs, mem_types), flags_info, name + " memory");
 		}
 		else
@@ -1147,9 +1165,10 @@ namespace device_buffer_memory
 
 		if (usage & VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT)
 		{
-			VkBufferDeviceAddressInfo info = {};
-			info.sType = VK_STRUCTURE_TYPE_BUFFER_DEVICE_ADDRESS_INFO;
-			info.buffer = d.buffer;
+			const VkBufferDeviceAddressInfo info = {
+				.sType = VK_STRUCTURE_TYPE_BUFFER_DEVICE_ADDRESS_INFO,
+				.buffer = d.buffer,
+			};
 
 			d.addr = vkGetBufferDeviceAddress(device, &info);
 			d.usage = usage;
@@ -1164,23 +1183,24 @@ namespace device_buffer_memory
 
 		device_buffer_memory::data d;
 		d.buffer = vk_buffer::create(device, data.size(), usage, name + " buffer");
-		VkBufferMemoryRequirementsInfo2 buff_mem_info = {};
-		buff_mem_info.sType = VK_STRUCTURE_TYPE_BUFFER_MEMORY_REQUIREMENTS_INFO_2;
-		buff_mem_info.buffer = d.buffer;
+		const VkBufferMemoryRequirementsInfo2 buff_mem_info = {
+			.sType = VK_STRUCTURE_TYPE_BUFFER_MEMORY_REQUIREMENTS_INFO_2,
+			.buffer = d.buffer,
+		};
 
-		VkMemoryRequirements2 mem_reqs = {};
-		mem_reqs.sType = VK_STRUCTURE_TYPE_MEMORY_REQUIREMENTS_2;
+		VkMemoryRequirements2 mem_reqs = {
+			.sType = VK_STRUCTURE_TYPE_MEMORY_REQUIREMENTS_2,
+		};
 
 		vkGetBufferMemoryRequirements2(device, &buff_mem_info, &mem_reqs);
 		uint32_t mem_types = VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT;
 
-		//// device mem checker
-		// usage |= VK_BUFFER_USAGE_TRANSFER_SRC_BIT;
 		if (usage & VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT)
 		{
-			VkMemoryAllocateFlagsInfo flags_info = {};
-			flags_info.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_FLAGS_INFO;
-			flags_info.flags = VK_MEMORY_ALLOCATE_DEVICE_ADDRESS_BIT;
+			const VkMemoryAllocateFlagsInfo flags_info = {
+				.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_FLAGS_INFO,
+				.flags = VK_MEMORY_ALLOCATE_DEVICE_ADDRESS_BIT,
+			};
 
 			d.memory = vk_device_memory::allocate(device, mem_reqs.memoryRequirements.size, get_memory_type_id(mem_props, mem_reqs, mem_types), flags_info, name + " memory");
 		}
@@ -1193,9 +1213,10 @@ namespace device_buffer_memory
 
 		if (usage & VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT)
 		{
-			VkBufferDeviceAddressInfo info = {};
-			info.sType = VK_STRUCTURE_TYPE_BUFFER_DEVICE_ADDRESS_INFO;
-			info.buffer = d.buffer;
+			const VkBufferDeviceAddressInfo info = {
+				.sType = VK_STRUCTURE_TYPE_BUFFER_DEVICE_ADDRESS_INFO,
+				.buffer = d.buffer,
+			};
 
 			d.addr = vkGetBufferDeviceAddress(device, &info);
 			d.usage = usage;

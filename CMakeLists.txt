@@ -12,7 +12,7 @@ file(GLOB IMGUI_FILE_DLG_SRCS ImGuiFileDialog/ImGuiFileDialog*.*)
 
 add_executable(${PROJECT_NAME} ${PROJECT_SRCS} ${IMGUI_SRCS} ${IMGUI_FILE_DLG_SRCS})
 
-add_compile_definitions(_HAS_EXCEPTIONS=0 SDL_MAIN_USE_CALLBACKS IMGUI_DEFINE_MATH_OPERATORS WIN32_LEAN_AND_MEAN)
+add_compile_definitions(_HAS_EXCEPTIONS=0 SDL_MAIN_USE_CALLBACKS IMGUI_DEFINE_MATH_OPERATORS)
 
 if (CMAKE_CXX_COMPILER_ID MATCHES "MSVC")
     set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} /EHs-c-")
@@ -35,7 +35,8 @@ target_precompile_headers(${PROJECT_NAME} PRIVATE
                                         <imgui_impl_vulkan.h>
                                         <ImGuiFileDialog.h>
                                         <ImGuiFileDialogConfig.h>
-                                        <Windows.h>
+                                        <thread>
+                                        <algorithm>
                            )
 set_property(TARGET ${PROJECT_NAME} PROPERTY CXX_STANDARD 23)
 set_property(TARGET ${PROJECT_NAME} PROPERTY CUDA_SEPARABLE_COMPILATION ON)
