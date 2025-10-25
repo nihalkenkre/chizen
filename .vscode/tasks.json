@@ -1,0 +1,40 @@
+{
+   "version": "2.0.0",
+   "tasks": [
+      {
+         "label": "Build MinSizeRel",
+         "type": "shell",
+         "group": {
+            "kind": "build",
+         },
+         "command": "MSBuild.exe",
+         "args": [
+            "-p:Configuration=MinSizeRel",
+            "./build/chizen.sln"
+         ],
+      },
+      {
+         "label": "Build Debug",
+         "type": "shell",
+         "group": {
+            "kind": "build",
+         },
+         "command": "MSBuild.exe",
+         "args": [
+            "-p:Configuration=Debug",
+            "./build/chizen.sln"
+         ],
+      },
+      {
+         "label": "Execute MinSizeRel",
+         "type": "shell",
+         "group": "build",
+         "command": "MSBuild.exe",
+         "args": [
+            "-p:Configuration=MinSizeRel",
+            "-getProperty:TargetPath",
+            "./build/chizen.vcxproj"
+         ],
+      },
+   ]
+}

@@ -1,0 +1,9 @@
+[submodule "imgui"]
+	path = imgui
+	url = git@github.com:ocornut/imgui.git
+[submodule "SDL"]
+	path = SDL
+	url = git@github.com:libsdl-org/SDL.git
+[submodule "ImGuiFileDialog"]
+	path = ImGuiFileDialog
+	url = git@github.com:aiekick/ImGuiFileDialog.git
