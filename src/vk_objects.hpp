@@ -10,7 +10,7 @@ VKAPI_ATTR VkResult VKAPI_CALL vkSetDebugUtilsObjectNameEXT(
 }
 
 #define VK_CHECK(action, result)					\
-	if (result < VK_SUCCESS)						\
+	if (result != VK_SUCCESS)						\
 	{														\
 		std::printf("%s %d\n", action, result);	\
 	}

@@ -142,13 +142,13 @@ SDL_AppResult SDL_AppEvent(void* appstate, SDL_Event* event)
 	}
 	else if (event->type == SDL_EVENT_WINDOW_RESIZED)
 	{
-		VK_CHECK("wait for present fence", vkWaitForFences(app_state.vk_state.device_data.device, 1, &app_state.vk_state.swapchain_data.present_fences[app_state.vk_state.swapchain_data.curr_img_idx], VK_TRUE, UINT64_MAX));
-		VK_CHECK("reset present fence", vkResetFences(app_state.vk_state.device_data.device, 1, &app_state.vk_state.swapchain_data.present_fences[app_state.vk_state.swapchain_data.curr_img_idx]));
+		//VK_CHECK("wait for present fence", vkWaitForFences(app_state.vk_state.device_data.device, 1, &app_state.vk_state.swapchain_data.present_fences[app_state.vk_state.swapchain_data.curr_img_idx], VK_TRUE, UINT64_MAX));
+		//VK_CHECK("reset present fence", vkResetFences(app_state.vk_state.device_data.device, 1, &app_state.vk_state.swapchain_data.present_fences[app_state.vk_state.swapchain_data.curr_img_idx]));
 
-		VK_CHECK("get surface capabilities", vkGetPhysicalDeviceSurfaceCapabilitiesKHR(app_state.vk_state.phy_dev_data.phy_dev, app_state.vk_state.surface_data.surface, &app_state.vk_state.surface_data.surf_caps));
+		//VK_CHECK("get surface capabilities", vkGetPhysicalDeviceSurfaceCapabilitiesKHR(app_state.vk_state.phy_dev_data.phy_dev, app_state.vk_state.surface_data.surface, &app_state.vk_state.surface_data.surf_caps));
 
-		vk_swapchain::destroy(app_state.vk_state.swapchain_data, app_state.vk_state.device_data.device);
-		app_state.vk_state.swapchain_data = vk_swapchain::create(app_state.vk_state.device_data.device, app_state.vk_state.surface_data, app_state.vk_state.phy_dev_data, VK_NULL_HANDLE, "swapchain");
+		//vk_swapchain::destroy(app_state.vk_state.swapchain_data, app_state.vk_state.device_data.device);
+		//app_state.vk_state.swapchain_data = vk_swapchain::create(app_state.vk_state.device_data.device, app_state.vk_state.surface_data, app_state.vk_state.phy_dev_data, VK_NULL_HANDLE, "swapchain");
 	}
 	else if (event->type == SDL_EVENT_KEY_DOWN)
 	{
@@ -173,7 +173,21 @@ SDL_AppResult SDL_AppIterate(void* appstate)
 	};
 	VK_CHECK("wait to acquire image", vkWaitSemaphores(app_state.vk_state.device_data.device, &wait_info, UINT64_MAX));
 
-	VK_CHECK("acquire image index", vkAcquireNextImageKHR(app_state.vk_state.device_data.device, app_state.vk_state.swapchain_data.swapchain, UINT64_MAX, app_state.vk_state.swapchain_data.acq_sig_sem.semaphore, VK_NULL_HANDLE, &app_state.vk_state.swapchain_data.curr_img_idx));
+	VkResult result = vkAcquireNextImageKHR(app_state.vk_state.device_data.device, app_state.vk_state.swapchain_data.swapchain, UINT64_MAX, app_state.vk_state.swapchain_data.acq_sig_sem.semaphore, VK_NULL_HANDLE, &app_state.vk_state.swapchain_data.curr_img_idx);
+	if (result == VK_ERROR_OUT_OF_DATE_KHR)
+	{
+		VK_CHECK("wait for present fence", vkWaitForFences(app_state.vk_state.device_data.device, 1, &app_state.vk_state.swapchain_data.present_fences[app_state.vk_state.swapchain_data.curr_img_idx], VK_TRUE, UINT64_MAX));
+		VK_CHECK("reset present fence", vkResetFences(app_state.vk_state.device_data.device, 1, &app_state.vk_state.swapchain_data.present_fences[app_state.vk_state.swapchain_data.curr_img_idx]));
+
+		VK_CHECK("get surface capabilities", vkGetPhysicalDeviceSurfaceCapabilitiesKHR(app_state.vk_state.phy_dev_data.phy_dev, app_state.vk_state.surface_data.surface, &app_state.vk_state.surface_data.surf_caps));
+
+		vk_swapchain::destroy(app_state.vk_state.swapchain_data, app_state.vk_state.device_data.device);
+		app_state.vk_state.swapchain_data = vk_swapchain::create(app_state.vk_state.device_data.device, app_state.vk_state.surface_data, app_state.vk_state.phy_dev_data, VK_NULL_HANDLE, "swapchain");
+
+		std::println("acq img out of date");
+		return SDL_APP_CONTINUE;
+	}
+
 	VK_CHECK("reset command buffer", vkResetCommandBuffer(app_state.vk_state.swapchain_data.cmd_buffs[app_state.vk_state.swapchain_data.curr_img_idx], VK_COMMAND_BUFFER_RESET_RELEASE_RESOURCES_BIT));
 
 	VkImageMemoryBarrier2 sc_img_mem_bar = {
@@ -194,7 +208,7 @@ SDL_AppResult SDL_AppIterate(void* appstate)
 		}
 	};
 
-	VkDependencyInfo sc_img_dep_info = {
+	const VkDependencyInfo sc_img_dep_info = {
 		.sType = VK_STRUCTURE_TYPE_DEPENDENCY_INFO,
 		.imageMemoryBarrierCount = 1,
 		.pImageMemoryBarriers = &sc_img_mem_bar,
@@ -205,7 +219,7 @@ SDL_AppResult SDL_AppIterate(void* appstate)
 		.flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT,
 	};
 
-	vkBeginCommandBuffer(app_state.vk_state.swapchain_data.cmd_buffs[app_state.vk_state.swapchain_data.curr_img_idx], &begin_info);
+	VK_CHECK("being cmd buff", vkBeginCommandBuffer(app_state.vk_state.swapchain_data.cmd_buffs[app_state.vk_state.swapchain_data.curr_img_idx], &begin_info));
 	vkCmdPipelineBarrier2(app_state.vk_state.swapchain_data.cmd_buffs[app_state.vk_state.swapchain_data.curr_img_idx], &sc_img_dep_info);
 
 	// Clear frame
@@ -497,7 +511,7 @@ SDL_AppResult SDL_AppIterate(void* appstate)
 		{
 			.sType = VK_STRUCTURE_TYPE_SEMAPHORE_SUBMIT_INFO,
 			.semaphore = app_state.vk_state.swapchain_data.acq_sig_sem.semaphore,
-			.stageMask = VK_PIPELINE_STAGE_2_TOP_OF_PIPE_BIT,
+			.stageMask = VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT,
 		},
 	};
 
@@ -550,17 +564,30 @@ SDL_AppResult SDL_AppIterate(void* appstate)
 		.pImageIndices = &app_state.vk_state.swapchain_data.curr_img_idx,
 	};
 
+
+	VK_CHECK("wait for present fence", vkWaitForFences(app_state.vk_state.device_data.device, 1, &app_state.vk_state.swapchain_data.present_fences[app_state.vk_state.swapchain_data.curr_img_idx], VK_TRUE, UINT64_MAX));
 	VK_CHECK("reset present fence", vkResetFences(app_state.vk_state.device_data.device, 1, &app_state.vk_state.swapchain_data.present_fences[app_state.vk_state.swapchain_data.curr_img_idx]));
-	VK_CHECK("queue present", vkQueuePresentKHR(app_state.vk_state.device_data.gfx_q, &present_info));
+	result = vkQueuePresentKHR(app_state.vk_state.device_data.gfx_q, &present_info);
+
+	if (result == VK_ERROR_OUT_OF_DATE_KHR)
+	{
+		VK_CHECK("wait for present fence", vkWaitForFences(app_state.vk_state.device_data.device, 1, &app_state.vk_state.swapchain_data.present_fences[app_state.vk_state.swapchain_data.curr_img_idx], VK_TRUE, UINT64_MAX));
+		VK_CHECK("reset present fence", vkResetFences(app_state.vk_state.device_data.device, 1, &app_state.vk_state.swapchain_data.present_fences[app_state.vk_state.swapchain_data.curr_img_idx]));
+
+		VK_CHECK("get surface capabilities", vkGetPhysicalDeviceSurfaceCapabilitiesKHR(app_state.vk_state.phy_dev_data.phy_dev, app_state.vk_state.surface_data.surface, &app_state.vk_state.surface_data.surf_caps));
+
+		vk_swapchain::destroy(app_state.vk_state.swapchain_data, app_state.vk_state.device_data.device);
+		app_state.vk_state.swapchain_data = vk_swapchain::create(app_state.vk_state.device_data.device, app_state.vk_state.surface_data, app_state.vk_state.phy_dev_data, VK_NULL_HANDLE, "swapchain");
+		std::println("q present out of date");
+
+		return SDL_APP_CONTINUE;
+	}
 
 	return SDL_APP_CONTINUE;
 }
 
 void SDL_AppQuit(void* appstate, SDL_AppResult result)
 {
-	if (app_state.render_thread.joinable())
-		app_state.render_thread.join();
-
 	VK_CHECK("wait for present fence", vkWaitForFences(app_state.vk_state.device_data.device, 1, &app_state.vk_state.swapchain_data.present_fences[app_state.vk_state.swapchain_data.curr_img_idx], VK_TRUE, UINT64_MAX));
 	VK_CHECK("reset present fence", vkResetFences(app_state.vk_state.device_data.device, 1, &app_state.vk_state.swapchain_data.present_fences[app_state.vk_state.swapchain_data.curr_img_idx]));
 
