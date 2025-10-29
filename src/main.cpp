@@ -7,7 +7,6 @@ struct VulkanState {
 	vk_device::data device_data = {};
 	vk_swapchain::data swapchain_data = {};
 	vk_command_pool::data xfer_cmd_pool_data = {};
-	VkFence fence = VK_NULL_HANDLE;
 	float clear_color[4] = { 0,0,0,0 };
 	host_buffer_memory::data staging_buffer = {};
 	vk_image::data staging_image = {};
@@ -140,16 +139,6 @@ SDL_AppResult SDL_AppEvent(void* appstate, SDL_Event* event)
 		app_state.vk_state.clear_color[2] = 0;
 		app_state.vk_state.clear_color[3] = 1;
 	}
-	else if (event->type == SDL_EVENT_WINDOW_RESIZED)
-	{
-		//VK_CHECK("wait for present fence", vkWaitForFences(app_state.vk_state.device_data.device, 1, &app_state.vk_state.swapchain_data.present_fences[app_state.vk_state.swapchain_data.curr_img_idx], VK_TRUE, UINT64_MAX));
-		//VK_CHECK("reset present fence", vkResetFences(app_state.vk_state.device_data.device, 1, &app_state.vk_state.swapchain_data.present_fences[app_state.vk_state.swapchain_data.curr_img_idx]));
-
-		//VK_CHECK("get surface capabilities", vkGetPhysicalDeviceSurfaceCapabilitiesKHR(app_state.vk_state.phy_dev_data.phy_dev, app_state.vk_state.surface_data.surface, &app_state.vk_state.surface_data.surf_caps));
-
-		//vk_swapchain::destroy(app_state.vk_state.swapchain_data, app_state.vk_state.device_data.device);
-		//app_state.vk_state.swapchain_data = vk_swapchain::create(app_state.vk_state.device_data.device, app_state.vk_state.surface_data, app_state.vk_state.phy_dev_data, VK_NULL_HANDLE, "swapchain");
-	}
 	else if (event->type == SDL_EVENT_KEY_DOWN)
 	{
 		if (event->key.key == SDLK_R)
@@ -164,66 +153,51 @@ SDL_AppResult SDL_AppEvent(void* appstate, SDL_Event* event)
 
 SDL_AppResult SDL_AppIterate(void* appstate)
 {
-	// Begin Frame
-	const	VkSemaphoreWaitInfo wait_info = {
-		.sType = VK_STRUCTURE_TYPE_SEMAPHORE_WAIT_INFO,
-		.semaphoreCount = 1,
-		.pSemaphores = &app_state.vk_state.swapchain_data.acq_wait_sem.semaphore,
-		.pValues = &app_state.vk_state.swapchain_data.acq_wait_sem_val,
-	};
-	VK_CHECK("wait to acquire image", vkWaitSemaphores(app_state.vk_state.device_data.device, &wait_info, UINT64_MAX));
+	VkDevice device = app_state.vk_state.device_data.device;
 
-	VkResult result = vkAcquireNextImageKHR(app_state.vk_state.device_data.device, app_state.vk_state.swapchain_data.swapchain, UINT64_MAX, app_state.vk_state.swapchain_data.acq_sig_sem.semaphore, VK_NULL_HANDLE, &app_state.vk_state.swapchain_data.curr_img_idx);
+	const VkAcquireNextImageInfoKHR acq_info = {
+		.sType = VK_STRUCTURE_TYPE_ACQUIRE_NEXT_IMAGE_INFO_KHR,
+		.swapchain = app_state.vk_state.swapchain_data.swapchain,
+		.semaphore = app_state.vk_state.swapchain_data.acq_sig_sem.semaphore,
+		.deviceMask = 0x1,
+	};
+
+	VkResult result = vkAcquireNextImage2KHR(device, &acq_info, &app_state.vk_state.swapchain_data.curr_img_idx);
+
 	if (result == VK_ERROR_OUT_OF_DATE_KHR)
 	{
-		VK_CHECK("wait for present fence", vkWaitForFences(app_state.vk_state.device_data.device, 1, &app_state.vk_state.swapchain_data.present_fences[app_state.vk_state.swapchain_data.curr_img_idx], VK_TRUE, UINT64_MAX));
-		VK_CHECK("reset present fence", vkResetFences(app_state.vk_state.device_data.device, 1, &app_state.vk_state.swapchain_data.present_fences[app_state.vk_state.swapchain_data.curr_img_idx]));
-
+		VK_CHECK("gfx q wait idle", vkQueueWaitIdle(app_state.vk_state.device_data.gfx_q));
 		VK_CHECK("get surface capabilities", vkGetPhysicalDeviceSurfaceCapabilitiesKHR(app_state.vk_state.phy_dev_data.phy_dev, app_state.vk_state.surface_data.surface, &app_state.vk_state.surface_data.surf_caps));
+
+		if (SDL_GetWindowFlags(app_state.window) & SDL_WINDOW_MINIMIZED)
+		{
+			return SDL_APP_CONTINUE;
+		}
 
 		vk_swapchain::destroy(app_state.vk_state.swapchain_data, app_state.vk_state.device_data.device);
 		app_state.vk_state.swapchain_data = vk_swapchain::create(app_state.vk_state.device_data.device, app_state.vk_state.surface_data, app_state.vk_state.phy_dev_data, VK_NULL_HANDLE, "swapchain");
 
-		std::println("acq img out of date");
 		return SDL_APP_CONTINUE;
 	}
 
-	VK_CHECK("reset command buffer", vkResetCommandBuffer(app_state.vk_state.swapchain_data.cmd_buffs[app_state.vk_state.swapchain_data.curr_img_idx], VK_COMMAND_BUFFER_RESET_RELEASE_RESOURCES_BIT));
-
-	VkImageMemoryBarrier2 sc_img_mem_bar = {
-		.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER_2,
-		.srcStageMask = 0,
-		.srcAccessMask = 0,
-		.dstStageMask = VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT,
-		.dstAccessMask = VK_ACCESS_2_COLOR_ATTACHMENT_WRITE_BIT,
-		.oldLayout = VK_IMAGE_LAYOUT_UNDEFINED,
-		.newLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
-		.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
-		.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
-		.image = app_state.vk_state.swapchain_data.images[app_state.vk_state.swapchain_data.curr_img_idx],
-		.subresourceRange = {
-			.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT,
-			.levelCount = 1,
-			.layerCount = 1,
-		}
-	};
-
-	const VkDependencyInfo sc_img_dep_info = {
-		.sType = VK_STRUCTURE_TYPE_DEPENDENCY_INFO,
-		.imageMemoryBarrierCount = 1,
-		.pImageMemoryBarriers = &sc_img_mem_bar,
-	};
+	VkCommandBuffer curr_cmd_buff = app_state.vk_state.swapchain_data.cmd_buffs[app_state.vk_state.swapchain_data.curr_img_idx];
+	VkImage curr_sc_img = app_state.vk_state.swapchain_data.images[app_state.vk_state.swapchain_data.curr_img_idx];
+	VkFence curr_rndr_fnc = app_state.vk_state.swapchain_data.rndr_fncs[app_state.vk_state.swapchain_data.curr_img_idx];
 
 	const VkCommandBufferBeginInfo begin_info = {
 		.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO,
 		.flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT,
 	};
+	VK_CHECK("begin sc cmd_buff", vkBeginCommandBuffer(curr_cmd_buff, &begin_info));
 
-	VK_CHECK("being cmd buff", vkBeginCommandBuffer(app_state.vk_state.swapchain_data.cmd_buffs[app_state.vk_state.swapchain_data.curr_img_idx], &begin_info));
-	vkCmdPipelineBarrier2(app_state.vk_state.swapchain_data.cmd_buffs[app_state.vk_state.swapchain_data.curr_img_idx], &sc_img_dep_info);
+	change_image_layout(curr_cmd_buff,
+		0, 0,
+		VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT, VK_ACCESS_2_COLOR_ATTACHMENT_WRITE_BIT_KHR,
+		VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
+		VK_QUEUE_FAMILY_IGNORED, VK_QUEUE_FAMILY_IGNORED,
+		curr_sc_img);
 
-	// Clear frame
-	const VkRenderingAttachmentInfoKHR color_attachment_infos[] = {
+	const VkRenderingAttachmentInfo col_attachs[] = {
 		{
 			.sType = VK_STRUCTURE_TYPE_RENDERING_ATTACHMENT_INFO,
 			.imageView = app_state.vk_state.swapchain_data.image_views[app_state.vk_state.swapchain_data.curr_img_idx],
@@ -236,208 +210,24 @@ SDL_AppResult SDL_AppIterate(void* appstate)
 						app_state.vk_state.clear_color[0],
 						app_state.vk_state.clear_color[1],
 						app_state.vk_state.clear_color[2],
-						app_state.vk_state.clear_color[3],
+						app_state.vk_state.clear_color[3]
 					},
 				},
 			},
 		},
 	};
 
-	const VkRenderingInfoKHR rendering_info = {
+	const VkRenderingInfo rendering_info = {
 		.sType = VK_STRUCTURE_TYPE_RENDERING_INFO,
 		.renderArea = {
 			.extent = app_state.vk_state.surface_data.surf_caps.currentExtent,
 		},
 		.layerCount = 1,
-		.colorAttachmentCount = _countof(color_attachment_infos),
-		.pColorAttachments = color_attachment_infos,
+		.colorAttachmentCount = _countof(col_attachs),
+		.pColorAttachments = col_attachs,
 	};
 
-	// Render frame
-	vkCmdBeginRendering(app_state.vk_state.swapchain_data.cmd_buffs[app_state.vk_state.swapchain_data.curr_img_idx], &rendering_info);
-
-	// End Frame
-	vkCmdEndRendering(app_state.vk_state.swapchain_data.cmd_buffs[app_state.vk_state.swapchain_data.curr_img_idx]);
-
-	// Update staging image
-	uint8_t* pixels = reinterpret_cast<uint8_t*>(app_state.vk_state.staging_buffer.map);
-
-	for (size_t y = 0; y < 720; ++y)
-	{
-		for (size_t x = 0; x < 1280; ++x)
-		{
-			size_t pixel_idx = (y * 1280 * 4) + (x * 4);
-
-			pixels[pixel_idx] = static_cast<uint8_t>(static_cast<float>(rand()) / RAND_MAX * 255);
-			pixels[pixel_idx + 1] = static_cast<uint8_t>(static_cast<float>(rand()) / RAND_MAX * 255);
-			pixels[pixel_idx + 2] = static_cast<uint8_t>(static_cast<float>(rand()) / RAND_MAX * 255);
-			pixels[pixel_idx + 3] = 255;
-		}
-	}
-
-	// Copy staging buffer to staging image
-	// change staging image layout to xfer dst
-	const VkImageMemoryBarrier2 stg_img_to_xfer_dst_bar = {
-		.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER_2,
-		.srcStageMask = VK_PIPELINE_STAGE_2_BLIT_BIT,
-		.srcAccessMask = VK_ACCESS_2_TRANSFER_READ_BIT,
-		.dstStageMask = VK_PIPELINE_STAGE_2_TRANSFER_BIT,
-		.dstAccessMask = VK_ACCESS_2_TRANSFER_WRITE_BIT,
-		.oldLayout = VK_IMAGE_LAYOUT_UNDEFINED,
-		.newLayout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
-		.image = app_state.vk_state.staging_image.image,
-		.subresourceRange = {
-			.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT,
-			.levelCount = 1,
-			.layerCount = 1,
-		}
-	};
-
-	const VkDependencyInfo stg_img_to_xfer_dst_dep = {
-		.sType = VK_STRUCTURE_TYPE_DEPENDENCY_INFO,
-		.imageMemoryBarrierCount = 1,
-		.pImageMemoryBarriers = &stg_img_to_xfer_dst_bar,
-	};
-	vkCmdPipelineBarrier2(app_state.vk_state.swapchain_data.cmd_buffs[app_state.vk_state.swapchain_data.curr_img_idx], &stg_img_to_xfer_dst_dep);
-
-	// copy stg buffer to stg img
-	const VkBufferImageCopy2 stg_buff_stg_img_regions[] = {
-		{
-			.sType = VK_STRUCTURE_TYPE_BUFFER_IMAGE_COPY_2,
-			.imageSubresource = {
-				.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT,
-				.layerCount = 1,
-			},
-			.imageExtent = {
-				.width = 1280,
-				.height = 720,
-				.depth = 1,
-			}
-		},
-	};
-
-	const VkCopyBufferToImageInfo2 copy_stg_buff_to_stg_img_info = {
-		.sType = VK_STRUCTURE_TYPE_COPY_BUFFER_TO_IMAGE_INFO_2,
-		.srcBuffer = app_state.vk_state.staging_buffer.buffer,
-		.dstImage = app_state.vk_state.staging_image.image,
-		.dstImageLayout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
-		.regionCount = _countof(stg_buff_stg_img_regions),
-		.pRegions = stg_buff_stg_img_regions,
-	};
-	vkCmdCopyBufferToImage2(app_state.vk_state.swapchain_data.cmd_buffs[app_state.vk_state.swapchain_data.curr_img_idx], &copy_stg_buff_to_stg_img_info);
-
-	// change stg img layout to xfer src
-	const VkImageMemoryBarrier2 stg_img_to_xfer_src_bar = {
-		.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER_2,
-		.srcStageMask = VK_PIPELINE_STAGE_TRANSFER_BIT,
-		.srcAccessMask = VK_ACCESS_2_TRANSFER_WRITE_BIT,
-		.dstStageMask = VK_PIPELINE_STAGE_2_TRANSFER_BIT,
-		.dstAccessMask = VK_ACCESS_2_TRANSFER_READ_BIT,
-		.oldLayout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
-		.newLayout = VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
-		.image = app_state.vk_state.staging_image.image,
-		.subresourceRange = {
-			.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT,
-			.levelCount = 1,
-			.layerCount = 1,
-		}
-	};
-
-	const VkDependencyInfo stg_img_to_xfer_src_dep = {
-		.sType = VK_STRUCTURE_TYPE_DEPENDENCY_INFO,
-		.imageMemoryBarrierCount = 1,
-		.pImageMemoryBarriers = &stg_img_to_xfer_src_bar,
-	};
-	vkCmdPipelineBarrier2(app_state.vk_state.swapchain_data.cmd_buffs[app_state.vk_state.swapchain_data.curr_img_idx], &stg_img_to_xfer_src_dep);
-
-	// Copy stg img to sc img
-	// change sc img layout to xfer dst
-	const VkImageMemoryBarrier2 sc_img_to_dst_bar = {
-		.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER_2,
-		.srcStageMask = VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT,
-		.srcAccessMask = VK_ACCESS_2_COLOR_ATTACHMENT_WRITE_BIT,
-		.dstStageMask = VK_PIPELINE_STAGE_2_TRANSFER_BIT,
-		.dstAccessMask = VK_ACCESS_2_TRANSFER_WRITE_BIT,
-		.oldLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
-		.newLayout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
-		.image = app_state.vk_state.swapchain_data.images[app_state.vk_state.swapchain_data.curr_img_idx],
-		.subresourceRange = {
-			.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT,
-			.levelCount = 1,
-			.layerCount = 1,
-		}
-	};
-
-	const VkDependencyInfo sc_img_to_dst_dep = {
-		.sType = VK_STRUCTURE_TYPE_DEPENDENCY_INFO,
-		.imageMemoryBarrierCount = 1,
-		.pImageMemoryBarriers = &sc_img_to_dst_bar,
-	};
-
-	vkCmdPipelineBarrier2(app_state.vk_state.swapchain_data.cmd_buffs[app_state.vk_state.swapchain_data.curr_img_idx], &sc_img_to_dst_dep);
-
-	const VkImageBlit2 blit_regions[] = {
-		{
-			.sType = VK_STRUCTURE_TYPE_IMAGE_BLIT_2,
-			.srcSubresource = {
-				.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT,
-				.layerCount = 1,
-			},
-			.srcOffsets = {
-				{},{.x = 1280, .y = 720, .z = 1}
-			},
-			.dstSubresource = {
-				.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT,
-				.layerCount = 1,
-			},
-			.dstOffsets = {
-				{},
-				{
-					.x = static_cast<int32_t>(std::min(app_state.vk_state.surface_data.surf_caps.currentExtent.width, static_cast<uint32_t>(1280))),
-					.y = static_cast<int32_t>(std::min(app_state.vk_state.surface_data.surf_caps.currentExtent.height, static_cast<uint32_t>(720))),
-					.z = 1
-				},
-			},
-		},
-	};
-
-	// blit stg img to sc img
-	const VkBlitImageInfo2 stg_img_to_sc_img_info = {
-		.sType = VK_STRUCTURE_TYPE_BLIT_IMAGE_INFO_2,
-		.srcImage = app_state.vk_state.staging_image.image,
-		.srcImageLayout = VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
-		.dstImage = app_state.vk_state.swapchain_data.images[app_state.vk_state.swapchain_data.curr_img_idx],
-		.dstImageLayout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
-		.regionCount = _countof(blit_regions),
-		.pRegions = blit_regions,
-	};
-
-	vkCmdBlitImage2(app_state.vk_state.swapchain_data.cmd_buffs[app_state.vk_state.swapchain_data.curr_img_idx], &stg_img_to_sc_img_info);
-
-	const VkImageMemoryBarrier2 sc_img_to_col_attch_bar = {
-		.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER_2,
-		.srcStageMask = VK_PIPELINE_STAGE_2_BLIT_BIT,
-		.srcAccessMask = VK_ACCESS_2_TRANSFER_WRITE_BIT,
-		.dstStageMask = VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT,
-		.dstAccessMask = VK_ACCESS_2_COLOR_ATTACHMENT_WRITE_BIT,
-		.oldLayout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
-		.newLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
-		.image = app_state.vk_state.swapchain_data.images[app_state.vk_state.swapchain_data.curr_img_idx],
-		.subresourceRange = {
-			.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT,
-			.levelCount = 1,
-			.layerCount = 1,
-		}
-	};
-
-	const VkDependencyInfo sc_img_to_col_attch_dep = {
-		.sType = VK_STRUCTURE_TYPE_DEPENDENCY_INFO,
-		.imageMemoryBarrierCount = 1,
-		.pImageMemoryBarriers = &sc_img_to_col_attch_bar,
-	};
-
-	vkCmdPipelineBarrier2(app_state.vk_state.swapchain_data.cmd_buffs[app_state.vk_state.swapchain_data.curr_img_idx], &sc_img_to_col_attch_dep);
-
+	vkCmdBeginRendering(curr_cmd_buff, &rendering_info);
 	ImGui_ImplVulkan_NewFrame();
 	ImGui_ImplSDL3_NewFrame();
 	ImGui::NewFrame();
@@ -446,30 +236,7 @@ SDL_AppResult SDL_AppIterate(void* appstate)
 
 	ImGui::Render();
 
-	// IMGUI Render
-	const VkRenderingAttachmentInfoKHR imgui_col_attach[] = {
-		{
-			.sType = VK_STRUCTURE_TYPE_RENDERING_ATTACHMENT_INFO,
-			.imageView = app_state.vk_state.swapchain_data.image_views[app_state.vk_state.swapchain_data.curr_img_idx],
-			.imageLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
-			.loadOp = VK_ATTACHMENT_LOAD_OP_NONE,
-			.storeOp = VK_ATTACHMENT_STORE_OP_NONE,
-		},
-	};
-
-	const VkRenderingInfoKHR imgui_rend_info = {
-		.sType = VK_STRUCTURE_TYPE_RENDERING_INFO,
-		.renderArea = {
-			.extent = app_state.vk_state.surface_data.surf_caps.currentExtent,
-		},
-		.layerCount = 1,
-		.colorAttachmentCount = _countof(imgui_col_attach),
-		.pColorAttachments = imgui_col_attach,
-	};
-
-	// Render frame
-	vkCmdBeginRendering(app_state.vk_state.swapchain_data.cmd_buffs[app_state.vk_state.swapchain_data.curr_img_idx], &imgui_rend_info);
-	ImGui_ImplVulkan_RenderDrawData(ImGui::GetDrawData(), app_state.vk_state.swapchain_data.cmd_buffs[app_state.vk_state.swapchain_data.curr_img_idx]);
+	ImGui_ImplVulkan_RenderDrawData(ImGui::GetDrawData(), curr_cmd_buff);
 
 	// Update and Render additional Platform Windows
 	if (ImGui::GetIO().ConfigFlags & ImGuiConfigFlags_ViewportsEnable)
@@ -477,108 +244,68 @@ SDL_AppResult SDL_AppIterate(void* appstate)
 		ImGui::UpdatePlatformWindows();
 		ImGui::RenderPlatformWindowsDefault();
 	}
+	vkCmdEndRendering(curr_cmd_buff);
 
-	// End Frame
-	vkCmdEndRendering(app_state.vk_state.swapchain_data.cmd_buffs[app_state.vk_state.swapchain_data.curr_img_idx]);
+	change_image_layout(curr_cmd_buff,
+		VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT, VK_ACCESS_2_COLOR_ATTACHMENT_WRITE_BIT,
+		VK_PIPELINE_STAGE_2_BOTTOM_OF_PIPE_BIT, 0,
+		VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL, VK_IMAGE_LAYOUT_PRESENT_SRC_KHR,
+		VK_QUEUE_FAMILY_IGNORED, VK_QUEUE_FAMILY_IGNORED,
+		curr_sc_img);
 
-	const VkImageMemoryBarrier2 sc_img_to_prsnt_bar = {
-		.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER_2,
-		.srcStageMask = VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT,
-		.srcAccessMask = VK_ACCESS_2_COLOR_ATTACHMENT_WRITE_BIT,
-		.dstStageMask = VK_PIPELINE_STAGE_2_BOTTOM_OF_PIPE_BIT,
-		.dstAccessMask = 0,
-		.oldLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
-		.newLayout = VK_IMAGE_LAYOUT_PRESENT_SRC_KHR,
-		.image = app_state.vk_state.swapchain_data.images[app_state.vk_state.swapchain_data.curr_img_idx],
-		.subresourceRange = {
-			.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT,
-			.levelCount = 1,
-			.layerCount = 1,
-		}
-	};
-
-	const VkDependencyInfo sc_img_to_prsnt_dep = {
-		.sType = VK_STRUCTURE_TYPE_DEPENDENCY_INFO,
-		.imageMemoryBarrierCount = 1,
-		.pImageMemoryBarriers = &sc_img_to_prsnt_bar,
-	};
-
-	vkCmdPipelineBarrier2(app_state.vk_state.swapchain_data.cmd_buffs[app_state.vk_state.swapchain_data.curr_img_idx], &sc_img_to_prsnt_dep);
-
-	VK_CHECK("end buffer", vkEndCommandBuffer(app_state.vk_state.swapchain_data.cmd_buffs[app_state.vk_state.swapchain_data.curr_img_idx]));
+	VK_CHECK("end sc cmd_buff", vkEndCommandBuffer(curr_cmd_buff));
 
 	const VkSemaphoreSubmitInfo wait_sem_infos[] = {
 		{
 			.sType = VK_STRUCTURE_TYPE_SEMAPHORE_SUBMIT_INFO,
 			.semaphore = app_state.vk_state.swapchain_data.acq_sig_sem.semaphore,
-			.stageMask = VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT,
-		},
-	};
-
-	const VkSemaphoreSubmitInfo sig_sem_infos[] = {
-		{
-			.sType = VK_STRUCTURE_TYPE_SEMAPHORE_SUBMIT_INFO,
-			.semaphore = app_state.vk_state.swapchain_data.rndr_semaphores[app_state.vk_state.swapchain_data.curr_img_idx],
-			.stageMask = VK_PIPELINE_STAGE_2_BOTTOM_OF_PIPE_BIT,
-		},
-		{
-			.sType = VK_STRUCTURE_TYPE_SEMAPHORE_SUBMIT_INFO,
-			.semaphore = app_state.vk_state.swapchain_data.acq_wait_sem.semaphore,
-			.value = ++app_state.vk_state.swapchain_data.acq_wait_sem_val,
-			.stageMask = VK_PIPELINE_STAGE_2_BOTTOM_OF_PIPE_BIT,
+			.stageMask = VK_PIPELINE_STAGE_2_TOP_OF_PIPE_BIT,
 		},
 	};
 
 	const VkCommandBufferSubmitInfo cmd_buff_infos[] = {
 		{
 			.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_SUBMIT_INFO,
-			.commandBuffer = app_state.vk_state.swapchain_data.cmd_buffs[app_state.vk_state.swapchain_data.curr_img_idx],
-		}
+			.commandBuffer = curr_cmd_buff,
+		},
 	};
 
-	const VkSubmitInfo2 submit_info = {
-		.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO_2,
-		.waitSemaphoreInfoCount = _countof(wait_sem_infos),
-		.pWaitSemaphoreInfos = wait_sem_infos,
-		.commandBufferInfoCount = _countof(cmd_buff_infos),
-		.pCommandBufferInfos = cmd_buff_infos,
-		.signalSemaphoreInfoCount = _countof(sig_sem_infos),
-		.pSignalSemaphoreInfos = sig_sem_infos,
+	const VkSubmitInfo2 submit_infos[] = {
+		{
+			.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO_2,
+			.waitSemaphoreInfoCount = _countof(wait_sem_infos),
+			.pWaitSemaphoreInfos = wait_sem_infos,
+			.commandBufferInfoCount = _countof(cmd_buff_infos),
+			.pCommandBufferInfos = cmd_buff_infos,
+		},
 	};
 
-	VK_CHECK("queue submit", vkQueueSubmit2(app_state.vk_state.device_data.gfx_q, 1, &submit_info, VK_NULL_HANDLE));
+	VK_CHECK("submit drawing commamds", vkQueueSubmit2(app_state.vk_state.device_data.gfx_q, _countof(submit_infos), submit_infos, curr_rndr_fnc));
 
-	const VkSwapchainPresentFenceInfoEXT present_fence_info = {
-		.sType = VK_STRUCTURE_TYPE_SWAPCHAIN_PRESENT_FENCE_INFO_EXT,
-		.swapchainCount = 1,
-		.pFences = &app_state.vk_state.swapchain_data.present_fences[app_state.vk_state.swapchain_data.curr_img_idx],
-	};
+	VK_CHECK("wait for rndr fnc", vkWaitForFences(device, 1, &curr_rndr_fnc, VK_TRUE, UINT64_MAX));
+	VK_CHECK("reset rndr fnc", vkResetFences(device, 1, &curr_rndr_fnc));
 
 	const VkPresentInfoKHR present_info = {
 		.sType = VK_STRUCTURE_TYPE_PRESENT_INFO_KHR,
-		.pNext = &present_fence_info,
-		.waitSemaphoreCount = 1,
-		.pWaitSemaphores = &app_state.vk_state.swapchain_data.rndr_semaphores[app_state.vk_state.swapchain_data.curr_img_idx],
 		.swapchainCount = 1,
 		.pSwapchains = &app_state.vk_state.swapchain_data.swapchain,
 		.pImageIndices = &app_state.vk_state.swapchain_data.curr_img_idx,
 	};
 
-
-	VK_CHECK("wait for present fence", vkWaitForFences(app_state.vk_state.device_data.device, 1, &app_state.vk_state.swapchain_data.present_fences[app_state.vk_state.swapchain_data.curr_img_idx], VK_TRUE, UINT64_MAX));
-	VK_CHECK("reset present fence", vkResetFences(app_state.vk_state.device_data.device, 1, &app_state.vk_state.swapchain_data.present_fences[app_state.vk_state.swapchain_data.curr_img_idx]));
 	result = vkQueuePresentKHR(app_state.vk_state.device_data.gfx_q, &present_info);
 
 	if (result == VK_ERROR_OUT_OF_DATE_KHR)
 	{
-		VK_CHECK("wait for present fence", vkWaitForFences(app_state.vk_state.device_data.device, 1, &app_state.vk_state.swapchain_data.present_fences[app_state.vk_state.swapchain_data.curr_img_idx], VK_TRUE, UINT64_MAX));
-		VK_CHECK("reset present fence", vkResetFences(app_state.vk_state.device_data.device, 1, &app_state.vk_state.swapchain_data.present_fences[app_state.vk_state.swapchain_data.curr_img_idx]));
-
+		VK_CHECK("gfx q wait idle", vkQueueWaitIdle(app_state.vk_state.device_data.gfx_q));
 		VK_CHECK("get surface capabilities", vkGetPhysicalDeviceSurfaceCapabilitiesKHR(app_state.vk_state.phy_dev_data.phy_dev, app_state.vk_state.surface_data.surface, &app_state.vk_state.surface_data.surf_caps));
+
+		if (SDL_GetWindowFlags(app_state.window) & SDL_WINDOW_MINIMIZED)
+		{
+			return SDL_APP_CONTINUE;
+		}
 
 		vk_swapchain::destroy(app_state.vk_state.swapchain_data, app_state.vk_state.device_data.device);
 		app_state.vk_state.swapchain_data = vk_swapchain::create(app_state.vk_state.device_data.device, app_state.vk_state.surface_data, app_state.vk_state.phy_dev_data, VK_NULL_HANDLE, "swapchain");
-		std::println("q present out of date");
 
 		return SDL_APP_CONTINUE;
 	}
@@ -588,8 +315,7 @@ SDL_AppResult SDL_AppIterate(void* appstate)
 
 void SDL_AppQuit(void* appstate, SDL_AppResult result)
 {
-	VK_CHECK("wait for present fence", vkWaitForFences(app_state.vk_state.device_data.device, 1, &app_state.vk_state.swapchain_data.present_fences[app_state.vk_state.swapchain_data.curr_img_idx], VK_TRUE, UINT64_MAX));
-	VK_CHECK("reset present fence", vkResetFences(app_state.vk_state.device_data.device, 1, &app_state.vk_state.swapchain_data.present_fences[app_state.vk_state.swapchain_data.curr_img_idx]));
+	VK_CHECK("device wait idle", vkDeviceWaitIdle(app_state.vk_state.device_data.device));
 
 	ImGui_ImplSDL3_Shutdown();
 	ImGui_ImplVulkan_Shutdown();

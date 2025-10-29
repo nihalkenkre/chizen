@@ -142,6 +142,41 @@ void copy_buffer_to_image(const VkBuffer src_buffer, const VkImage dst_image, co
 	VK_CHECK("reset buffer copy cmd buff", vkResetCommandBuffer(cmd_buff, VK_COMMAND_BUFFER_RESET_RELEASE_RESOURCES_BIT));
 }
 
+void change_image_layout(
+	const VkCommandBuffer cmd_buff, 
+	const VkPipelineStageFlags2 src_stage_mask, const VkAccessFlags2 src_access_mask, 
+	const VkPipelineStageFlags2 dst_stage_mask, const VkAccessFlags2 dst_access_mask, 
+	const VkImageLayout old_layout, const VkImageLayout new_layout,
+	const uint32_t src_q_fly_idx, const uint32_t dst_q_fly_idx,
+	const VkImage& image)
+{
+	const VkImageMemoryBarrier2 img_mem_barr = {
+		.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER_2,
+		.srcStageMask = src_stage_mask,
+		.srcAccessMask = src_access_mask,
+		.dstStageMask = dst_stage_mask,
+		.dstAccessMask = dst_access_mask,
+		.oldLayout = old_layout,
+		.newLayout = new_layout,
+		.srcQueueFamilyIndex = src_q_fly_idx,
+		.dstQueueFamilyIndex = dst_q_fly_idx,
+		.image = image,
+		.subresourceRange = {
+			.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT,
+			.levelCount = 1,
+			.layerCount = 1,
+		},
+	};
+
+	const VkDependencyInfo dep_info = {
+		.sType = VK_STRUCTURE_TYPE_DEPENDENCY_INFO,
+		.imageMemoryBarrierCount = 1,
+		.pImageMemoryBarriers = &img_mem_barr,
+	};
+
+	vkCmdPipelineBarrier2(cmd_buff, &dep_info);
+}
+
 namespace vk_instance
 {
 	VkInstance create(const char* const* extensions, uint32_t extensions_count)
@@ -332,8 +367,6 @@ namespace vk_device
 	{
 		std::vector<const char*> req_ext_names = {
 			VK_KHR_SWAPCHAIN_EXTENSION_NAME,
-			VK_EXT_SWAPCHAIN_MAINTENANCE_1_EXTENSION_NAME,
-			VK_EXT_EXTENDED_DYNAMIC_STATE_3_EXTENSION_NAME,
 		};
 
 		uint32_t property_count = 0;
@@ -361,14 +394,8 @@ namespace vk_device
 			.pQueuePriorities = priorities.data(),
 		};
 
-		VkPhysicalDeviceSwapchainMaintenance1FeaturesEXT swapchain_main_1_feats = {
-			.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SWAPCHAIN_MAINTENANCE_1_FEATURES_EXT,
-			.pNext = nullptr,
-		};
-
 		VkPhysicalDeviceDynamicRenderingFeatures dyn_rend_feats = {
 			.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_DYNAMIC_RENDERING_FEATURES,
-			.pNext = &swapchain_main_1_feats,
 		};
 
 		VkPhysicalDeviceSynchronization2Features sync2_feats = {
@@ -376,14 +403,9 @@ namespace vk_device
 			.pNext = &dyn_rend_feats,
 		};
 
-		VkPhysicalDeviceTimelineSemaphoreFeatures time_sem_feats = {
-			.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_TIMELINE_SEMAPHORE_FEATURES,
-			.pNext = &sync2_feats,
-		};
-
 		VkPhysicalDeviceFeatures2 feats2 = {
 			.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FEATURES_2,
-			.pNext = &time_sem_feats,
+			.pNext = &sync2_feats,
 		};
 
 		vkGetPhysicalDeviceFeatures2(phy_dev_data.phy_dev, &feats2);
@@ -475,7 +497,6 @@ namespace vk_semaphore
 	}
 }
 
-
 namespace vk_swapchain
 {
 	struct data
@@ -486,9 +507,7 @@ namespace vk_swapchain
 		std::vector<VkImage> images;
 		std::vector<VkImageView> image_views;
 		std::vector<VkCommandBuffer> cmd_buffs;
-		std::vector<VkSemaphore> rndr_semaphores;
-		std::vector<VkFence> present_fences;
-		vk_semaphore::data acq_wait_sem;
+		std::vector<VkFence> rndr_fncs;
 		vk_semaphore::data acq_sig_sem;
 		uint64_t acq_wait_sem_val = 0;
 		uint32_t images_count = 0;
@@ -523,8 +542,7 @@ namespace vk_swapchain
 
 		d.image_views.resize(d.images_count);
 		d.cmd_buffs.resize(d.images_count);
-		d.rndr_semaphores.resize(d.images_count);
-		d.present_fences.resize(d.images_count);
+		d.rndr_fncs.resize(d.images_count);
 
 		VkImageViewCreateInfo image_view_create_info = {
 			.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO,
@@ -563,7 +581,6 @@ namespace vk_swapchain
 
 		const VkFenceCreateInfo fence_ci = {
 			.sType = VK_STRUCTURE_TYPE_FENCE_CREATE_INFO,
-			.flags = VK_FENCE_CREATE_SIGNALED_BIT,
 		};
 
 		for (uint32_t i = 0; i < d.images_count; ++i)
@@ -573,20 +590,10 @@ namespace vk_swapchain
 
 			cmd_buff_ai.commandPool = d.cmd_pool;
 			VK_CHECK("allocate command buffer", vkAllocateCommandBuffers(device, &cmd_buff_ai, &d.cmd_buffs[i]));
-			VK_CHECK("create semaphore", vkCreateSemaphore(device, &sem_ci, nullptr, &d.rndr_semaphores[i]));
-			VK_CHECK("create fence", vkCreateFence(device, &fence_ci, nullptr, &d.present_fences[i]));
+			VK_CHECK("create fence", vkCreateFence(device, &fence_ci, nullptr, &d.rndr_fncs[i]));
 		}
 
 		d.acq_sig_sem = vk_semaphore::create(device, VK_SEMAPHORE_TYPE_BINARY, "acq sig sem");
-		d.acq_wait_sem = vk_semaphore::create(device, VK_SEMAPHORE_TYPE_TIMELINE, "acq wait sem");
-
-		// signalling so that the render function does not stall on vkAcquireNextImage the first time
-		const VkSemaphoreSignalInfo sem_sig_info = {
-			.sType = VK_STRUCTURE_TYPE_SEMAPHORE_SIGNAL_INFO,
-			.semaphore = d.acq_wait_sem.semaphore,
-			.value = ++d.acq_wait_sem_val,
-		};
-		VK_CHECK("signal acq wait sem", vkSignalSemaphore(device, &sem_sig_info));
 
 #ifdef _DEBUG
 		VkDebugUtilsObjectNameInfoEXT name_info = {
@@ -608,7 +615,7 @@ namespace vk_swapchain
 
 			name_info.objectType = VK_OBJECT_TYPE_IMAGE;
 			name_info.objectHandle = reinterpret_cast<uint64_t>(d.images[i]);
-			name_info.pObjectName = sc_img.append(std::to_string(i)).c_str();// std::strcat(object_name, _itoa(i, i_str, 10));
+			name_info.pObjectName = sc_img.append(std::to_string(i)).c_str();
 			VK_CHECK("setting swapchain image name", vkSetDebugUtilsObjectNameEXT(device, &name_info));
 
 			std::string sc_iv("swapchain image view ");
@@ -623,17 +630,11 @@ namespace vk_swapchain
 			name_info.pObjectName = sc_cb.append(std::to_string(i)).c_str();
 			VK_CHECK("setting swapchain command buffer name", vkSetDebugUtilsObjectNameEXT(device, &name_info));
 
-			std::string sc_r_sem("swapchain render semaphore ");
-			name_info.objectType = VK_OBJECT_TYPE_SEMAPHORE;
-			name_info.objectHandle = reinterpret_cast<uint64_t>(d.rndr_semaphores[i]);
-			name_info.pObjectName = sc_r_sem.append(std::to_string(i)).c_str();
-			VK_CHECK("setting swapchain render sem name", vkSetDebugUtilsObjectNameEXT(device, &name_info));
-
-			std::string sc_pr_fnc("swapchain present fence ");
+			std::string sc_pr_fnc("swapchain render fence ");
 			name_info.objectType = VK_OBJECT_TYPE_FENCE;
-			name_info.objectHandle = reinterpret_cast<uint64_t>(d.present_fences[i]);
+			name_info.objectHandle = reinterpret_cast<uint64_t>(d.rndr_fncs[i]);
 			name_info.pObjectName = sc_pr_fnc.append(std::to_string(i)).c_str();
-			VK_CHECK("setting swapchain present fence name", vkSetDebugUtilsObjectNameEXT(device, &name_info));
+			VK_CHECK("setting swapchain render fence name", vkSetDebugUtilsObjectNameEXT(device, &name_info));
 		}
 #endif // _DEBUG
 
@@ -642,16 +643,12 @@ namespace vk_swapchain
 
 	void destroy(vk_swapchain::data data, const VkDevice device)
 	{
-		//VK_CHECK("wait for present fence", vkWaitForFences(device, 1, &data.present_fences[data.curr_img_idx], VK_TRUE, UINT64_MAX));
-		//VK_CHECK("reset present fence", vkResetFences(device, 1, &data.present_fences[data.curr_img_idx]));
-
 		vkDestroyCommandPool(device, data.cmd_pool, nullptr);
 
 		for (uint32_t i = 0; i < data.images_count; ++i)
 		{
-			vkDestroyFence(device, data.present_fences[i], nullptr);
+			vkDestroyFence(device, data.rndr_fncs[i], nullptr);
 			vkDestroyImageView(device, data.image_views[i], nullptr);
-			vkDestroySemaphore(device, data.rndr_semaphores[i], nullptr);
 		}
 
 		if (data.swapchain != VK_NULL_HANDLE && device != VK_NULL_HANDLE)
@@ -660,7 +657,11 @@ namespace vk_swapchain
 		}
 
 		vk_semaphore::destroy(data.acq_sig_sem.semaphore, device);
-		vk_semaphore::destroy(data.acq_wait_sem.semaphore, device);
+
+		data.cmd_buffs.clear();
+		data.images.clear();
+		data.image_views.clear();
+		data.rndr_fncs.clear();
 	}
 };
 
