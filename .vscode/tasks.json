@@ -29,12 +29,8 @@
          "label": "Execute MinSizeRel",
          "type": "shell",
          "group": "build",
-         "command": "MSBuild.exe",
-         "args": [
-            "-p:Configuration=MinSizeRel",
-            "-getProperty:TargetPath",
-            "./build/chizen.vcxproj"
-         ],
+         "command": "${workspaceFolder}/build/MinSizeRel/chizen.exe",
+         "dependsOn": "Build MinSizeRel"
       },
    ]
 }

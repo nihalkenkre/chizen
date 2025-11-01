@@ -222,7 +222,22 @@ SDL_AppResult SDL_AppIterate(void* appstate)
 
 	vkCmdBindDescriptorSets2(curr_cmd_buff, &bind_info);
 
-	vkCmdDispatch(curr_cmd_buff, 1280, 720, 1);
+	const PushConstants pc = {
+		.dispatch_x = 1280,
+		.dispatch_y = 720,
+		.dispatch_z = 1,
+	};
+
+	const VkPushConstantsInfo pc_info = {
+		.sType = VK_STRUCTURE_TYPE_PUSH_CONSTANTS_INFO,
+		.layout = app_state.vk_state.cmpt_ppln.lyt,
+		.stageFlags = VK_SHADER_STAGE_COMPUTE_BIT,
+		.size = sizeof(PushConstants),
+		.pValues = &pc,
+	};
+	vkCmdPushConstants2(curr_cmd_buff, &pc_info);
+
+	vkCmdDispatch(curr_cmd_buff, pc.dispatch_x, pc.dispatch_y, pc.dispatch_z);
 
 	change_image_layout(curr_cmd_buff,
 		VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, VK_ACCESS_2_SHADER_STORAGE_WRITE_BIT,

@@ -4,12 +4,10 @@
          "name": "(Windows) Launch",
          "type": "cppvsdbg",
          "request": "launch",
-         "program": "",
-         "args": [],
+         "program": "${workspaceFolder}/build/Debug/chizen.exe",
          "stopAtEntry": false,
          "cwd": "${fileDirname}",
-         "environment": [],
-         "console": "externalTerminal"
+         "console": "externalTerminal",
       },
    ]
 }

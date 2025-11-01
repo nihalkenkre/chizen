@@ -720,6 +720,13 @@ namespace vk_command_pool
 	}
 }
 
+struct PushConstants
+{
+	int32_t dispatch_x;
+	int32_t dispatch_y;
+	int32_t dispatch_z;
+};
+
 namespace vk_compute_pipeline
 {
 	struct data
@@ -737,98 +744,16 @@ namespace vk_compute_pipeline
 	{
 		data d = {};
 
-		Slang::ComPtr<slang::IGlobalSession> global_session;
-		SLANG_CHECK("create global global_session", slang::createGlobalSession(global_session.writeRef()));
+		const std::string shader_path = std::string(current_path).append("/shaders/compute.comp.glsl.spv");
+		std::vector<char> shader_code(std::filesystem::file_size(shader_path));
+		std::ifstream shader_file(shader_path.c_str(), std::ios::binary | std::ios::in);
 
-		const slang::TargetDesc target_descs[] = {
-			{
-				.format = SLANG_SPIRV,
-				.profile = global_session->findProfile("spirv_1_5"),
-			},
-		};
-
-		slang::CompilerOptionEntry compiler_options[] = {
-			{
-				.name = slang::CompilerOptionName::DebugInformation,
-				.value = {
-					.kind = slang::CompilerOptionValueKind::Int,
-					.intValue0 = SLANG_DEBUG_INFO_LEVEL_STANDARD,
-				},
-			},
-			{
-				.name = slang::CompilerOptionName::EmitSpirvDirectly,
-				.value = {
-					.kind = slang::CompilerOptionValueKind::Int,
-					.intValue0 = 1,
-				},
-			}
-		};
-
-		const slang::SessionDesc session_desc = {
-			.targets = target_descs,
-			.targetCount = std::size(target_descs),
-			.compilerOptionEntries = compiler_options,
-			.compilerOptionEntryCount = std::size(compiler_options),
-		};
-
-		Slang::ComPtr<slang::ISession> session;
-		SLANG_CHECK("create session", global_session->createSession(session_desc, session.writeRef()));
-
-		Slang::ComPtr<slang::IBlob> diagnostic;
-		auto shader_path = std::string(current_path).append("/shaders/compute.slang");
-
-		Slang::ComPtr<slang::IModule> module(session->loadModule(shader_path.c_str()));
-
-		if (diagnostic != NULL)
-		{
-			std::println("{}", reinterpret_cast<const char*>(diagnostic->getBufferPointer()));
-		}
-
-		Slang::ComPtr<slang::IEntryPoint> entry_point;
-		SLANG_CHECK("find compute entry point", module->findEntryPointByName("compute_main", entry_point.writeRef()));
-
-		slang::IComponentType* components[] = { module, entry_point };
-		Slang::ComPtr<slang::IComponentType> program;
-		SLANG_CHECK("create program", session->createCompositeComponentType(components, std::size(components), program.writeRef()));
-
-		diagnostic.setNull();
-		Slang::ComPtr<slang::IComponentType> linked_program;
-		SLANG_CHECK("link program", program->link(linked_program.writeRef(), diagnostic.writeRef()));
-
-		if (diagnostic != NULL)
-		{
-			std::println("{}", reinterpret_cast<const char*>(diagnostic->getBufferPointer()));
-		}
-
-		diagnostic.setNull();
-		Slang::ComPtr<slang::IBlob> spirv;
-		SLANG_CHECK("getting entry point code", program->getEntryPointCode(0, 0, spirv.writeRef(), diagnostic.writeRef()));
-
-		if (diagnostic != NULL)
-		{
-			std::println("{}", reinterpret_cast<const char*>(diagnostic->getBufferPointer()));
-		}
-
-		//diagnostic.setNull();
-		//slang::ProgramLayout* layout = program->getLayout(0, diagnostic.writeRef());
-
-		//if (diagnostic != NULL)
-		//{
-		//	std::println("{}", reinterpret_cast<const char*>(diagnostic->getBufferPointer()));
-		//}
-
-		//Slang::ComPtr<slang::IBlob> layout_json;
-		//SLANG_CHECK("slang layout to json", layout->toJson(layout_json.writeRef()));
-
-		//if (layout_json != NULL)
-		//{
-		//	std::println("{}", reinterpret_cast<const char*>(layout_json->getBufferPointer()));
-		//}
+		shader_file.read(shader_code.data(), shader_code.size());
 
 		const VkShaderModuleCreateInfo mod_ci = {
 			.sType = VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO,
-			.codeSize = spirv->getBufferSize(),
-			.pCode = reinterpret_cast<const uint32_t*>(spirv->getBufferPointer()),
+			.codeSize = shader_code.size(),
+			.pCode = reinterpret_cast<const uint32_t*>(shader_code.data()),
 		};
 
 		VkShaderModule mod = VK_NULL_HANDLE;
@@ -885,10 +810,19 @@ namespace vk_compute_pipeline
 
 		const VkDescriptorSetLayout dsls[] = { {d.dsl} };
 
+		const VkPushConstantRange pc_rngs[] = {
+			{
+				.stageFlags = VK_SHADER_STAGE_COMPUTE_BIT,
+				.size = sizeof(PushConstants),
+			},
+		};
+
 		const VkPipelineLayoutCreateInfo pip_lyt_ci = {
 			.sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO,
 			.setLayoutCount = std::size(dsls),
 			.pSetLayouts = dsls,
+			.pushConstantRangeCount = std::size(pc_rngs),
+			.pPushConstantRanges = pc_rngs,
 		};
 
 		VK_CHECK("create pipe lyt", vkCreatePipelineLayout(device, &pip_lyt_ci, nullptr, &d.lyt));

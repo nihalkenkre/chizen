@@ -50,4 +50,8 @@ target_include_directories(${PROJECT_NAME} PRIVATE SDL/include imgui imgui/backe
 target_link_directories(${PROJECT_NAME} PRIVATE $<IF:$<CONFIG:Debug>,${CMAKE_SOURCE_DIR}/SDL/build/Debug,> $<IF:$<CONFIG:MinSizeRel>,${CMAKE_SOURCE_DIR}/SDL/build/MinSizeRel,> $ENV{VULKAN_SDK}/Lib)
 target_link_libraries(${PROJECT_NAME} PRIVATE SDL3-static Vulkan::Vulkan slang winmm setupapi version)
 
-add_custom_command(TARGET ${PROJECT_NAME} COMMAND ${CMAKE_COMMAND} -E copy_directory "${CMAKE_SOURCE_DIR}/shaders" "$<TARGET_FILE_DIR:${PROJECT_NAME}>/shaders" COMMENT "Copying shaders")
+if (CMAKE_CXX_COMPILER_ID MATCHES "MSVC")
+   add_custom_command(TARGET ${PROJECT_NAME} POST_BUILD COMMAND ${CMAKE_SOURCE_DIR}/build_shaders.bat ${CMAKE_SOURCE_DIR} $<CONFIG> $<TARGET_FILE_DIR:${PROJECT_NAME}>)
+# TODO
+# NON WINDOWS SHADER BUILD SCRIPT
+endif()
