@@ -27,6 +27,7 @@ add_executable(${PROJECT_NAME} ${PROJECT_SRCS} ${SHADER_SRCS} ${IMGUI_SRCS} ${IM
 target_precompile_headers(${PROJECT_NAME} PRIVATE 
                                        <vector>
                                        <fstream>
+                                       <chrono>
                                        <algorithm>
                                        <filesystem>
                                        <expected>
@@ -53,5 +54,5 @@ target_link_libraries(${PROJECT_NAME} PRIVATE SDL3-static Vulkan::Vulkan slang w
 if (CMAKE_CXX_COMPILER_ID MATCHES "MSVC")
    add_custom_command(TARGET ${PROJECT_NAME} POST_BUILD COMMAND ${CMAKE_SOURCE_DIR}/build_shaders.bat ${CMAKE_SOURCE_DIR} $<CONFIG> $<TARGET_FILE_DIR:${PROJECT_NAME}>)
 # TODO
-# NON WINDOWS SHADER BUILD SCRIPT
+# OTHER OS SHADER BUILD SCRIPT
 endif()

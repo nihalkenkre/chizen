@@ -226,6 +226,7 @@ SDL_AppResult SDL_AppIterate(void* appstate)
 		.dispatch_x = 1280,
 		.dispatch_y = 720,
 		.dispatch_z = 1,
+		.current_time = static_cast<uint32_t>(std::chrono::system_clock::now().time_since_epoch().count()),
 	};
 
 	const VkPushConstantsInfo pc_info = {

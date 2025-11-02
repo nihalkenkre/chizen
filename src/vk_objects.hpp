@@ -725,6 +725,7 @@ struct PushConstants
 	int32_t dispatch_x;
 	int32_t dispatch_y;
 	int32_t dispatch_z;
+	uint32_t current_time;
 };
 
 namespace vk_compute_pipeline
