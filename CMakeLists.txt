@@ -7,6 +7,7 @@ find_package(Vulkan REQUIRED)
 
 file(GLOB PROJECT_SRCS src/*)
 file(GLOB SHADER_SRCS shaders/*)
+list(FILTER SHADER_SRCS EXCLUDE REGEX "spv")
 file(GLOB IMGUI_SRCS imgui/*.cpp imgui/*.h imgui/backends/imgui_impl_sdl3.* imgui/backends/imgui_impl_vulkan.*)
 file(GLOB IMGUI_FILE_DLG_SRCS ImGuiFileDialog/ImGuiFileDialog*.*)
 

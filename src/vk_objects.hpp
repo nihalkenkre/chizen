@@ -689,6 +689,7 @@ namespace vk_command_pool
 		VK_CHECK("allocate command buffer", vkAllocateCommandBuffers(device, &allocate_info, d.cmd_buffs.data()));
 
 #ifdef _DEBUG
+		std::string n = name;
 		VkDebugUtilsObjectNameInfoEXT name_info = {
 			.sType = VK_STRUCTURE_TYPE_DEBUG_UTILS_OBJECT_NAME_INFO_EXT,
 			.objectType = VK_OBJECT_TYPE_COMMAND_POOL,
@@ -700,9 +701,10 @@ namespace vk_command_pool
 
 		for (size_t cb = 0; cb < d.cmd_buffs.size(); ++cb)
 		{
+			n = name;
 			name_info.objectType = VK_OBJECT_TYPE_COMMAND_BUFFER;
 			name_info.objectHandle = reinterpret_cast<uint64_t>(d.cmd_buffs[cb]);
-			name_info.pObjectName = std::string(name).append(" command buffer ").append(std::to_string(cb)).c_str();
+			name_info.pObjectName = n.append(" command buffer ").append(std::to_string(cb)).c_str();
 
 			VK_CHECK("setting command pool name", vkSetDebugUtilsObjectNameEXT(device, &name_info));
 		}
@@ -720,13 +722,6 @@ namespace vk_command_pool
 	}
 }
 
-struct PushConstants
-{
-	int32_t dispatch_x;
-	int32_t dispatch_y;
-	int32_t dispatch_z;
-	uint32_t current_time;
-};
 
 namespace vk_compute_pipeline
 {
@@ -735,17 +730,23 @@ namespace vk_compute_pipeline
 		VkDescriptorPool dsp = VK_NULL_HANDLE;
 		VkDescriptorSet ds = VK_NULL_HANDLE;
 		VkDescriptorSetLayout dsl = VK_NULL_HANDLE;
-		VkDeviceSize dsl_size = 0;
-		VkDeviceSize bind_0_offset = 0;
 		VkPipelineLayout lyt = VK_NULL_HANDLE;
-		VkPipeline pipeline = VK_NULL_HANDLE;
+		VkPipeline pipe = VK_NULL_HANDLE;
+	};
+
+	struct PushConstants
+	{
+		uint32_t dispatch_x;
+		uint32_t dispatch_y;
+		uint32_t dispatch_z;
+		uint32_t current_time;
 	};
 
 	data create(const VkDevice device, const std::string current_path, const std::string name)
 	{
 		data d = {};
 
-		const std::string shader_path = std::string(current_path).append("/shaders/compute.comp.glsl.spv");
+		const std::string shader_path = std::string(current_path).append("/shaders/render.comp.glsl.spv");
 		std::vector<char> shader_code(std::filesystem::file_size(shader_path));
 		std::ifstream shader_file(shader_path.c_str(), std::ios::binary | std::ios::in);
 
@@ -836,9 +837,49 @@ namespace vk_compute_pipeline
 			},
 		};
 
-		VK_CHECK("create compute pipeline", vkCreateComputePipelines(device, VK_NULL_HANDLE, std::size(p_cis), p_cis, nullptr, &d.pipeline));
+		VK_CHECK("create compute pipeline", vkCreateComputePipelines(device, VK_NULL_HANDLE, std::size(p_cis), p_cis, nullptr, &d.pipe));
 
 		vkDestroyShaderModule(device, mod, nullptr);
+
+#ifdef _DEBUG
+		std::string n = name;
+		VkDebugUtilsObjectNameInfoEXT name_info = {
+			.sType = VK_STRUCTURE_TYPE_DEBUG_UTILS_OBJECT_NAME_INFO_EXT,
+			.objectType = VK_OBJECT_TYPE_DESCRIPTOR_SET_LAYOUT,
+			.objectHandle = reinterpret_cast<uint64_t>(d.dsl),
+			.pObjectName = n.append(" desc set lyt").c_str(),
+		};
+
+		VK_CHECK("setting cmpt ppln dsl name", vkSetDebugUtilsObjectNameEXT(device, &name_info));
+
+		n = name;
+		name_info.objectType = VK_OBJECT_TYPE_DESCRIPTOR_POOL;
+		name_info.objectHandle = reinterpret_cast<uint64_t>(d.dsp);
+		name_info.pObjectName = n.append(" desc pool").c_str();
+
+		VK_CHECK("setting cmpt ppln dsp name", vkSetDebugUtilsObjectNameEXT(device, &name_info));
+
+		n = name;
+		name_info.objectType = VK_OBJECT_TYPE_DESCRIPTOR_SET;
+		name_info.objectHandle = reinterpret_cast<uint64_t>(d.ds);
+		name_info.pObjectName = n.append(" desc set").c_str();
+
+		VK_CHECK("setting cmpt ppln ds name", vkSetDebugUtilsObjectNameEXT(device, &name_info));
+
+		n = name;
+		name_info.objectType = VK_OBJECT_TYPE_PIPELINE_LAYOUT;
+		name_info.objectHandle = reinterpret_cast<uint64_t>(d.lyt);
+		name_info.pObjectName = n.append(" pipe lyt").c_str();
+
+		VK_CHECK("setting cmpt ppln lyt name", vkSetDebugUtilsObjectNameEXT(device, &name_info));
+
+		n = name;
+		name_info.objectType = VK_OBJECT_TYPE_PIPELINE;
+		name_info.objectHandle = reinterpret_cast<uint64_t>(d.pipe);
+		name_info.pObjectName = n.append(" pipe").c_str();
+
+		VK_CHECK("setting cmpt ppln name", vkSetDebugUtilsObjectNameEXT(device, &name_info));
+#endif	// _DEBUG
 
 		return d;
 	}
@@ -849,13 +890,320 @@ namespace vk_compute_pipeline
 		{
 			vkDestroyDescriptorPool(device, d.dsp, nullptr);
 			vkDestroyDescriptorSetLayout(device, d.dsl, nullptr);
-			vkDestroyPipeline(device, d.pipeline, nullptr);
+			vkDestroyPipeline(device, d.pipe, nullptr);
 			vkDestroyPipelineLayout(device, d.lyt, nullptr);
 		}
 	}
 }
 
-namespace graphics_target
+namespace vk_graphics_pipeline
+{
+	struct data
+	{
+		VkDescriptorPool dsp = VK_NULL_HANDLE;
+		VkDescriptorSet ds = VK_NULL_HANDLE;
+		VkDescriptorSetLayout dsl = VK_NULL_HANDLE;
+		VkPipelineLayout lyt = VK_NULL_HANDLE;
+		VkPipeline pipe = VK_NULL_HANDLE;
+	};
+
+	struct PushConstants
+	{
+		float pos_offset[2];
+		float zoom_level;
+	};
+
+	data create(const VkDevice device, const std::string& current_path, const VkFormat& format, const std::string& name)
+	{
+		data d = {};
+
+		const std::string vert_shader_path = std::string(current_path).append("/shaders/display.vert.glsl.spv");
+		std::vector<char> vert_shader_code(std::filesystem::file_size(vert_shader_path));
+		std::ifstream vert_shader_file(vert_shader_path.c_str(), std::ios::binary | std::ios::in);
+
+		vert_shader_file.read(vert_shader_code.data(), vert_shader_code.size());
+
+		const VkShaderModuleCreateInfo vert_mod_ci = {
+			.sType = VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO,
+			.codeSize = vert_shader_code.size(),
+			.pCode = reinterpret_cast<const uint32_t*>(vert_shader_code.data()),
+		};
+
+		VkShaderModule vert_mod = VK_NULL_HANDLE;
+		VK_CHECK("create vert shader module", vkCreateShaderModule(device, &vert_mod_ci, nullptr, &vert_mod));
+
+		const std::string frag_shader_path = std::string(current_path).append("/shaders/display.frag.glsl.spv");
+		std::vector<char> frag_shader_code(std::filesystem::file_size(frag_shader_path));
+		std::ifstream frag_shader_file(frag_shader_path.c_str(), std::ios::binary | std::ios::in);
+
+		frag_shader_file.read(frag_shader_code.data(), frag_shader_code.size());
+
+		const VkShaderModuleCreateInfo frag_mod_ci = {
+			.sType = VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO,
+			.codeSize = frag_shader_code.size(),
+			.pCode = reinterpret_cast<const uint32_t*>(frag_shader_code.data()),
+		};
+
+		VkShaderModule frag_mod = VK_NULL_HANDLE;
+		VK_CHECK("create frag shader module", vkCreateShaderModule(device, &frag_mod_ci, nullptr, &frag_mod));
+
+		const VkPipelineShaderStageCreateInfo stages[] = {
+			{
+				.sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO,
+				.stage = VK_SHADER_STAGE_VERTEX_BIT,
+				.module = vert_mod,
+				.pName = "main",
+			},
+			{
+				.sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO,
+				.stage = VK_SHADER_STAGE_FRAGMENT_BIT,
+				.module = frag_mod,
+				.pName = "main",
+			},
+		};
+
+		const VkVertexInputBindingDescription vbds[] = {
+			{
+				.binding = 0,
+				.stride = sizeof(float) * 4,
+				.inputRate = VK_VERTEX_INPUT_RATE_VERTEX,
+			},
+		};
+
+		const VkVertexInputAttributeDescription vads[] = {
+			{
+				.location = 0,
+				.binding = 0,
+				.format = VK_FORMAT_R32G32_SFLOAT,
+			},
+			{
+				.location = 1,
+				.binding = 0,
+				.format = VK_FORMAT_R32G32_SFLOAT,
+				.offset = sizeof(float) * 2,
+			},
+		};
+
+		const VkPipelineVertexInputStateCreateInfo vis_ci = {
+			.sType = VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO,
+			.vertexBindingDescriptionCount = std::size(vbds),
+			.pVertexBindingDescriptions = vbds,
+			.vertexAttributeDescriptionCount = std::size(vads),
+			.pVertexAttributeDescriptions = vads,
+		};
+
+		const VkViewport viewports[] = {
+			{},
+		};
+
+		const VkRect2D scissors[] = {
+			{},
+		};
+
+		const VkPipelineViewportStateCreateInfo vs_ci = {
+			.sType = VK_STRUCTURE_TYPE_PIPELINE_VIEWPORT_STATE_CREATE_INFO,
+			.viewportCount = std::size(viewports),
+			.pViewports = viewports,
+			.scissorCount = std::size(scissors),
+			.pScissors = scissors,
+		};
+
+		const VkPipelineInputAssemblyStateCreateInfo ias_ci = {
+			.sType = VK_STRUCTURE_TYPE_PIPELINE_INPUT_ASSEMBLY_STATE_CREATE_INFO,
+			.topology = VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST,
+		};
+
+		const VkPipelineRasterizationStateCreateInfo ras_ci = {
+			.sType = VK_STRUCTURE_TYPE_PIPELINE_RASTERIZATION_STATE_CREATE_INFO,
+			.polygonMode = VK_POLYGON_MODE_FILL,
+			.cullMode = VK_CULL_MODE_BACK_BIT,
+			.frontFace = VK_FRONT_FACE_CLOCKWISE,
+		};
+
+		const VkPipelineMultisampleStateCreateInfo ms_ci = {
+			.sType = VK_STRUCTURE_TYPE_PIPELINE_MULTISAMPLE_STATE_CREATE_INFO,
+			.rasterizationSamples = VK_SAMPLE_COUNT_1_BIT,
+		};
+
+		const VkPipelineColorBlendAttachmentState cbas[] = {
+			{
+				.blendEnable = VK_TRUE,
+				.srcColorBlendFactor = VK_BLEND_FACTOR_SRC_ALPHA,
+				.dstColorBlendFactor = VK_BLEND_FACTOR_ONE_MINUS_SRC_ALPHA,
+				.colorBlendOp = VK_BLEND_OP_ADD,
+				.srcAlphaBlendFactor = VK_BLEND_FACTOR_ONE,
+				.dstAlphaBlendFactor = VK_BLEND_FACTOR_ZERO,
+				.alphaBlendOp = VK_BLEND_OP_ADD,
+				.colorWriteMask = VK_COLOR_COMPONENT_R_BIT | VK_COLOR_COMPONENT_G_BIT | VK_COLOR_COMPONENT_B_BIT | VK_COLOR_COMPONENT_A_BIT,
+			},
+		};
+
+		const VkPipelineColorBlendStateCreateInfo cbs_ci = {
+			.sType = VK_STRUCTURE_TYPE_PIPELINE_COLOR_BLEND_STATE_CREATE_INFO,
+			.attachmentCount = std::size(cbas),
+			.pAttachments = cbas,
+		};
+
+		std::vector<VkDynamicState> ds = {
+			VK_DYNAMIC_STATE_VIEWPORT,
+			VK_DYNAMIC_STATE_SCISSOR,
+		};
+
+		const VkPipelineDynamicStateCreateInfo ds_ci = {
+			.sType = VK_STRUCTURE_TYPE_PIPELINE_DYNAMIC_STATE_CREATE_INFO,
+			.dynamicStateCount = static_cast<uint32_t>(ds.size()),
+			.pDynamicStates = ds.data(),
+		};
+
+		const VkDescriptorSetLayoutBinding dsl_binds[] = {
+			{
+				.binding = 0,
+				.descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
+				.descriptorCount = 1,
+				.stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT,
+			},
+		};
+
+		const VkDescriptorSetLayoutCreateInfo dsl_ci = {
+			.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO,
+			.bindingCount = std::size(dsl_binds),
+			.pBindings = dsl_binds,
+		};
+
+		VK_CHECK("create dsl", vkCreateDescriptorSetLayout(device, &dsl_ci, nullptr, &d.dsl));
+
+		const VkDescriptorPoolSize pool_sizes[] = {
+			{
+				.type = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
+				.descriptorCount = 1,
+			},
+		};
+
+		const VkDescriptorPoolCreateInfo dp_ci = {
+			.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO,
+			.maxSets = 1,
+			.poolSizeCount = std::size(pool_sizes),
+			.pPoolSizes = pool_sizes,
+		};
+
+		VK_CHECK("create dsp", vkCreateDescriptorPool(device, &dp_ci, nullptr, &d.dsp));
+
+		const VkDescriptorSetAllocateInfo ds_ai = {
+			.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO,
+			.descriptorPool = d.dsp,
+			.descriptorSetCount = 1,
+			.pSetLayouts = &d.dsl,
+		};
+
+		VK_CHECK("allocate ds", vkAllocateDescriptorSets(device, &ds_ai, &d.ds));
+
+		const VkDescriptorSetLayout dsls[] = { {d.dsl} };
+
+		const VkPushConstantRange pc_rngs[] = {
+			{
+				.stageFlags = VK_SHADER_STAGE_VERTEX_BIT,
+				.size = sizeof(PushConstants),
+			},
+		};
+
+		const VkPipelineLayoutCreateInfo lyt_ci = {
+			.sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO,
+			.setLayoutCount = 1,
+			.pSetLayouts = &d.dsl,
+			.pushConstantRangeCount = std::size(pc_rngs),
+			.pPushConstantRanges = pc_rngs,
+		};
+
+		VK_CHECK("create graphics pipeline layout", vkCreatePipelineLayout(device, &lyt_ci, nullptr, &d.lyt));
+
+		const VkFormat col_attach_forms[] = {
+			format,
+		};
+
+		const VkPipelineRenderingCreateInfo rend_info = {
+			.sType = VK_STRUCTURE_TYPE_PIPELINE_RENDERING_CREATE_INFO,
+			.colorAttachmentCount = std::size(col_attach_forms),
+			.pColorAttachmentFormats = col_attach_forms,
+		};
+
+		const VkGraphicsPipelineCreateInfo cis[] = {
+			{
+				.sType = VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_CREATE_INFO,
+				.pNext = &rend_info,
+				.stageCount = std::size(stages),
+				.pStages = stages,
+				.pVertexInputState = &vis_ci,
+				.pInputAssemblyState = &ias_ci,
+				.pViewportState = &vs_ci,
+				.pRasterizationState = &ras_ci,
+				.pMultisampleState = &ms_ci,
+				.pColorBlendState = &cbs_ci,
+				.pDynamicState = &ds_ci,
+				.layout = d.lyt,
+			},
+		};
+
+		VK_CHECK("create graphics pipeline", vkCreateGraphicsPipelines(device, VK_NULL_HANDLE, std::size(cis), cis, nullptr, &d.pipe));
+
+		vkDestroyShaderModule(device, vert_mod, nullptr);
+		vkDestroyShaderModule(device, frag_mod, nullptr);
+
+#ifdef _DEBUG
+		std::string n = name;
+		VkDebugUtilsObjectNameInfoEXT name_info = {
+			.sType = VK_STRUCTURE_TYPE_DEBUG_UTILS_OBJECT_NAME_INFO_EXT,
+			.objectType = VK_OBJECT_TYPE_DESCRIPTOR_SET_LAYOUT,
+			.objectHandle = reinterpret_cast<uint64_t>(d.dsl),
+			.pObjectName = n.append(" desc set lyt").c_str(),
+		};
+
+		VK_CHECK("setting gfx ppln dsl name", vkSetDebugUtilsObjectNameEXT(device, &name_info));
+
+		n = name;
+		name_info.objectType = VK_OBJECT_TYPE_DESCRIPTOR_POOL;
+		name_info.objectHandle = reinterpret_cast<uint64_t>(d.dsp);
+		name_info.pObjectName = n.append(" desc pool").c_str();
+
+		VK_CHECK("setting gfx ppln dsp name", vkSetDebugUtilsObjectNameEXT(device, &name_info));
+
+		n = name;
+		name_info.objectType = VK_OBJECT_TYPE_DESCRIPTOR_SET;
+		name_info.objectHandle = reinterpret_cast<uint64_t>(d.ds);
+		name_info.pObjectName = n.append(" desc set").c_str();
+
+		VK_CHECK("setting gfx ppln ds name", vkSetDebugUtilsObjectNameEXT(device, &name_info));
+
+		n = name;
+		name_info.objectType = VK_OBJECT_TYPE_PIPELINE_LAYOUT;
+		name_info.objectHandle = reinterpret_cast<uint64_t>(d.lyt);
+		name_info.pObjectName = n.append(" pipe lyt").c_str();
+
+		VK_CHECK("setting gfx ppln lyt name", vkSetDebugUtilsObjectNameEXT(device, &name_info));
+
+		n = name;
+		name_info.objectType = VK_OBJECT_TYPE_PIPELINE;
+		name_info.objectHandle = reinterpret_cast<uint64_t>(d.pipe);
+		name_info.pObjectName = n.append(" pipe").c_str();
+
+		VK_CHECK("setting gfx ppln name", vkSetDebugUtilsObjectNameEXT(device, &name_info));
+#endif	// _DEBUG
+
+		return d;
+	}
+
+	void destroy(data d, const VkDevice device)
+	{
+		if (device != VK_NULL_HANDLE)
+		{
+			vkDestroyDescriptorPool(device, d.dsp, nullptr);
+			vkDestroyDescriptorSetLayout(device, d.dsl, nullptr);
+			vkDestroyPipeline(device, d.pipe, nullptr);
+			vkDestroyPipelineLayout(device, d.lyt, nullptr);
+		}
+	}
+}
+
+namespace vk_swapchain
 {
 	struct data
 	{
@@ -891,7 +1239,7 @@ namespace graphics_target
 			.oldSwapchain = old_swapchain,
 		};
 
-		graphics_target::data d;
+		vk_swapchain::data d;
 		VK_CHECK("create swapchain", vkCreateSwapchainKHR(device, &create_info, nullptr, &d.swapchain));
 		VK_CHECK("get swapchain images", vkGetSwapchainImagesKHR(device, d.swapchain, &d.images_count, nullptr));
 
@@ -999,7 +1347,7 @@ namespace graphics_target
 		return d;
 	}
 
-	void destroy(graphics_target::data data, const VkDevice device)
+	void destroy(vk_swapchain::data data, const VkDevice device)
 	{
 		vkDestroyCommandPool(device, data.cmd_pool, nullptr);
 
@@ -1038,13 +1386,15 @@ namespace vk_command_buffer
 		VK_CHECK("allocate command buffer", vkAllocateCommandBuffers(device, &allocate_info, cmd_buffs.data()));
 
 #ifdef _DEBUG
+		std::string n = name;
 		for (uint32_t idx = 0; idx < count; ++idx)
 		{
+			n = name;
 			const VkDebugUtilsObjectNameInfoEXT name_info = {
 				.sType = VK_STRUCTURE_TYPE_DEBUG_UTILS_OBJECT_NAME_INFO_EXT,
 				.objectType = VK_OBJECT_TYPE_COMMAND_BUFFER,
 				.objectHandle = reinterpret_cast<uint64_t>(cmd_buffs[idx]),
-				.pObjectName = std::string(name).append(" ").append(std::to_string(idx)).c_str(),
+				.pObjectName = n.append(" ").append(std::to_string(idx)).c_str(),
 			};
 
 			VK_CHECK("setting command buffer name", vkSetDebugUtilsObjectNameEXT(device, &name_info));
@@ -1098,9 +1448,6 @@ namespace vk_buffer
 		VkBuffer buffer = VK_NULL_HANDLE;
 		VmaAllocation allocation = VK_NULL_HANDLE;
 		VmaAllocationInfo alloc_info = {};
-
-		void* map = nullptr;
-		VkDeviceSize addr = 0;
 	};
 
 	data create(const VkDevice device, const VmaAllocator& allocator, const VkDeviceSize size, const VkBufferUsageFlags usage, const VmaAllocationCreateFlags vma_alloc_create_flags, const VmaMemoryUsage vma_mem_usage, const std::string& name)
@@ -1118,14 +1465,7 @@ namespace vk_buffer
 			.usage = vma_mem_usage,
 		};
 
-		VK_CHECK(std::string("allocating buffer").append(name).c_str(), vmaCreateBuffer(allocator, &create_info, &alloc_ci, &d.buffer, &d.allocation, &d.alloc_info));
-
-		VK_CHECK("map memory", vmaMapMemory(allocator, d.allocation, &d.map));
-
-		const VkBufferDeviceAddressInfo bda_info = {
-			.sType = VK_STRUCTURE_TYPE_BUFFER_DEVICE_ADDRESS_INFO,
-			.buffer = d.buffer,
-		};
+		VK_CHECK(std::string("create buffer").append(name).c_str(), vmaCreateBuffer(allocator, &create_info, &alloc_ci, &d.buffer, &d.allocation, &d.alloc_info));
 
 #ifdef _DEBUG
 		const VkDebugUtilsObjectNameInfoEXT name_info = {
@@ -1145,7 +1485,6 @@ namespace vk_buffer
 	{
 		if (device != VK_NULL_HANDLE)
 		{
-			vmaUnmapMemory(allocator, d.allocation);
 			vmaDestroyBuffer(allocator, d.buffer, d.allocation);
 		}
 	}
