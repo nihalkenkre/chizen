@@ -51,6 +51,39 @@ VKAPI_ATTR void VKAPI_CALL vkCmdSetDescriptorBufferOffsets2EXT(VkCommandBuffer c
 	std::printf("%s %d\n", action, result);		\
 }
 
+struct dim2d
+{
+	uint32_t width = 0;
+	uint32_t height = 0;
+};
+
+dim2d operator+(const dim2d& lhs, const dim2d& rhs)
+{
+	return { lhs.width + rhs.width, lhs.height + rhs.height };
+}
+
+dim2d operator-(const dim2d& lhs, const dim2d& rhs)
+{
+	return { lhs.width - lhs.height, lhs.height - rhs.height };
+}
+
+void operator +=(dim2d& lhs, const dim2d& rhs)
+{
+	lhs.width += rhs.width;
+	lhs.height += rhs.height;
+}
+
+void operator -=(dim2d& lhs, const dim2d& rhs)
+{
+	lhs.width -= rhs.width;
+	lhs.height -= rhs.height;
+}
+
+dim2d operator*(const dim2d& lhs, const float multiplier)
+{
+	return { static_cast<uint32_t>(static_cast<float>(lhs.width) * multiplier), static_cast<uint32_t>(static_cast<float>(lhs.height) * multiplier) };
+}
+
 inline static VkDeviceSize ALIGNED_SIZE(VkDeviceSize value, VkDeviceSize alignment)
 {
 	return (value + alignment - 1) & ~(alignment - 1);
@@ -1502,6 +1535,7 @@ namespace vk_image
 		VkDeviceSize desc_offset = 0;
 		VmaAllocation alloc = VK_NULL_HANDLE;
 		VmaAllocationInfo alloc_info = {};
+		dim2d dims = {};
 	};
 
 	data create(
@@ -1512,7 +1546,12 @@ namespace vk_image
 		const VmaAllocator allocator,
 		const std::string& name)
 	{
-		data d = {};
+		data d = {
+			.dims = {
+				.width = extent.width, 
+				.height = extent.height,
+			},
+		};
 
 		const VkImageCreateInfo create_info = {
 			.sType = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO,

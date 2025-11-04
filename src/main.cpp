@@ -46,37 +46,6 @@ void operator -=(pos2d& lhs, const pos2d& rhs)
 	lhs.y -= rhs.y;
 }
 
-struct dim2d : public VkExtent2D
-{
-};
-
-dim2d operator+(const dim2d& lhs, const dim2d& rhs)
-{
-	return { lhs.width + rhs.width, lhs.height + rhs.height };
-}
-
-dim2d operator-(const dim2d& lhs, const dim2d& rhs)
-{
-	return { lhs.width - lhs.height, lhs.height - rhs.height };
-}
-
-void operator +=(dim2d& lhs, const dim2d& rhs)
-{
-	lhs.width += rhs.width;
-	lhs.height += rhs.height;
-}
-
-void operator -=(dim2d& lhs, const dim2d& rhs)
-{
-	lhs.width -= rhs.width;
-	lhs.height -= rhs.height;
-}
-
-dim2d operator*(const dim2d& lhs, const float multiplier)
-{
-	return { static_cast<uint32_t>(static_cast<float>(lhs.width) * multiplier), static_cast<uint32_t>(static_cast<float>(lhs.height) * multiplier) };
-}
-
 struct VulkanState
 {
 	VkInstance instance = VK_NULL_HANDLE;
@@ -235,36 +204,55 @@ SDL_AppResult SDL_AppEvent(void* appstate, SDL_Event* event)
 {
 	ImGui_ImplSDL3_ProcessEvent(event);
 
+	ImGuiIO& io = ImGui::GetIO();
+
 	if (event->type == SDL_EVENT_QUIT)
 	{
 		return SDL_APP_SUCCESS;
 	}
 	else if (event->type == SDL_EVENT_MOUSE_BUTTON_DOWN)
 	{
-		app_state.mouse_motion_tracking = true;
-		app_state.last_mouse_pos = { event->motion.x, event->motion.y };
+		if (!io.WantCaptureMouse)
+		{
+			app_state.mouse_motion_tracking = true;
+			app_state.last_mouse_pos = { event->motion.x, event->motion.y };
+		}
 	}
 	else if (event->type == SDL_EVENT_MOUSE_BUTTON_UP)
 	{
-		app_state.mouse_motion_tracking = false;
-		app_state.last_mouse_pos = {};
+		if (!io.WantCaptureMouse)
+		{
+			app_state.mouse_motion_tracking = false;
+			app_state.last_mouse_pos = {};
+		}
 	}
 	else if (event->type == SDL_EVENT_MOUSE_MOTION)
 	{
-		if (app_state.mouse_motion_tracking)
+		if (!io.WantCaptureMouse)
 		{
-			app_state.delta_mouse += ((app_state.last_mouse_pos - pos2d{ event->motion.x, event->motion.y }) / 
-				pos2d(static_cast<float>(app_state.vk_state.surface_data.surf_caps.currentExtent.width), static_cast<float>(app_state.vk_state.surface_data.surf_caps.currentExtent.height))) * 2;
+			if (app_state.mouse_motion_tracking)
+			{
+				app_state.delta_mouse += ((app_state.last_mouse_pos - pos2d{ event->motion.x, event->motion.y }) /
+					pos2d(static_cast<float>(app_state.vk_state.surface_data.surf_caps.currentExtent.width), static_cast<float>(app_state.vk_state.surface_data.surf_caps.currentExtent.height))) * 2;
 
-			app_state.last_mouse_pos = { event->motion.x, event->motion.y };
+				app_state.last_mouse_pos = { event->motion.x, event->motion.y };
+			}
 		}
 	}
 	else if (event->type == SDL_EVENT_MOUSE_WHEEL)
 	{
-		app_state.rndr_tgt_zoom_level = std::max(0.01f, app_state.rndr_tgt_zoom_level + event->wheel.y / 20.f);
+		if (!io.WantCaptureMouse)
+		{
+			app_state.rndr_tgt_zoom_level = std::max(0.01f, app_state.rndr_tgt_zoom_level + event->wheel.y / 20.f);
+		}
 	}
 
 	return SDL_APP_CONTINUE;
+}
+
+bool is_new_render_target_required()
+{
+	return (app_state.vk_state.rndr_tgt.dims.width != app_state.render_dims.width) || (app_state.vk_state.rndr_tgt.dims.height != app_state.render_dims.height);
 }
 
 SDL_AppResult SDL_AppIterate(void* appstate)
@@ -275,6 +263,18 @@ SDL_AppResult SDL_AppIterate(void* appstate)
 	}
 
 	VkDevice device = app_state.vk_state.device_data.device;
+
+	if (is_new_render_target_required())
+	{
+		VK_CHECK("device wait for render target destroy", vkDeviceWaitIdle(device));
+
+		vk_image::destroy(app_state.vk_state.rndr_tgt, app_state.vk_state.allocator, device);
+		app_state.vk_state.rndr_tgt = vk_image::create(
+			app_state.vk_state.device_data.device,
+			{ app_state.render_dims.width, app_state.render_dims.height, 1 },
+			VK_FORMAT_R32G32B32A32_SFLOAT, VK_IMAGE_USAGE_STORAGE_BIT | VK_IMAGE_USAGE_SAMPLED_BIT,
+			app_state.vk_state.allocator, "render target");
+	}
 
 	const VkAcquireNextImageInfoKHR acq_info = {
 		.sType = VK_STRUCTURE_TYPE_ACQUIRE_NEXT_IMAGE_INFO_KHR,
@@ -363,7 +363,7 @@ SDL_AppResult SDL_AppIterate(void* appstate)
 
 	vkCmdPushConstants2(curr_cmd_buff, &cmpt_pc_info);
 
-	vkCmdDispatch(curr_cmd_buff, cmpt_pc.dispatch_x, cmpt_pc.dispatch_y, cmpt_pc.dispatch_z);
+	vkCmdDispatch(curr_cmd_buff, cmpt_pc.dispatch_x / 32 + 1, cmpt_pc.dispatch_y / 32 + 1, cmpt_pc.dispatch_z / 32 + 1);
 
 	change_image_layout(curr_cmd_buff,
 		VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, VK_ACCESS_2_SHADER_STORAGE_WRITE_BIT,
@@ -492,7 +492,10 @@ SDL_AppResult SDL_AppIterate(void* appstate)
 	ImGui_ImplSDL3_NewFrame();
 	ImGui::NewFrame();
 
-	ImGui::ShowDemoWindow();
+	ImGui::Begin("Awesome Panel");
+	ImGui::DragInt2("Render Dims", reinterpret_cast<int*>(&app_state.render_dims), 0, 8192);
+
+	ImGui::End();
 	ImGui::Render();
 
 	ImGui_ImplVulkan_RenderDrawData(ImGui::GetDrawData(), curr_cmd_buff);
