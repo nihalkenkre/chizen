@@ -63,15 +63,27 @@ struct VulkanState
 	vk_image::data rndr_tgt = {};
 };
 
+struct ImGuiState
+{
+	int tmp_render_dims[2] = { 1280, 720 };
+};
+
+struct RenderTargetState
+{
+	dim2d dims = { 1280, 720 };
+	float zoom_level = 1;
+	bool is_reset = false;
+};
+
 struct AppState
 {
 	SDL_Window* window = nullptr;
 	std::string current_path;
 	VulkanState vk_state = {};
-	float rndr_tgt_zoom_level = 1;
-	dim2d render_dims = { 1280, 720 };
 	pos2d delta_mouse = {};
+	RenderTargetState rt_state = {};
 	pos2d last_mouse_pos = {};
+	ImGuiState imgui_state = {};
 	bool mouse_motion_tracking = false;
 };
 
@@ -88,7 +100,7 @@ SDL_AppResult SDL_AppInit(void** appstate, int argc, char** argv)
 	app_state.current_path = std::filesystem::path(std::string(argv[0])).parent_path().string();
 
 	SDL_CHECK(SDL_Init(SDL_INIT_VIDEO));
-	app_state.window = SDL_CreateWindow("Chizen", app_state.render_dims.width, app_state.render_dims.height, SDL_WINDOW_MAXIMIZED | SDL_WINDOW_RESIZABLE | SDL_WINDOW_VULKAN);
+	app_state.window = SDL_CreateWindow("Chizen", app_state.rt_state.dims.width, app_state.rt_state.dims.height, SDL_WINDOW_MAXIMIZED | SDL_WINDOW_RESIZABLE | SDL_WINDOW_VULKAN);
 
 	if (app_state.window == nullptr)
 	{
@@ -118,7 +130,7 @@ SDL_AppResult SDL_AppInit(void** appstate, int argc, char** argv)
 
 	app_state.vk_state.rndr_tgt = vk_image::create(
 		app_state.vk_state.device_data.device,
-		{ app_state.render_dims.width, app_state.render_dims.height, 1 },
+		{ app_state.rt_state.dims.width, app_state.rt_state.dims.height, 1 },
 		VK_FORMAT_R32G32B32A32_SFLOAT, VK_IMAGE_USAGE_STORAGE_BIT | VK_IMAGE_USAGE_SAMPLED_BIT,
 		app_state.vk_state.allocator, "render target");
 	app_state.vk_state.cmpt_ppln = vk_compute_pipeline::create(app_state.vk_state.device_data.device, app_state.current_path, "compute pipeline");
@@ -223,6 +235,7 @@ SDL_AppResult SDL_AppEvent(void* appstate, SDL_Event* event)
 		if (!io.WantCaptureMouse)
 		{
 			app_state.mouse_motion_tracking = false;
+			app_state.rt_state.is_reset = false;
 			app_state.last_mouse_pos = {};
 		}
 	}
@@ -236,6 +249,7 @@ SDL_AppResult SDL_AppEvent(void* appstate, SDL_Event* event)
 					pos2d(static_cast<float>(app_state.vk_state.surface_data.surf_caps.currentExtent.width), static_cast<float>(app_state.vk_state.surface_data.surf_caps.currentExtent.height))) * 2;
 
 				app_state.last_mouse_pos = { event->motion.x, event->motion.y };
+				app_state.rt_state.is_reset = 1;
 			}
 		}
 	}
@@ -243,7 +257,7 @@ SDL_AppResult SDL_AppEvent(void* appstate, SDL_Event* event)
 	{
 		if (!io.WantCaptureMouse)
 		{
-			app_state.rndr_tgt_zoom_level = std::max(0.01f, app_state.rndr_tgt_zoom_level + event->wheel.y / 20.f);
+			app_state.rt_state.zoom_level = std::max(0.01f, app_state.rt_state.zoom_level + event->wheel.y / 20.f);
 		}
 	}
 
@@ -252,7 +266,7 @@ SDL_AppResult SDL_AppEvent(void* appstate, SDL_Event* event)
 
 bool is_new_render_target_required()
 {
-	return (app_state.vk_state.rndr_tgt.dims.width != app_state.render_dims.width) || (app_state.vk_state.rndr_tgt.dims.height != app_state.render_dims.height);
+	return (app_state.vk_state.rndr_tgt.dims.width != app_state.rt_state.dims.width) || (app_state.vk_state.rndr_tgt.dims.height != app_state.rt_state.dims.height);
 }
 
 SDL_AppResult SDL_AppIterate(void* appstate)
@@ -271,7 +285,7 @@ SDL_AppResult SDL_AppIterate(void* appstate)
 		vk_image::destroy(app_state.vk_state.rndr_tgt, app_state.vk_state.allocator, device);
 		app_state.vk_state.rndr_tgt = vk_image::create(
 			app_state.vk_state.device_data.device,
-			{ app_state.render_dims.width, app_state.render_dims.height, 1 },
+			{ app_state.rt_state.dims.width, app_state.rt_state.dims.height, 1 },
 			VK_FORMAT_R32G32B32A32_SFLOAT, VK_IMAGE_USAGE_STORAGE_BIT | VK_IMAGE_USAGE_SAMPLED_BIT,
 			app_state.vk_state.allocator, "render target");
 	}
@@ -318,11 +332,7 @@ SDL_AppResult SDL_AppIterate(void* appstate)
 
 	vkCmdBindPipeline(curr_cmd_buff, VK_PIPELINE_BIND_POINT_COMPUTE, app_state.vk_state.cmpt_ppln.pipe);
 
-	const VkDescriptorImageInfo cmpt_desc_img_info = {
-		.sampler = app_state.vk_state.rndr_tgt.sampler,
-		.imageView = app_state.vk_state.rndr_tgt.image_view,
-		.imageLayout = VK_IMAGE_LAYOUT_GENERAL,
-	};
+	app_state.vk_state.rndr_tgt.desc_img_info.imageLayout = VK_IMAGE_LAYOUT_GENERAL;
 
 	const VkWriteDescriptorSet cmpt_desc_writes[] = {
 		{
@@ -330,7 +340,7 @@ SDL_AppResult SDL_AppIterate(void* appstate)
 			.dstSet = app_state.vk_state.cmpt_ppln.ds,
 			.descriptorCount = 1,
 			.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_IMAGE,
-			.pImageInfo = &cmpt_desc_img_info,
+			.pImageInfo = &app_state.vk_state.rndr_tgt.desc_img_info,
 		},
 	};
 
@@ -347,10 +357,10 @@ SDL_AppResult SDL_AppIterate(void* appstate)
 	vkCmdBindDescriptorSets2(curr_cmd_buff, &cmpt_ds_bi);
 
 	const vk_compute_pipeline::PushConstants cmpt_pc = {
-		.dispatch_x = app_state.render_dims.width,
-		.dispatch_y = app_state.render_dims.height,
-		.dispatch_z = 1,
+		.dispatch_x = app_state.rt_state.dims.width,
+		.dispatch_y = app_state.rt_state.dims.height,
 		.current_time = static_cast<uint32_t>(std::chrono::system_clock::now().time_since_epoch().count()),
+		.is_reset = app_state.rt_state.is_reset,
 	};
 
 	const VkPushConstantsInfo cmpt_pc_info = {
@@ -363,7 +373,7 @@ SDL_AppResult SDL_AppIterate(void* appstate)
 
 	vkCmdPushConstants2(curr_cmd_buff, &cmpt_pc_info);
 
-	vkCmdDispatch(curr_cmd_buff, cmpt_pc.dispatch_x / 32 + 1, cmpt_pc.dispatch_y / 32 + 1, cmpt_pc.dispatch_z / 32 + 1);
+	vkCmdDispatch(curr_cmd_buff, cmpt_pc.dispatch_x / 32 + 1, cmpt_pc.dispatch_y / 32 + 1, 1);
 
 	change_image_layout(curr_cmd_buff,
 		VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, VK_ACCESS_2_SHADER_STORAGE_WRITE_BIT,
@@ -386,7 +396,7 @@ SDL_AppResult SDL_AppIterate(void* appstate)
 			.imageView = app_state.vk_state.swapchain_data.image_views[app_state.vk_state.swapchain_data.curr_img_idx],
 			.imageLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
 			.loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR,
-			.storeOp = VK_ATTACHMENT_STORE_OP_STORE,
+			.storeOp = VK_ATTACHMENT_STORE_OP_NONE,
 			.clearValue = {
 				.color = {
 					.float32 = {
@@ -422,11 +432,7 @@ SDL_AppResult SDL_AppIterate(void* appstate)
 		.pDescriptorSets = &app_state.vk_state.gfx_ppln.ds,
 	};
 
-	const VkDescriptorImageInfo gfx_desc_img_info = {
-		.sampler = app_state.vk_state.rndr_tgt.sampler,
-		.imageView = app_state.vk_state.rndr_tgt.image_view,
-		.imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
-	};
+	app_state.vk_state.rndr_tgt.desc_img_info.imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
 
 	const VkWriteDescriptorSet gfx_desc_writes[] = {
 		{
@@ -434,7 +440,7 @@ SDL_AppResult SDL_AppIterate(void* appstate)
 			.dstSet = app_state.vk_state.gfx_ppln.ds,
 			.descriptorCount = 1,
 			.descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
-			.pImageInfo = &gfx_desc_img_info,
+			.pImageInfo = &app_state.vk_state.rndr_tgt.desc_img_info,
 		},
 	};
 
@@ -473,7 +479,7 @@ SDL_AppResult SDL_AppIterate(void* appstate)
 			app_state.delta_mouse.x,
 			app_state.delta_mouse.y,
 		},
-		.zoom_level = app_state.rndr_tgt_zoom_level,
+		.zoom_level = app_state.rt_state.zoom_level,
 	};
 
 	const VkPushConstantsInfo gfx_pc_info = {
@@ -493,7 +499,15 @@ SDL_AppResult SDL_AppIterate(void* appstate)
 	ImGui::NewFrame();
 
 	ImGui::Begin("Awesome Panel");
-	ImGui::DragInt2("Render Dims", reinterpret_cast<int*>(&app_state.render_dims), 0, 8192);
+
+	if (ImGui::InputInt2("Render Dims", app_state.imgui_state.tmp_render_dims))
+	{
+		app_state.imgui_state.tmp_render_dims[0] = std::clamp(app_state.imgui_state.tmp_render_dims[0], 1, 8192);
+		app_state.rt_state.dims.width = app_state.imgui_state.tmp_render_dims[0];
+
+		app_state.imgui_state.tmp_render_dims[1] = std::clamp(app_state.imgui_state.tmp_render_dims[1], 1, 8192);
+		app_state.rt_state.dims.height = app_state.imgui_state.tmp_render_dims[1];
+	}
 
 	ImGui::End();
 	ImGui::Render();

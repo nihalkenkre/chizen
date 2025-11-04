@@ -2,14 +2,14 @@
 
 #define UINT32_MAX 0xFFFFFFFF
 
-layout(set=0, binding=0, rgba32f) uniform writeonly image2D render_target;
+layout(set = 0, binding = 0, rgba32f) uniform image2D render_target;
 
-layout(local_size_x=32, local_size_y=32, local_size_z=1) in;
+layout(local_size_x = 32, local_size_y = 32, local_size_z = 1) in;
 
-layout(push_constant) uniform PushConstants
-{
-   ivec3 render_dims;
+layout(push_constant) uniform PushConstants {
+   ivec2 dispatch_size;
    uint current_time;
+   uint is_reset;
 } pc;
 
 uint lcg_xs_24(inout uint state) {
@@ -26,24 +26,30 @@ float random(inout uint state) {
    return float(result) * inv_max_int;
 }
 
-void main()
-{
+void main() {
    uvec3 thread_id = gl_GlobalInvocationID;
 
-   if (thread_id.x > pc.render_dims.x || thread_id.y > pc.render_dims.y)
+   if(thread_id.x > pc.dispatch_size.x || thread_id.y > pc.dispatch_size.y)
       return;
 
    ivec2 image_size = imageSize(render_target);
 
    uint flatIndex = gl_GlobalInvocationID.z * (gl_NumWorkGroups.x * gl_WorkGroupSize.x) * (gl_NumWorkGroups.y * gl_WorkGroupSize.y) +
-                 gl_GlobalInvocationID.y * (gl_NumWorkGroups.x * gl_WorkGroupSize.x) +
-                 gl_GlobalInvocationID.x + pc.current_time;
+      gl_GlobalInvocationID.y * (gl_NumWorkGroups.x * gl_WorkGroupSize.x) +
+      gl_GlobalInvocationID.x + pc.current_time;
 
-   float hash_x = random(flatIndex);
-   float hash_y = random(flatIndex);
-   float hash_z = random(flatIndex);
+   float hash_x = random(flatIndex) / 100.f;
+   float hash_y = random(flatIndex) / 100.f;
+   float hash_z = random(flatIndex) / 100.f;
+
+   vec4 in_color = vec4(0,0,0,1);
+
+   if (pc.is_reset == 0)
+   {
+      in_color = imageLoad(render_target, ivec2(thread_id.xy));
+   }
 
    vec4 out_color = vec4(hash_x, hash_y, hash_z, 1);
-   
-   imageStore(render_target, ivec2(thread_id.xy), out_color);
+
+   imageStore(render_target, ivec2(thread_id.xy), out_color + in_color);
 }

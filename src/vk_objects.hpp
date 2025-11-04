@@ -769,10 +769,10 @@ namespace vk_compute_pipeline
 
 	struct PushConstants
 	{
-		uint32_t dispatch_x;
-		uint32_t dispatch_y;
-		uint32_t dispatch_z;
-		uint32_t current_time;
+		uint32_t dispatch_x = 32;
+		uint32_t dispatch_y = 32;
+		uint32_t current_time = 0;
+		uint32_t is_reset = 0;
 	};
 
 	data create(const VkDevice device, const std::string current_path, const std::string name)
@@ -1531,7 +1531,7 @@ namespace vk_image
 		VkImageView image_view = VK_NULL_HANDLE;
 		VkSampler sampler = VK_NULL_HANDLE;
 		VkImageLayout image_layout = VK_IMAGE_LAYOUT_UNDEFINED;
-		void* descriptor = nullptr;
+		VkDescriptorImageInfo desc_img_info = {};
 		VkDeviceSize desc_offset = 0;
 		VmaAllocation alloc = VK_NULL_HANDLE;
 		VmaAllocationInfo alloc_info = {};
@@ -1591,8 +1591,13 @@ namespace vk_image
 
 		VK_CHECK(std::string("create sampler ").append(name).c_str(), vkCreateSampler(device, &s_ci, nullptr, &d.sampler));
 
+		d.desc_img_info = {
+			.sampler = d.sampler,
+			.imageView = d.image_view,
+		};
+
 #ifdef _DEBUG
-		const VkDebugUtilsObjectNameInfoEXT name_info = {
+		VkDebugUtilsObjectNameInfoEXT name_info = {
 			.sType = VK_STRUCTURE_TYPE_DEBUG_UTILS_OBJECT_NAME_INFO_EXT,
 			.objectType = VK_OBJECT_TYPE_IMAGE,
 			.objectHandle = reinterpret_cast<uint64_t>(d.image),
@@ -1600,6 +1605,21 @@ namespace vk_image
 		};
 
 		VK_CHECK(std::string("setting image name ").append(name).c_str(), vkSetDebugUtilsObjectNameEXT(device, &name_info));
+
+		std::string n(name);
+		name_info.objectType = VK_OBJECT_TYPE_IMAGE_VIEW;
+		name_info.objectHandle = reinterpret_cast<uint64_t>(d.image_view);
+		name_info.pObjectName = n.append(" image view").c_str();
+
+		VK_CHECK(std::string("setting image view name ").append(name).c_str(), vkSetDebugUtilsObjectNameEXT(device, &name_info));
+		
+		n = name;
+		name_info.objectType = VK_OBJECT_TYPE_SAMPLER;
+		name_info.objectHandle = reinterpret_cast<uint64_t>(d.sampler);
+		name_info.pObjectName = n.append(" sampler").c_str();
+
+		VK_CHECK(std::string("setting sample name ").append(name).c_str(), vkSetDebugUtilsObjectNameEXT(device, &name_info));
+
 #endif //  _DEBUG
 
 		return d;
@@ -1612,8 +1632,6 @@ namespace vk_image
 			vkDestroySampler(device, d.sampler, nullptr);
 			vkDestroyImageView(device, d.image_view, nullptr);
 			vmaDestroyImage(allocator, d.image, d.alloc);
-
-			std::free(d.descriptor);
 		}
 	}
 }
