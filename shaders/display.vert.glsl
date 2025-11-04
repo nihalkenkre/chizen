@@ -11,7 +11,7 @@ layout(push_constant) uniform PushConstants {
 layout(location = 0) out vec2 out_uv;
 
 void main() {
-   gl_Position = vec4((in_position - pc.pos_offset) * pc.zoom_level, 0, 1);
+   gl_Position = vec4((in_position * pc.zoom_level) - pc.pos_offset, 0, 1);
 
    out_uv = in_uv;
 }

@@ -19,9 +19,19 @@ pos2d operator-(const pos2d& lhs, const pos2d& rhs)
 	return pos2d{ lhs.x - rhs.x, lhs.y - rhs.y };
 }
 
+pos2d operator*(const pos2d& lhs, const float multiplier)
+{
+	return pos2d{ lhs.x * multiplier , lhs.y * multiplier };
+}
+
 pos2d operator/(const pos2d& lhs, const float divisor)
 {
 	return pos2d{ lhs.x / divisor, lhs.y / divisor };
+}
+
+pos2d operator/(const pos2d& lhs, const pos2d& rhs)
+{
+	return pos2d{ lhs.x / rhs.x, lhs.y / rhs.y };
 }
 
 void operator +=(pos2d& lhs, const pos2d& rhs)
@@ -238,21 +248,15 @@ SDL_AppResult SDL_AppEvent(void* appstate, SDL_Event* event)
 	{
 		app_state.mouse_motion_tracking = false;
 		app_state.last_mouse_pos = {};
-		app_state.delta_mouse = {};
 	}
 	else if (event->type == SDL_EVENT_MOUSE_MOTION)
 	{
-		app_state.vk_state.clear_color[0] = event->motion.x / app_state.vk_state.surface_data.surf_caps.currentExtent.width;
-		app_state.vk_state.clear_color[1] = event->motion.y / app_state.vk_state.surface_data.surf_caps.currentExtent.height;
-		app_state.vk_state.clear_color[2] = 0;
-		app_state.vk_state.clear_color[3] = 1;
-
 		if (app_state.mouse_motion_tracking)
 		{
-			app_state.delta_mouse += (app_state.last_mouse_pos - pos2d{ event->motion.x, event->motion.y }) / 100.f;
-			app_state.last_mouse_pos = { event->motion.x, event->motion.y };
+			app_state.delta_mouse += ((app_state.last_mouse_pos - pos2d{ event->motion.x, event->motion.y }) / 
+				pos2d(static_cast<float>(app_state.vk_state.surface_data.surf_caps.currentExtent.width), static_cast<float>(app_state.vk_state.surface_data.surf_caps.currentExtent.height))) * 2;
 
-			std::println("{} {}", app_state.delta_mouse.x, app_state.delta_mouse.y);
+			app_state.last_mouse_pos = { event->motion.x, event->motion.y };
 		}
 	}
 	else if (event->type == SDL_EVENT_MOUSE_WHEEL)
@@ -386,10 +390,10 @@ SDL_AppResult SDL_AppIterate(void* appstate)
 			.clearValue = {
 				.color = {
 					.float32 = {
-						app_state.vk_state.clear_color[0],
-						app_state.vk_state.clear_color[1],
-						app_state.vk_state.clear_color[2],
-						app_state.vk_state.clear_color[3]
+						0.2f,
+						0.2f,
+						0.2f,
+						1.0f,
 					},
 				},
 			},
