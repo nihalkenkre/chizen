@@ -61,7 +61,6 @@ struct VulkanState
 	vk_graphics_pipeline::data gfx_ppln = {};
 	vk_buffer::data geom_buffer = {};
 	std::vector<vk_image::data> rndr_tgts;
-	uint8_t curr_frame = 0;
 };
 
 struct ImGuiState
@@ -221,6 +220,11 @@ SDL_AppResult SDL_AppInit(void** appstate, int argc, char** argv)
 
 SDL_AppResult SDL_AppEvent(void* appstate, SDL_Event* event)
 {
+	if (SDL_GetWindowFlags(app_state.window) & SDL_WINDOW_MINIMIZED)
+	{
+		return SDL_APP_CONTINUE;
+	}
+
 	ImGui_ImplSDL3_ProcessEvent(event);
 
 	ImGuiIO& io = ImGui::GetIO();
@@ -267,6 +271,13 @@ SDL_AppResult SDL_AppEvent(void* appstate, SDL_Event* event)
 			app_state.rt_state.zoom_level = std::max(0.01f, app_state.rt_state.zoom_level + event->wheel.y / 20.f);
 		}
 	}
+	else if (event->type == SDL_EVENT_WINDOW_RESIZED)
+	{
+		VK_CHECK("gfx q wait idle", vkQueueWaitIdle(app_state.vk_state.device_data.gfx_q));
+		VK_CHECK("get surface capabilities", vkGetPhysicalDeviceSurfaceCapabilitiesKHR(app_state.vk_state.phy_dev_data.phy_dev, app_state.vk_state.surface_data.surface, &app_state.vk_state.surface_data.surf_caps));
+		vk_swapchain::destroy(app_state.vk_state.swapchain_data, app_state.vk_state.device_data.device);
+		app_state.vk_state.swapchain_data = vk_swapchain::create(app_state.vk_state.device_data.device, app_state.vk_state.surface_data, app_state.vk_state.phy_dev_data, VK_NULL_HANDLE, "swapchain");
+	}
 
 	return SDL_APP_CONTINUE;
 }
@@ -300,10 +311,9 @@ SDL_AppResult SDL_AppIterate(void* appstate)
 		}
 	}
 
-	uint8_t curr_frame = app_state.vk_state.curr_frame;
+	uint8_t curr_frame = app_state.vk_state.swapchain_data.curr_frame;
 
 	VK_CHECK("wait for rndr fnc", vkWaitForFences(device, 1, &app_state.vk_state.swapchain_data.rndr_fncs[curr_frame], VK_TRUE, UINT64_MAX));
-	VK_CHECK("reset rndr fnc", vkResetFences(device, 1, &app_state.vk_state.swapchain_data.rndr_fncs[curr_frame]));
 
 	VkCommandBuffer curr_cmd_buff = app_state.vk_state.swapchain_data.cmd_buffs[curr_frame];
 
@@ -376,26 +386,15 @@ SDL_AppResult SDL_AppIterate(void* appstate)
 	const VkAcquireNextImageInfoKHR acq_info = {
 		.sType = VK_STRUCTURE_TYPE_ACQUIRE_NEXT_IMAGE_INFO_KHR,
 		.swapchain = app_state.vk_state.swapchain_data.swapchain,
+		.timeout = UINT64_MAX,
 		.semaphore = app_state.vk_state.swapchain_data.acq_sig_sems[curr_frame],
 		.deviceMask = 0x1,
 	};
 
 	uint32_t sc_img_idx = 0;
 	VkResult result = vkAcquireNextImage2KHR(device, &acq_info, &sc_img_idx);
-	if (result == VK_NOT_READY)
-	{
-		return SDL_APP_CONTINUE;
-	}
-	else if (result == VK_ERROR_OUT_OF_DATE_KHR)
-	{
-		VK_CHECK("gfx q wait idle", vkQueueWaitIdle(app_state.vk_state.device_data.gfx_q));
-		VK_CHECK("get surface capabilities", vkGetPhysicalDeviceSurfaceCapabilitiesKHR(app_state.vk_state.phy_dev_data.phy_dev, app_state.vk_state.surface_data.surface, &app_state.vk_state.surface_data.surf_caps));
 
-		vk_swapchain::destroy(app_state.vk_state.swapchain_data, app_state.vk_state.device_data.device);
-		app_state.vk_state.swapchain_data = vk_swapchain::create(app_state.vk_state.device_data.device, app_state.vk_state.surface_data, app_state.vk_state.phy_dev_data, VK_NULL_HANDLE, "swapchain");
-
-		return SDL_APP_CONTINUE;
-	}
+	VK_CHECK("reset rndr fnc", vkResetFences(device, 1, &app_state.vk_state.swapchain_data.rndr_fncs[curr_frame]));
 
 	VkImage curr_sc_img = app_state.vk_state.swapchain_data.images[sc_img_idx];
 	VkFence curr_rndr_fnc = app_state.vk_state.swapchain_data.rndr_fncs[curr_frame];
@@ -552,7 +551,7 @@ SDL_AppResult SDL_AppIterate(void* appstate)
 	const VkSemaphoreSubmitInfo wait_sem_infos[] = {
 		{
 			.sType = VK_STRUCTURE_TYPE_SEMAPHORE_SUBMIT_INFO,
-			.semaphore = app_state.vk_state.swapchain_data.acq_sig_sems[app_state.vk_state.curr_frame],
+			.semaphore = app_state.vk_state.swapchain_data.acq_sig_sems[curr_frame],
 			.stageMask = VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT,
 		},
 	};
@@ -567,7 +566,7 @@ SDL_AppResult SDL_AppIterate(void* appstate)
 	const VkSemaphoreSubmitInfo sig_sem_info[] = {
 		{
 			.sType = VK_STRUCTURE_TYPE_SEMAPHORE_SUBMIT_INFO,
-			.semaphore = app_state.vk_state.swapchain_data.rndr_sems[app_state.vk_state.curr_frame],
+			.semaphore = app_state.vk_state.swapchain_data.rndr_sems[curr_frame],
 			.stageMask = VK_PIPELINE_STAGE_2_BOTTOM_OF_PIPE_BIT,
 		},
 	};
@@ -589,7 +588,7 @@ SDL_AppResult SDL_AppIterate(void* appstate)
 	const VkPresentInfoKHR present_info = {
 		.sType = VK_STRUCTURE_TYPE_PRESENT_INFO_KHR,
 		.waitSemaphoreCount = 1,
-		.pWaitSemaphores = &app_state.vk_state.swapchain_data.rndr_sems[app_state.vk_state.curr_frame],
+		.pWaitSemaphores = &app_state.vk_state.swapchain_data.rndr_sems[curr_frame],
 		.swapchainCount = 1,
 		.pSwapchains = &app_state.vk_state.swapchain_data.swapchain,
 		.pImageIndices = &sc_img_idx,
@@ -597,22 +596,7 @@ SDL_AppResult SDL_AppIterate(void* appstate)
 
 	result = vkQueuePresentKHR(app_state.vk_state.device_data.gfx_q, &present_info);
 
-	if (result == VK_NOT_READY)
-	{
-		return SDL_APP_CONTINUE;
-	}
-	else if (result == VK_ERROR_OUT_OF_DATE_KHR)
-	{
-		VK_CHECK("gfx q wait idle", vkQueueWaitIdle(app_state.vk_state.device_data.gfx_q));
-		VK_CHECK("get surface capabilities", vkGetPhysicalDeviceSurfaceCapabilitiesKHR(app_state.vk_state.phy_dev_data.phy_dev, app_state.vk_state.surface_data.surface, &app_state.vk_state.surface_data.surf_caps));
-
-		vk_swapchain::destroy(app_state.vk_state.swapchain_data, app_state.vk_state.device_data.device);
-		app_state.vk_state.swapchain_data = vk_swapchain::create(app_state.vk_state.device_data.device, app_state.vk_state.surface_data, app_state.vk_state.phy_dev_data, VK_NULL_HANDLE, "swapchain");
-
-		return SDL_APP_CONTINUE;
-	}
-
-	app_state.vk_state.curr_frame = (curr_frame + 1) % app_state.vk_state.swapchain_data.max_frames_in_flight;
+	app_state.vk_state.swapchain_data.curr_frame = (curr_frame + 1) % app_state.vk_state.swapchain_data.max_frames_in_flight;
 
 	return SDL_APP_CONTINUE;
 }

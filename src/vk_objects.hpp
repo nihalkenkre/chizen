@@ -1259,6 +1259,7 @@ namespace vk_swapchain
 		std::vector<VkSemaphore> acq_sig_sems;
 		uint8_t max_frames_in_flight = 0;
 		uint32_t sc_image_count = 0;
+		uint8_t curr_frame = 0;
 	};
 
 	data create(const VkDevice device, const vk_surface::data& surface, const vk_phydev::data& phy_dev, const VkSwapchainKHR old_swapchain, const std::string& name)
