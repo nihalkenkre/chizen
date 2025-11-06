@@ -771,7 +771,7 @@ namespace vk_compute_pipeline
 		uint32_t dispatch_x = 32;
 		uint32_t dispatch_y = 32;
 		uint32_t current_time = 0;
-		uint32_t is_reset = 0;
+		uint32_t num_samples_is_reset = 0;
 	};
 
 	data create(const VkDevice device, const std::string current_path, const uint8_t max_frames_in_flight, const std::string name)
@@ -901,7 +901,6 @@ namespace vk_compute_pipeline
 			name_info.pObjectName = n.append(" desc set ").append(std::to_string(fr)).c_str();
 			VK_CHECK("setting cmpt ppln ds name", vkSetDebugUtilsObjectNameEXT(device, &name_info));
 		}
-
 
 		n = name;
 		name_info.objectType = VK_OBJECT_TYPE_PIPELINE_LAYOUT;
