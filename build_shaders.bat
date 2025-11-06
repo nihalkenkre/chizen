@@ -6,8 +6,6 @@ set source_dir=%1
 set build_config_name=%2
 set output_dir=%3
 
-echo %source_dir:/=\%
-
 @echo off
 echo deleting spv in %source_dir:/=\%\shaders
 

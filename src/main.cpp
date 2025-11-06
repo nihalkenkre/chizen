@@ -62,6 +62,7 @@ struct VulkanState
 	vk_buffer::data geom_buffer = {};
 	vk_image::data accum_tgt = {};
 	vk_image::data final_rndr = {};
+	uint16_t num_samples = 0;
 };
 
 struct ImGuiState
@@ -84,7 +85,6 @@ RenderTargetState rt_state = {};
 pos2d last_mouse_pos = {};
 ImGuiState imgui_state = {};
 bool mouse_motion_tracking = false;
-uint16_t num_samples = 0;
 
 #define SDL_CHECK(result)						\
 	if (!result) {									\
@@ -129,12 +129,12 @@ SDL_AppResult SDL_AppInit(void** appstate, int argc, char** argv)
 	vk_state.accum_tgt = vk_image::create(
 		vk_state.device_data.device,
 		{ rt_state.dims.width, rt_state.dims.height, 1 },
-		VK_FORMAT_R32G32B32A32_SFLOAT, VK_IMAGE_USAGE_STORAGE_BIT | VK_IMAGE_USAGE_SAMPLED_BIT,
+		VK_FORMAT_R32G32B32A32_SFLOAT, VK_IMAGE_USAGE_STORAGE_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT,
 		vk_state.allocator, 0, "accum target");
 
 	vk_state.final_rndr = vk_image::create(vk_state.device_data.device,
 		{ rt_state.dims.width, rt_state.dims.height, 1 },
-		VK_FORMAT_R32G32B32A32_SFLOAT, VK_IMAGE_USAGE_STORAGE_BIT | VK_IMAGE_USAGE_SAMPLED_BIT,
+		VK_FORMAT_R32G32B32A32_SFLOAT, VK_IMAGE_USAGE_STORAGE_BIT | VK_IMAGE_USAGE_SAMPLED_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT,
 		vk_state.allocator, 0, "final render");
 
 	vk_state.cmpt_ppln = vk_compute_pipeline::create(vk_state.device_data.device, current_path, vk_state.swapchain_data.max_frames_in_flight, "compute pipeline");
@@ -189,7 +189,6 @@ SDL_AppResult SDL_AppInit(void** appstate, int argc, char** argv)
 	VK_CHECK("create imgui desc pool", vkCreateDescriptorPool(vk_state.device_data.device, &pool_info, nullptr, &vk_state.imgui_pool));
 
 	ImGui::CreateContext();
-	//ImGui::GetIO().ConfigFlags |= ImGuiConfigFlags_ViewportsEnable;
 	ImGui::GetIO().ConfigFlags |= ImGuiConfigFlags_DockingEnable;
 	SDL_CHECK(ImGui_ImplSDL3_InitForVulkan(window));
 
@@ -296,14 +295,21 @@ SDL_AppResult SDL_AppIterate(void* appstate)
 
 	if (is_new_render_targets_required())
 	{
-		VK_CHECK("device wait for render target destroy", vkDeviceWaitIdle(device));
+		VK_CHECK("device wait for accum target final render destroy", vkDeviceWaitIdle(device));
 
-			vk_image::destroy(vk_state.accum_tgt, vk_state.allocator, device);
-			vk_state.accum_tgt = vk_image::create(
-				vk_state.device_data.device,
-				{ rt_state.dims.width, rt_state.dims.height, 1 },
-				VK_FORMAT_R32G32B32A32_SFLOAT, VK_IMAGE_USAGE_STORAGE_BIT | VK_IMAGE_USAGE_SAMPLED_BIT,
-				vk_state.allocator, 0, "render target");
+		vk_image::destroy(vk_state.accum_tgt, vk_state.allocator, device);
+		vk_state.accum_tgt = vk_image::create(
+			vk_state.device_data.device,
+			{ rt_state.dims.width, rt_state.dims.height, 1 },
+			VK_FORMAT_R32G32B32A32_SFLOAT, VK_IMAGE_USAGE_STORAGE_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT,
+			vk_state.allocator, 0, "accum target");
+
+		vk_image::destroy(vk_state.final_rndr, vk_state.allocator, device);
+		vk_state.final_rndr = vk_image::create(
+			vk_state.device_data.device,
+			{ rt_state.dims.width, rt_state.dims.height, 1 },
+			VK_FORMAT_R32G32B32A32_SFLOAT, VK_IMAGE_USAGE_STORAGE_BIT | VK_IMAGE_USAGE_SAMPLED_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT,
+			vk_state.allocator, 0, "final render");
 	}
 
 	uint8_t curr_frame = vk_state.swapchain_data.curr_frame;
@@ -319,22 +325,44 @@ SDL_AppResult SDL_AppIterate(void* appstate)
 	VK_CHECK("begin sc cmd_buff", vkBeginCommandBuffer(curr_cmd_buff, &begin_info));
 
 	change_image_layout(curr_cmd_buff,
-		0, 0,
-		VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, VK_ACCESS_2_SHADER_STORAGE_READ_BIT | VK_ACCESS_2_SHADER_STORAGE_WRITE_BIT,
+		VK_PIPELINE_STAGE_2_CLEAR_BIT, VK_ACCESS_2_TRANSFER_WRITE_BIT,
+		VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT | VK_PIPELINE_STAGE_2_CLEAR_BIT, VK_ACCESS_2_SHADER_STORAGE_READ_BIT | VK_ACCESS_2_SHADER_STORAGE_WRITE_BIT | VK_ACCESS_2_TRANSFER_WRITE_BIT,
 		VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_GENERAL,
 		VK_QUEUE_FAMILY_IGNORED, VK_QUEUE_FAMILY_IGNORED,
 		vk_state.accum_tgt.image);
 
 	change_image_layout(curr_cmd_buff,
 		0, 0,
-		VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, VK_ACCESS_2_SHADER_STORAGE_WRITE_BIT,
+		VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT | VK_PIPELINE_STAGE_2_CLEAR_BIT, VK_ACCESS_2_SHADER_STORAGE_WRITE_BIT | VK_ACCESS_2_TRANSFER_WRITE_BIT,
 		VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_GENERAL,
 		VK_QUEUE_FAMILY_IGNORED, VK_QUEUE_FAMILY_IGNORED,
 		vk_state.final_rndr.image);
 
+	if (rt_state.is_reset)
+	{
+		const VkClearColorValue clear_color = {
+			.float32 = {
+				0, 0, 0, 1,
+			},
+		};
+
+		const VkImageSubresourceRange ranges[] = {
+			{
+				.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT,
+				.levelCount = 1,
+				.layerCount = 1,
+			},
+		};
+
+		vkCmdClearColorImage(curr_cmd_buff, vk_state.accum_tgt.image, VK_IMAGE_LAYOUT_GENERAL, &clear_color, std::size(ranges), ranges);
+		vkCmdClearColorImage(curr_cmd_buff, vk_state.final_rndr.image, VK_IMAGE_LAYOUT_GENERAL, &clear_color, std::size(ranges), ranges);
+		vk_state.num_samples = 0;
+	}
+
 	vkCmdBindPipeline(curr_cmd_buff, VK_PIPELINE_BIND_POINT_COMPUTE, vk_state.cmpt_ppln.pipe);
 
 	vk_state.accum_tgt.desc_img_info.imageLayout = VK_IMAGE_LAYOUT_GENERAL;
+	vk_state.final_rndr.desc_img_info.imageLayout = VK_IMAGE_LAYOUT_GENERAL;
 
 	const VkWriteDescriptorSet cmpt_desc_writes[] = {
 		{
@@ -343,6 +371,14 @@ SDL_AppResult SDL_AppIterate(void* appstate)
 			.descriptorCount = 1,
 			.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_IMAGE,
 			.pImageInfo = &vk_state.accum_tgt.desc_img_info,
+		},
+		{
+			.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
+			.dstSet = vk_state.cmpt_ppln.dss[curr_frame],
+			.dstBinding = 1,
+			.descriptorCount = 1,
+			.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_IMAGE,
+			.pImageInfo = &vk_state.final_rndr.desc_img_info,
 		},
 	};
 
@@ -362,7 +398,7 @@ SDL_AppResult SDL_AppIterate(void* appstate)
 		.dispatch_x = rt_state.dims.width,
 		.dispatch_y = rt_state.dims.height,
 		.current_time = static_cast<uint32_t>(std::chrono::system_clock::now().time_since_epoch().count()),
-		.num_samples_is_reset = static_cast<uint32_t>((rt_state.is_reset & 0x1) | (++num_samples << 1)),
+		.num_samples_is_reset = static_cast<uint32_t>((rt_state.is_reset & 0x1) | (++vk_state.num_samples << 1)),
 	};
 
 	const VkPushConstantsInfo cmpt_pc_info = {
@@ -378,11 +414,11 @@ SDL_AppResult SDL_AppIterate(void* appstate)
 	vkCmdDispatch(curr_cmd_buff, cmpt_pc.dispatch_x / 32 + 1, cmpt_pc.dispatch_y / 32 + 1, 1);
 
 	change_image_layout(curr_cmd_buff,
-		VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, VK_ACCESS_2_SHADER_STORAGE_WRITE_BIT,
+		VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT | VK_PIPELINE_STAGE_2_CLEAR_BIT, VK_ACCESS_2_SHADER_STORAGE_WRITE_BIT | VK_ACCESS_2_TRANSFER_WRITE_BIT,
 		VK_PIPELINE_STAGE_2_FRAGMENT_SHADER_BIT, VK_ACCESS_2_SHADER_READ_BIT,
 		VK_IMAGE_LAYOUT_GENERAL, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
 		VK_QUEUE_FAMILY_IGNORED, VK_QUEUE_FAMILY_IGNORED,
-		vk_state.accum_tgt.image
+		vk_state.final_rndr.image
 	);
 
 	const VkAcquireNextImageInfoKHR acq_info = {
@@ -450,7 +486,7 @@ SDL_AppResult SDL_AppIterate(void* appstate)
 		.pDescriptorSets = &vk_state.gfx_ppln.dss[curr_frame],
 	};
 
-	vk_state.accum_tgt.desc_img_info.imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+	vk_state.final_rndr.desc_img_info.imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
 
 	const VkWriteDescriptorSet gfx_desc_writes[] = {
 		{
@@ -458,7 +494,7 @@ SDL_AppResult SDL_AppIterate(void* appstate)
 			.dstSet = vk_state.gfx_ppln.dss[curr_frame],
 			.descriptorCount = 1,
 			.descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
-			.pImageInfo = &vk_state.accum_tgt.desc_img_info,
+			.pImageInfo = &vk_state.final_rndr.desc_img_info,
 		},
 	};
 
