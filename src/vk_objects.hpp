@@ -1,42 +1,12 @@
 #pragma once
 
 extern "C" PFN_vkSetDebugUtilsObjectNameEXT vk_SetDebugUtilsObjectNameEXT = nullptr;
-extern "C" PFN_vkGetDescriptorEXT vk_GetDescriptorEXT = nullptr;
-extern "C" PFN_vkGetDescriptorSetLayoutSizeEXT vk_GetDescriptorSetLayoutSizeEXT = nullptr;
-extern "C" PFN_vkGetDescriptorSetLayoutBindingOffsetEXT vk_GetDescriptorSetLayoutBindingOffsetEXT = nullptr;
-extern "C" PFN_vkCmdBindDescriptorBuffersEXT vk_CmdBindDescriptorBuffersEXT = nullptr;
-extern "C" PFN_vkCmdSetDescriptorBufferOffsets2EXT vk_CmdSetDescriptorBufferOffsets2EXT = nullptr;
 
 VKAPI_ATTR VkResult VKAPI_CALL vkSetDebugUtilsObjectNameEXT(
 	VkDevice                                    device,
 	const VkDebugUtilsObjectNameInfoEXT* pNameInfo)
 {
 	return vk_SetDebugUtilsObjectNameEXT(device, pNameInfo);
-}
-
-VKAPI_ATTR void VKAPI_CALL vkGetDescriptorEXT(VkDevice device, const VkDescriptorGetInfoEXT* pDescriptorInfo, size_t dataSize, void* pDescriptor)
-{
-	vk_GetDescriptorEXT(device, pDescriptorInfo, dataSize, pDescriptor);
-}
-
-VKAPI_ATTR void VKAPI_CALL vkGetDescriptorSetLayoutSizeEXT(VkDevice device, VkDescriptorSetLayout layout, VkDeviceSize* pLayoutSizeInBytes)
-{
-	vk_GetDescriptorSetLayoutSizeEXT(device, layout, pLayoutSizeInBytes);
-}
-
-VKAPI_ATTR void VKAPI_CALL vkGetDescriptorSetLayoutBindingOffsetEXT(VkDevice device, VkDescriptorSetLayout layout, uint32_t binding, VkDeviceSize* pOffset)
-{
-	vk_GetDescriptorSetLayoutBindingOffsetEXT(device, layout, binding, pOffset);
-}
-
-VKAPI_ATTR void VKAPI_CALL vkCmdBindDescriptorBuffersEXT(VkCommandBuffer commandBuffer, uint32_t bufferCount, const VkDescriptorBufferBindingInfoEXT* pBindingInfos)
-{
-	vk_CmdBindDescriptorBuffersEXT(commandBuffer, bufferCount, pBindingInfos);
-}
-
-VKAPI_ATTR void VKAPI_CALL vkCmdSetDescriptorBufferOffsets2EXT(VkCommandBuffer commandBuffer, const VkSetDescriptorBufferOffsetsInfoEXT* pSetDescriptorBufferOffsetsInfo)
-{
-	vk_CmdSetDescriptorBufferOffsets2EXT(commandBuffer, pSetDescriptorBufferOffsetsInfo);
 }
 
 #define VK_CHECK(action, result)						\
@@ -597,11 +567,6 @@ namespace vk_device
 		VK_CHECK("create device", vkCreateDevice(phy_dev_data.phy_dev, &create_info, nullptr, &d.device));
 
 		vk_SetDebugUtilsObjectNameEXT = reinterpret_cast<PFN_vkSetDebugUtilsObjectNameEXT>(vkGetDeviceProcAddr(d.device, "vkSetDebugUtilsObjectNameEXT"));
-		vk_GetDescriptorEXT = reinterpret_cast<PFN_vkGetDescriptorEXT>(vkGetDeviceProcAddr(d.device, "vkGetDescriptorEXT"));
-		vk_GetDescriptorSetLayoutSizeEXT = reinterpret_cast<PFN_vkGetDescriptorSetLayoutSizeEXT>(vkGetDeviceProcAddr(d.device, "vkGetDescriptorSetLayoutSizeEXT"));
-		vk_GetDescriptorSetLayoutBindingOffsetEXT = reinterpret_cast<PFN_vkGetDescriptorSetLayoutBindingOffsetEXT>(vkGetDeviceProcAddr(d.device, "vkGetDescriptorSetLayoutBindingOffsetEXT"));
-		vk_CmdBindDescriptorBuffersEXT = reinterpret_cast<PFN_vkCmdBindDescriptorBuffersEXT>(vkGetDeviceProcAddr(d.device, "vkCmdBindDescriptorBuffersEXT"));
-		vk_CmdSetDescriptorBufferOffsets2EXT = reinterpret_cast<PFN_vkCmdSetDescriptorBufferOffsets2EXT>(vkGetDeviceProcAddr(d.device, "vkCmdSetDescriptorBufferOffsets2EXT"));
 
 		VkDeviceQueueInfo2 queue_info = {
 			.sType = VK_STRUCTURE_TYPE_DEVICE_QUEUE_INFO_2,
@@ -771,7 +736,7 @@ namespace vk_compute_pipeline
 		uint32_t dispatch_x = 32;
 		uint32_t dispatch_y = 32;
 		uint32_t current_time = 0;
-		uint32_t num_samples_is_reset = 0;
+		uint32_t curr_sample_is_reset = 0;
 	};
 
 	data create(const VkDevice device, const std::string current_path, const uint8_t max_frames_in_flight, const std::string name)

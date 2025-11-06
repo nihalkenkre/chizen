@@ -8,7 +8,7 @@ layout(local_size_x = 32, local_size_y = 32, local_size_z = 1) in;
 layout(push_constant) uniform PushConstants {
    ivec2 dispatch_size;
    uint current_time;
-   uint num_samples_is_reset;  // 16 bits num_samples, 1 bit is reset
+   uint curr_sample_is_reset;  // 16 bits num_samples, 1 bit is reset
 } pc;
 
 uint lcg_xs_24(inout uint state) {
@@ -40,8 +40,8 @@ void main() {
 
    vec4 in_color = vec4(0, 0, 0, 1);
 
-   uint num_samples = (pc.num_samples_is_reset & 0x1FFFE) >> 1;
-   bool is_reset = (pc.num_samples_is_reset & 1u) == 1;
+   uint curr_sample = (pc.curr_sample_is_reset & 0x1FFFE) >> 1;
+   bool is_reset = (pc.curr_sample_is_reset & 1u) == 1;
 
    if (!is_reset) {
       in_color = imageLoad(accum_target, ivec2(thread_id.xy));
@@ -54,5 +54,5 @@ void main() {
    vec4 out_color = vec4(hash_x, hash_y, hash_z, 1);
 
    imageStore(accum_target, ivec2(thread_id.xy), out_color + in_color);
-   imageStore(final_render, ivec2(thread_id.xy), (out_color + in_color) / num_samples);
+   imageStore(final_render, ivec2(thread_id.xy), (out_color + in_color) / curr_sample);
 }
