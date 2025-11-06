@@ -326,10 +326,7 @@ SDL_AppResult SDL_AppIterate(void* appstate)
 	};
 	VK_CHECK("begin sc cmd_buff", vkBeginCommandBuffer(curr_cmd_buff, &begin_info));
 
-	if (vk_state.curr_sample >= vk_state.max_samples)
-	{
-	}
-	else
+	if (vk_state.curr_sample < vk_state.max_samples)
 	{
 		change_image_layout(curr_cmd_buff,
 			VK_PIPELINE_STAGE_2_CLEAR_BIT, VK_ACCESS_2_TRANSFER_WRITE_BIT,
