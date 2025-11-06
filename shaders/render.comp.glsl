@@ -8,7 +8,7 @@ layout(local_size_x = 32, local_size_y = 32, local_size_z = 1) in;
 layout(push_constant) uniform PushConstants {
    ivec2 dispatch_size;
    uint current_time;
-   uint curr_sample_is_reset;  // 16 bits num_samples, 1 bit is reset
+   uint curr_sample_is_reset;  // bit 17-1 curr_sample, bit 0 is_reset
 } pc;
 
 uint lcg_xs_24(inout uint state) {
