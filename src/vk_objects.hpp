@@ -280,6 +280,8 @@ namespace vk_instance
 		VkInstance instance = VK_NULL_HANDLE;
 		VK_CHECK("create instance", vkCreateInstance(&create_info, nullptr, &instance));
 
+		vk_SetDebugUtilsObjectNameEXT = reinterpret_cast<PFN_vkSetDebugUtilsObjectNameEXT>(vkGetInstanceProcAddr(instance, "vkSetDebugUtilsObjectNameEXT"));
+
 		return instance;
 	}
 
@@ -314,7 +316,7 @@ namespace vk_phydev
 		VkPhysicalDevice phy_dev = VK_NULL_HANDLE;
 		uint32_t gfx_q_fly_idx = 0;
 		uint32_t xfer_q_fly_idx = 0;
-		uint32_t comp_q_fly_idx = 0;
+		uint32_t cmpt_q_fly_idx = 0;
 		VkPhysicalDeviceProperties2 props = {};
 		VkPhysicalDeviceMemoryProperties2 mem_props = {};
 	};
@@ -431,17 +433,17 @@ namespace vk_phydev
 				{
 					if ((q_fly_props[q].queueFlags & VK_QUEUE_COMPUTE_BIT) && !(q_fly_props[q].queueFlags & VK_QUEUE_GRAPHICS_BIT) && !(q_fly_props[q].queueFlags & VK_QUEUE_TRANSFER_BIT))
 					{
-						d.comp_q_fly_idx = q;
+						d.cmpt_q_fly_idx = q;
 						break;
 					}
 					else if ((q_fly_props[q].queueFlags & VK_QUEUE_COMPUTE_BIT) && !(q_fly_props[q].queueFlags & VK_QUEUE_GRAPHICS_BIT))
 					{
-						d.comp_q_fly_idx = q;
+						d.cmpt_q_fly_idx = q;
 						break;
 					}
 					else if (q_fly_props[q].queueFlags & VK_QUEUE_COMPUTE_BIT)
 					{
-						d.comp_q_fly_idx = q;
+						d.cmpt_q_fly_idx = q;
 						break;
 					}
 				}
@@ -458,7 +460,7 @@ namespace vk_device
 	{
 		VkDevice device = VK_NULL_HANDLE;
 		VkQueue gfx_q = VK_NULL_HANDLE;
-		VkQueue comp_q = VK_NULL_HANDLE;
+		VkQueue cmpt_q = VK_NULL_HANDLE;
 		VkQueue xfer_q = VK_NULL_HANDLE;
 	};
 
@@ -507,11 +509,11 @@ namespace vk_device
 				++d_q_ci_it->queueCount;
 			}
 
-			d_q_ci_it = std::find_if(std::begin(d_q_cis), std::end(d_q_cis), [&](const VkDeviceQueueCreateInfo d_q_ci) {return d_q_ci.queueFamilyIndex == phy_dev_data.comp_q_fly_idx; });
+			d_q_ci_it = std::find_if(std::begin(d_q_cis), std::end(d_q_cis), [&](const VkDeviceQueueCreateInfo d_q_ci) {return d_q_ci.queueFamilyIndex == phy_dev_data.cmpt_q_fly_idx; });
 
 			if (d_q_ci_it == std::end(d_q_cis))
 			{
-				q_ci.queueFamilyIndex = phy_dev_data.comp_q_fly_idx;
+				q_ci.queueFamilyIndex = phy_dev_data.cmpt_q_fly_idx;
 				q_ci.queueCount = 1;
 				d_q_cis.push_back(q_ci);
 			}
@@ -566,8 +568,6 @@ namespace vk_device
 
 		VK_CHECK("create device", vkCreateDevice(phy_dev_data.phy_dev, &create_info, nullptr, &d.device));
 
-		vk_SetDebugUtilsObjectNameEXT = reinterpret_cast<PFN_vkSetDebugUtilsObjectNameEXT>(vkGetDeviceProcAddr(d.device, "vkSetDebugUtilsObjectNameEXT"));
-
 		VkDeviceQueueInfo2 queue_info = {
 			.sType = VK_STRUCTURE_TYPE_DEVICE_QUEUE_INFO_2,
 		};
@@ -588,14 +588,38 @@ namespace vk_device
 					queue_info.queueIndex = q;
 					vkGetDeviceQueue2(d.device, &queue_info, &d.xfer_q);
 				}
-				else if (d_q_ci.queueFamilyIndex == phy_dev_data.comp_q_fly_idx)
+				else if (d_q_ci.queueFamilyIndex == phy_dev_data.cmpt_q_fly_idx)
 				{
-					queue_info.queueFamilyIndex = phy_dev_data.comp_q_fly_idx;
+					queue_info.queueFamilyIndex = phy_dev_data.cmpt_q_fly_idx;
 					queue_info.queueIndex = q;
-					vkGetDeviceQueue2(d.device, &queue_info, &d.comp_q);
+					vkGetDeviceQueue2(d.device, &queue_info, &d.cmpt_q);
 				}
 			}
 		}
+
+#ifdef _DEBUG
+		VkDebugUtilsObjectNameInfoEXT name_info = {
+			.sType = VK_STRUCTURE_TYPE_DEBUG_UTILS_OBJECT_NAME_INFO_EXT,
+			.objectType = VK_OBJECT_TYPE_QUEUE,
+			.objectHandle = reinterpret_cast<uint64_t>(d.gfx_q),
+			.pObjectName = "gfx q",
+		};
+
+		VK_CHECK("set gfx_q name", vkSetDebugUtilsObjectNameEXT(d.device, &name_info));
+
+		name_info.objectType = VK_OBJECT_TYPE_QUEUE;
+		name_info.objectHandle = reinterpret_cast<uint64_t>(d.cmpt_q);
+		name_info.pObjectName = "cmpt q";
+
+		VK_CHECK("set cmpt_q name", vkSetDebugUtilsObjectNameEXT(d.device, &name_info));
+
+		name_info.objectType = VK_OBJECT_TYPE_QUEUE;
+		name_info.objectHandle = reinterpret_cast<uint64_t>(d.xfer_q);
+		name_info.pObjectName = "xfer q";
+
+		VK_CHECK("set xfer_q name", vkSetDebugUtilsObjectNameEXT(d.device, &name_info));
+
+#endif	// _DEBUG
 
 		return d;
 	}
@@ -659,8 +683,8 @@ namespace vk_command_pool
 {
 	struct data
 	{
-		VkCommandPool cmd_pool = VK_NULL_HANDLE;
-		std::vector<VkCommandBuffer> cmd_buffs;
+		VkCommandPool gfx_cmd_pool = VK_NULL_HANDLE;
+		std::vector<VkCommandBuffer> gfx_cmd_buffs;
 	};
 
 	data create(const VkDevice device, const uint32_t q_fly_idx, const uint32_t cmd_buffs_count, const std::string& name)
@@ -673,35 +697,35 @@ namespace vk_command_pool
 
 		vk_command_pool::data d;
 
-		VK_CHECK("create command pool", vkCreateCommandPool(device, &cmd_pool_ci, nullptr, &d.cmd_pool));
+		VK_CHECK("create command pool", vkCreateCommandPool(device, &cmd_pool_ci, nullptr, &d.gfx_cmd_pool));
 
 		const VkCommandBufferAllocateInfo allocate_info = {
 			.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO,
-			.commandPool = d.cmd_pool,
+			.commandPool = d.gfx_cmd_pool,
 			.level = VK_COMMAND_BUFFER_LEVEL_PRIMARY,
 			.commandBufferCount = cmd_buffs_count,
 		};
 
-		d.cmd_buffs.resize(cmd_buffs_count);
+		d.gfx_cmd_buffs.resize(cmd_buffs_count);
 
-		VK_CHECK("allocate command buffer", vkAllocateCommandBuffers(device, &allocate_info, d.cmd_buffs.data()));
+		VK_CHECK("allocate command buffer", vkAllocateCommandBuffers(device, &allocate_info, d.gfx_cmd_buffs.data()));
 
 #ifdef _DEBUG
 		std::string n = name;
 		VkDebugUtilsObjectNameInfoEXT name_info = {
 			.sType = VK_STRUCTURE_TYPE_DEBUG_UTILS_OBJECT_NAME_INFO_EXT,
 			.objectType = VK_OBJECT_TYPE_COMMAND_POOL,
-			.objectHandle = reinterpret_cast<uint64_t>(d.cmd_pool),
+			.objectHandle = reinterpret_cast<uint64_t>(d.gfx_cmd_pool),
 			.pObjectName = name.c_str(),
 		};
 
 		VK_CHECK("setting command pool name", vkSetDebugUtilsObjectNameEXT(device, &name_info));
 
-		for (size_t cb = 0; cb < d.cmd_buffs.size(); ++cb)
+		for (size_t cb = 0; cb < d.gfx_cmd_buffs.size(); ++cb)
 		{
 			n = name;
 			name_info.objectType = VK_OBJECT_TYPE_COMMAND_BUFFER;
-			name_info.objectHandle = reinterpret_cast<uint64_t>(d.cmd_buffs[cb]);
+			name_info.objectHandle = reinterpret_cast<uint64_t>(d.gfx_cmd_buffs[cb]);
 			name_info.pObjectName = n.append(" command buffer ").append(std::to_string(cb)).c_str();
 
 			VK_CHECK("setting command pool name", vkSetDebugUtilsObjectNameEXT(device, &name_info));
@@ -711,11 +735,11 @@ namespace vk_command_pool
 		return d;
 	}
 
-	void destroy(vk_command_pool::data cmd_pool, const VkDevice device)
+	void destroy(vk_command_pool::data gfx_cmd_pool, const VkDevice device)
 	{
 		if (device != VK_NULL_HANDLE)
 		{
-			vkDestroyCommandPool(device, cmd_pool.cmd_pool, nullptr);
+			vkDestroyCommandPool(device, gfx_cmd_pool.gfx_cmd_pool, nullptr);
 		}
 	}
 }
@@ -1219,13 +1243,16 @@ namespace vk_swapchain
 	struct data
 	{
 		VkSwapchainKHR swapchain = VK_NULL_HANDLE;
-		VkCommandPool cmd_pool = VK_NULL_HANDLE;
+		VkCommandPool gfx_cmd_pool = VK_NULL_HANDLE;
+		VkCommandPool cmpt_cmd_pool = VK_NULL_HANDLE;
 
 		std::vector<VkImage> images;
 		std::vector<VkImageView> image_views;
-		std::vector<VkCommandBuffer> cmd_buffs;
+		std::vector<VkCommandBuffer> gfx_cmd_buffs;
+		std::vector<VkCommandBuffer> cmpt_cmd_buffs;
 		std::vector<VkFence> rndr_fncs;
-		std::vector<VkSemaphore> rndr_sems;
+		std::vector<VkSemaphore> cmpt_sig_sems;
+		std::vector<VkSemaphore> gfx_sig_sems;
 		std::vector<VkSemaphore> acq_sig_sems;
 		uint8_t max_frames_in_flight = 0;
 		uint32_t sc_image_count = 0;
@@ -1262,21 +1289,17 @@ namespace vk_swapchain
 		d.max_frames_in_flight = d.sc_image_count;
 
 		d.image_views.resize(d.sc_image_count);
-		d.cmd_buffs.resize(d.max_frames_in_flight);
+		d.gfx_cmd_buffs.resize(d.max_frames_in_flight);
+		d.cmpt_cmd_buffs.resize(d.max_frames_in_flight);
 		d.rndr_fncs.resize(d.max_frames_in_flight);
-		d.rndr_sems.resize(d.max_frames_in_flight);
+		d.cmpt_sig_sems.resize(d.max_frames_in_flight);
+		d.gfx_sig_sems.resize(d.max_frames_in_flight);
 		d.acq_sig_sems.resize(d.max_frames_in_flight);
 
 		VkImageViewCreateInfo image_view_create_info = {
 			.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO,
 			.viewType = VK_IMAGE_VIEW_TYPE_2D,
 			.format = surface.format.format,
-			.components = {
-				.r = VK_COMPONENT_SWIZZLE_R,
-				.g = VK_COMPONENT_SWIZZLE_G,
-				.b = VK_COMPONENT_SWIZZLE_B,
-				.a = VK_COMPONENT_SWIZZLE_A,
-			},
 			.subresourceRange = {
 				.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT,
 				.levelCount = 1,
@@ -1290,17 +1313,32 @@ namespace vk_swapchain
 			VK_CHECK("create swapchain image view", vkCreateImageView(device, &image_view_create_info, nullptr, &d.image_views[i]));
 		}
 
-		const VkCommandPoolCreateInfo cmd_pool_ci = {
+		const VkCommandPoolCreateInfo gfx_cmd_pool_ci = {
 			.sType = VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO,
-			.flags = VK_COMMAND_POOL_CREATE_TRANSIENT_BIT | VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT,
+			.flags = VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT,
 			.queueFamilyIndex = phy_dev.gfx_q_fly_idx,
 		};
 
-		VK_CHECK("create command pool", vkCreateCommandPool(device, &cmd_pool_ci, nullptr, &d.cmd_pool));
+		VK_CHECK("create command pool", vkCreateCommandPool(device, &gfx_cmd_pool_ci, nullptr, &d.gfx_cmd_pool));
 
-		const VkCommandBufferAllocateInfo cmd_buff_ai = {
+		const VkCommandPoolCreateInfo cmpt_cmd_pool_ci = {
+			.sType = VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO,
+			.flags = VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT,
+			.queueFamilyIndex = phy_dev.cmpt_q_fly_idx,
+		};
+
+		VK_CHECK("create command pool", vkCreateCommandPool(device, &cmpt_cmd_pool_ci, nullptr, &d.cmpt_cmd_pool));
+
+		const VkCommandBufferAllocateInfo gfx_cmd_buff_ai = {
 			.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO,
-			.commandPool = d.cmd_pool,
+			.commandPool = d.gfx_cmd_pool,
+			.level = VK_COMMAND_BUFFER_LEVEL_PRIMARY,
+			.commandBufferCount = 1,
+		};
+
+		const VkCommandBufferAllocateInfo cmpt_cmd_buff_ai = {
+			.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO,
+			.commandPool = d.cmpt_cmd_pool,
 			.level = VK_COMMAND_BUFFER_LEVEL_PRIMARY,
 			.commandBufferCount = 1,
 		};
@@ -1316,10 +1354,12 @@ namespace vk_swapchain
 
 		for (uint8_t i = 0; i < d.max_frames_in_flight; ++i)
 		{
-			VK_CHECK("allocate command buffer", vkAllocateCommandBuffers(device, &cmd_buff_ai, &d.cmd_buffs[i]));
+			VK_CHECK("allocate gfx command buffer", vkAllocateCommandBuffers(device, &gfx_cmd_buff_ai, &d.gfx_cmd_buffs[i]));
+			VK_CHECK("allocate cmpt command buffer", vkAllocateCommandBuffers(device, &cmpt_cmd_buff_ai, &d.cmpt_cmd_buffs[i]));
 			VK_CHECK("create fence", vkCreateFence(device, &fence_ci, nullptr, &d.rndr_fncs[i]));
 			VK_CHECK("create acq sig semahpore", vkCreateSemaphore(device, &sem_ci, nullptr, &d.acq_sig_sems[i]));
-			VK_CHECK("create rndr semahpore", vkCreateSemaphore(device, &sem_ci, nullptr, &d.rndr_sems[i]));
+			VK_CHECK("create cmpt sig semahpore", vkCreateSemaphore(device, &sem_ci, nullptr, &d.cmpt_sig_sems[i]));
+			VK_CHECK("create gfx sig semahpore", vkCreateSemaphore(device, &sem_ci, nullptr, &d.gfx_sig_sems[i]));
 		}
 
 #ifdef _DEBUG
@@ -1332,49 +1372,70 @@ namespace vk_swapchain
 
 		VK_CHECK("set swapchain name", vkSetDebugUtilsObjectNameEXT(device, &name_info));
 
+		std::string n(name);
+
 		name_info.objectType = VK_OBJECT_TYPE_COMMAND_POOL;
-		name_info.objectHandle = reinterpret_cast<uint64_t>(d.cmd_pool);
-		name_info.pObjectName = "swapchain command pool";
+		name_info.objectHandle = reinterpret_cast<uint64_t>(d.gfx_cmd_pool);
+		name_info.pObjectName = n.append(" gfx command pool").c_str();
+		VK_CHECK("setting gfx swapchain cmd pool name", vkSetDebugUtilsObjectNameEXT(device, &name_info));
+
+		n = name;
+		name_info.objectType = VK_OBJECT_TYPE_COMMAND_POOL;
+		name_info.objectHandle = reinterpret_cast<uint64_t>(d.cmpt_cmd_pool);
+		name_info.pObjectName = n.append(" cmpt command pool").c_str();
+		VK_CHECK("setting cmpt swapchain cmd pool name", vkSetDebugUtilsObjectNameEXT(device, &name_info));
 
 		for (uint32_t i = 0; i < d.sc_image_count; ++i)
 		{
-			std::string sc_img("swapchain image ");
+			n = name;
 			name_info.objectType = VK_OBJECT_TYPE_IMAGE;
 			name_info.objectHandle = reinterpret_cast<uint64_t>(d.images[i]);
-			name_info.pObjectName = sc_img.append(std::to_string(i)).c_str();
+			name_info.pObjectName = n.append(" image ").append(std::to_string(i)).c_str();
 			VK_CHECK("setting swapchain image name", vkSetDebugUtilsObjectNameEXT(device, &name_info));
 
-			std::string sc_iv("swapchain image view ");
+			n = name;
 			name_info.objectType = VK_OBJECT_TYPE_IMAGE_VIEW;
 			name_info.objectHandle = reinterpret_cast<uint64_t>(d.image_views[i]);
-			name_info.pObjectName = sc_iv.append(std::to_string(i)).c_str();
+			name_info.pObjectName = n.append(" image view ").append(std::to_string(i)).c_str();
 			VK_CHECK("setting swapcahin image view name", vkSetDebugUtilsObjectNameEXT(device, &name_info));
 		}
 
 		for (uint8_t i = 0; i < d.max_frames_in_flight; ++i)
 		{
-			std::string sc_cb("swapchain command buffer ");
+			n = name;
 			name_info.objectType = VK_OBJECT_TYPE_COMMAND_BUFFER;
-			name_info.objectHandle = reinterpret_cast<uint64_t>(d.cmd_buffs[i]);
-			name_info.pObjectName = sc_cb.append(std::to_string(i)).c_str();
-			VK_CHECK("setting swapchain command buffer name", vkSetDebugUtilsObjectNameEXT(device, &name_info));
+			name_info.objectHandle = reinterpret_cast<uint64_t>(d.gfx_cmd_buffs[i]);
+			name_info.pObjectName = n.append(" gfx cmd buff ").append(std::to_string(i)).c_str();
+			VK_CHECK("setting swapchain gfx command buffer name", vkSetDebugUtilsObjectNameEXT(device, &name_info));
 
-			std::string sc_pr_fnc("swapchain render fence ");
+			n = name;
+			name_info.objectType = VK_OBJECT_TYPE_COMMAND_BUFFER;
+			name_info.objectHandle = reinterpret_cast<uint64_t>(d.cmpt_cmd_buffs[i]);
+			name_info.pObjectName = n.append(" cmpt cmd buff ").append(std::to_string(i)).c_str();
+			VK_CHECK("setting swapchain cmpt command buffer name", vkSetDebugUtilsObjectNameEXT(device, &name_info));
+
+			n = name;
 			name_info.objectType = VK_OBJECT_TYPE_FENCE;
 			name_info.objectHandle = reinterpret_cast<uint64_t>(d.rndr_fncs[i]);
-			name_info.pObjectName = sc_pr_fnc.append(std::to_string(i)).c_str();
+			name_info.pObjectName = n.append(" rndr fnc ").append(std::to_string(i)).c_str();
 			VK_CHECK("setting swapchain render fence name", vkSetDebugUtilsObjectNameEXT(device, &name_info));
 
-			std::string sc_fr_sem("swapchain rndr sem");
+			n = name;
 			name_info.objectType = VK_OBJECT_TYPE_SEMAPHORE;
-			name_info.objectHandle = reinterpret_cast<uint64_t>(d.rndr_sems[i]);
-			name_info.pObjectName = sc_fr_sem.append(std::to_string(i)).c_str();
-			VK_CHECK("setting swapchain rndr sem name", vkSetDebugUtilsObjectNameEXT(device, &name_info));
+			name_info.objectHandle = reinterpret_cast<uint64_t>(d.cmpt_sig_sems[i]);
+			name_info.pObjectName = n.append(" cmpt sig sem ").append(std::to_string(i)).c_str();
+			VK_CHECK("setting swapchain cmpt sig sem name", vkSetDebugUtilsObjectNameEXT(device, &name_info));
 
-			std::string sc_acq_sig_sem("swapchain acq sig sem");
+			n = name;
+			name_info.objectType = VK_OBJECT_TYPE_SEMAPHORE;
+			name_info.objectHandle = reinterpret_cast<uint64_t>(d.gfx_sig_sems[i]);
+			name_info.pObjectName = n.append(" gfx sig sem ").append(std::to_string(i)).c_str();
+			VK_CHECK("setting swapchain gfx sig sem name", vkSetDebugUtilsObjectNameEXT(device, &name_info));
+
+			n = name;
 			name_info.objectType = VK_OBJECT_TYPE_SEMAPHORE;
 			name_info.objectHandle = reinterpret_cast<uint64_t>(d.acq_sig_sems[i]);
-			name_info.pObjectName = sc_acq_sig_sem.append(std::to_string(i)).c_str();
+			name_info.pObjectName = n.append(" acq sig sem ").append(std::to_string(i)).c_str();
 			VK_CHECK("setting swapchain acq sig sem name", vkSetDebugUtilsObjectNameEXT(device, &name_info));
 		}
 #endif // _DEBUG
@@ -1386,7 +1447,8 @@ namespace vk_swapchain
 	{
 		if (device != VK_NULL_HANDLE)
 		{
-			vkDestroyCommandPool(device, d.cmd_pool, nullptr);
+			vkDestroyCommandPool(device, d.gfx_cmd_pool, nullptr);
+			vkDestroyCommandPool(device, d.cmpt_cmd_pool, nullptr);
 
 			for (uint32_t i = 0; i < d.sc_image_count; ++i)
 			{
@@ -1396,7 +1458,8 @@ namespace vk_swapchain
 			for (uint8_t i = 0; i < d.max_frames_in_flight; ++i)
 			{
 				vkDestroyFence(device, d.rndr_fncs[i], nullptr);
-				vkDestroySemaphore(device, d.rndr_sems[i], nullptr);
+				vkDestroySemaphore(device, d.cmpt_sig_sems[i], nullptr);
+				vkDestroySemaphore(device, d.gfx_sig_sems[i], nullptr);
 				vkDestroySemaphore(device, d.acq_sig_sems[i], nullptr);
 			}
 
@@ -1407,17 +1470,17 @@ namespace vk_swapchain
 
 namespace vk_command_buffer
 {
-	std::vector<VkCommandBuffer> allocate(const VkDevice device, const VkCommandPool cmd_pool, const uint32_t count, const std::string& name)
+	std::vector<VkCommandBuffer> allocate(const VkDevice device, const VkCommandPool gfx_cmd_pool, const uint32_t count, const std::string& name)
 	{
 		const VkCommandBufferAllocateInfo allocate_info = {
 			.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO,
-			.commandPool = cmd_pool,
+			.commandPool = gfx_cmd_pool,
 			.level = VK_COMMAND_BUFFER_LEVEL_PRIMARY,
 			.commandBufferCount = count,
 		};
 
-		std::vector<VkCommandBuffer> cmd_buffs(count);
-		VK_CHECK("allocate command buffer", vkAllocateCommandBuffers(device, &allocate_info, cmd_buffs.data()));
+		std::vector<VkCommandBuffer> gfx_cmd_buffs(count);
+		VK_CHECK("allocate command buffer", vkAllocateCommandBuffers(device, &allocate_info, gfx_cmd_buffs.data()));
 
 #ifdef _DEBUG
 		std::string n = name;
@@ -1427,7 +1490,7 @@ namespace vk_command_buffer
 			const VkDebugUtilsObjectNameInfoEXT name_info = {
 				.sType = VK_STRUCTURE_TYPE_DEBUG_UTILS_OBJECT_NAME_INFO_EXT,
 				.objectType = VK_OBJECT_TYPE_COMMAND_BUFFER,
-				.objectHandle = reinterpret_cast<uint64_t>(cmd_buffs[idx]),
+				.objectHandle = reinterpret_cast<uint64_t>(gfx_cmd_buffs[idx]),
 				.pObjectName = n.append(" ").append(std::to_string(idx)).c_str(),
 			};
 
@@ -1435,7 +1498,7 @@ namespace vk_command_buffer
 		}
 #endif // _DEBUG
 
-		return cmd_buffs;
+		return gfx_cmd_buffs;
 	}
 }
 
