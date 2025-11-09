@@ -292,6 +292,9 @@ SDL_AppResult SDL_AppIterate(void* appstate)
 	VkDevice device = vk_state.device_data.device;
 
 	uint8_t frame_in_flight = vk_state.swapchain_data.frame_in_flight;
+	uint64_t rndr_sem_value = 0;
+	VK_CHECK("get rndr sem value", vkGetSemaphoreCounterValue(device, vk_state.swapchain_data.rndr_sig_sem, &rndr_sem_value));
+	uint64_t draw_sem_wait_value = rndr_sem_value + 1;
 
 	if (is_rendering)
 	{
@@ -411,7 +414,8 @@ SDL_AppResult SDL_AppIterate(void* appstate)
 		const VkSemaphoreSubmitInfo cmpt_sig_sem_infos[] = {
 			{
 				.sType = VK_STRUCTURE_TYPE_SEMAPHORE_SUBMIT_INFO,
-				.semaphore = vk_state.swapchain_data.cmpt_sig_sems[frame_in_flight],
+				.semaphore = vk_state.swapchain_data.rndr_sig_sem,
+				.value = ++rndr_sem_value,
 				.stageMask = VK_PIPELINE_STAGE_2_BOTTOM_OF_PIPE_BIT,
 			},
 		};
@@ -644,7 +648,8 @@ SDL_AppResult SDL_AppIterate(void* appstate)
 		gfx_wait_sem_infos.push_back(
 			{
 				.sType = VK_STRUCTURE_TYPE_SEMAPHORE_SUBMIT_INFO,
-				.semaphore = vk_state.swapchain_data.cmpt_sig_sems[frame_in_flight],
+				.semaphore = vk_state.swapchain_data.rndr_sig_sem,
+				.value = draw_sem_wait_value,
 				.stageMask = VK_PIPELINE_STAGE_2_TOP_OF_PIPE_BIT,
 			}
 		);
@@ -714,7 +719,6 @@ SDL_AppResult SDL_AppIterate(void* appstate)
 				{ rt_state.dims.width, rt_state.dims.height, 1 },
 				VK_FORMAT_R32G32B32A32_SFLOAT, VK_IMAGE_USAGE_STORAGE_BIT | VK_IMAGE_USAGE_SAMPLED_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT,
 				vk_state.allocator, 0, "final render");
-
 		}
 
 		vk_state.curr_sample = 1;

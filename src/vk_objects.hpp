@@ -545,7 +545,7 @@ namespace vk_device
 		VkPhysicalDeviceVulkan12Features feats12 = {
 			.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_2_FEATURES,
 			.pNext = &sync2_feats,
-			.bufferDeviceAddress = VK_TRUE,
+			.timelineSemaphore = true,
 		};
 
 		VkPhysicalDeviceFeatures2 feats2 = {
@@ -636,6 +636,7 @@ namespace vk_semaphore
 	{
 		VkSemaphore semaphore = VK_NULL_HANDLE;
 		VkSemaphoreType type = VK_SEMAPHORE_TYPE_BINARY;
+		uint64_t value = 0;
 	};
 
 	vk_semaphore::data create(const VkDevice device, const VkSemaphoreType semaphore_type, const std::string& name)
@@ -1251,8 +1252,8 @@ namespace vk_swapchain
 		std::vector<VkCommandBuffer> gfx_cmd_buffs;
 		std::vector<VkCommandBuffer> cmpt_cmd_buffs;
 		std::vector<VkFence> rndr_fncs;
-		std::vector<VkSemaphore> cmpt_sig_sems;
-		std::vector<VkSemaphore> gfx_sig_sems;
+		VkSemaphore rndr_sig_sem;
+		std::vector<VkSemaphore> draw_sig_sems;
 		std::vector<VkSemaphore> acq_sig_sems;
 		uint8_t max_frames_in_flight = 0;
 		uint32_t sc_image_count = 0;
@@ -1292,8 +1293,8 @@ namespace vk_swapchain
 		d.gfx_cmd_buffs.resize(d.max_frames_in_flight);
 		d.cmpt_cmd_buffs.resize(d.max_frames_in_flight);
 		d.rndr_fncs.resize(d.max_frames_in_flight);
-		d.cmpt_sig_sems.resize(d.max_frames_in_flight);
-		d.gfx_sig_sems.resize(d.max_frames_in_flight);
+		//d.rndr_sig_sems.resize(d.max_frames_in_flight);
+		d.draw_sig_sems.resize(d.max_frames_in_flight);
 		d.acq_sig_sems.resize(d.max_frames_in_flight);
 
 		VkImageViewCreateInfo image_view_create_info = {
@@ -1343,8 +1344,19 @@ namespace vk_swapchain
 			.commandBufferCount = 1,
 		};
 
-		const VkSemaphoreCreateInfo sem_ci = {
+		const VkSemaphoreCreateInfo bin_sem_ci = {
 			.sType = VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO,
+		};
+
+		const VkSemaphoreTypeCreateInfo sem_type_ci = {
+			.sType = VK_STRUCTURE_TYPE_SEMAPHORE_TYPE_CREATE_INFO,
+			.semaphoreType = VK_SEMAPHORE_TYPE_TIMELINE,
+			.initialValue = 0,
+		};
+
+		const VkSemaphoreCreateInfo tl_sem_ci = {
+			.sType = VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO,
+			.pNext = &sem_type_ci,
 		};
 
 		const VkFenceCreateInfo fence_ci = {
@@ -1357,10 +1369,10 @@ namespace vk_swapchain
 			VK_CHECK("allocate gfx command buffer", vkAllocateCommandBuffers(device, &gfx_cmd_buff_ai, &d.gfx_cmd_buffs[i]));
 			VK_CHECK("allocate cmpt command buffer", vkAllocateCommandBuffers(device, &cmpt_cmd_buff_ai, &d.cmpt_cmd_buffs[i]));
 			VK_CHECK("create fence", vkCreateFence(device, &fence_ci, nullptr, &d.rndr_fncs[i]));
-			VK_CHECK("create acq sig semahpore", vkCreateSemaphore(device, &sem_ci, nullptr, &d.acq_sig_sems[i]));
-			VK_CHECK("create cmpt sig semahpore", vkCreateSemaphore(device, &sem_ci, nullptr, &d.cmpt_sig_sems[i]));
-			VK_CHECK("create gfx sig semahpore", vkCreateSemaphore(device, &sem_ci, nullptr, &d.gfx_sig_sems[i]));
+			VK_CHECK("create acq sig semahpore", vkCreateSemaphore(device, &bin_sem_ci, nullptr, &d.acq_sig_sems[i]));
+			VK_CHECK("create draw sig semahpore", vkCreateSemaphore(device, &bin_sem_ci, nullptr, &d.draw_sig_sems[i]));
 		}
+		VK_CHECK("create rndr sig semahpore", vkCreateSemaphore(device, &tl_sem_ci, nullptr, &d.rndr_sig_sem));
 
 #ifdef _DEBUG
 		VkDebugUtilsObjectNameInfoEXT name_info = {
@@ -1384,6 +1396,12 @@ namespace vk_swapchain
 		name_info.objectHandle = reinterpret_cast<uint64_t>(d.cmpt_cmd_pool);
 		name_info.pObjectName = n.append(" cmpt command pool").c_str();
 		VK_CHECK("setting cmpt swapchain cmd pool name", vkSetDebugUtilsObjectNameEXT(device, &name_info));
+
+		n = name;
+		name_info.objectType = VK_OBJECT_TYPE_SEMAPHORE;
+		name_info.objectHandle = reinterpret_cast<uint64_t>(d.rndr_sig_sem);
+		name_info.pObjectName = n.append(" rndr sig sem ").c_str();// .append(std::to_string(i)).c_str();
+		VK_CHECK("setting swapchain cmpt sig sem name", vkSetDebugUtilsObjectNameEXT(device, &name_info));
 
 		for (uint32_t i = 0; i < d.sc_image_count; ++i)
 		{
@@ -1422,13 +1440,7 @@ namespace vk_swapchain
 
 			n = name;
 			name_info.objectType = VK_OBJECT_TYPE_SEMAPHORE;
-			name_info.objectHandle = reinterpret_cast<uint64_t>(d.cmpt_sig_sems[i]);
-			name_info.pObjectName = n.append(" cmpt sig sem ").append(std::to_string(i)).c_str();
-			VK_CHECK("setting swapchain cmpt sig sem name", vkSetDebugUtilsObjectNameEXT(device, &name_info));
-
-			n = name;
-			name_info.objectType = VK_OBJECT_TYPE_SEMAPHORE;
-			name_info.objectHandle = reinterpret_cast<uint64_t>(d.gfx_sig_sems[i]);
+			name_info.objectHandle = reinterpret_cast<uint64_t>(d.draw_sig_sems[i]);
 			name_info.pObjectName = n.append(" gfx sig sem ").append(std::to_string(i)).c_str();
 			VK_CHECK("setting swapchain gfx sig sem name", vkSetDebugUtilsObjectNameEXT(device, &name_info));
 
@@ -1458,11 +1470,11 @@ namespace vk_swapchain
 			for (uint8_t i = 0; i < d.max_frames_in_flight; ++i)
 			{
 				vkDestroyFence(device, d.rndr_fncs[i], nullptr);
-				vkDestroySemaphore(device, d.cmpt_sig_sems[i], nullptr);
-				vkDestroySemaphore(device, d.gfx_sig_sems[i], nullptr);
+				vkDestroySemaphore(device, d.draw_sig_sems[i], nullptr);
 				vkDestroySemaphore(device, d.acq_sig_sems[i], nullptr);
 			}
 
+			vkDestroySemaphore(device, d.rndr_sig_sem, nullptr);
 			vkDestroySwapchainKHR(device, d.swapchain, nullptr);
 		}
 	}
