@@ -760,7 +760,7 @@ namespace vk_compute_pipeline
 		uint32_t dispatch_x = 32;
 		uint32_t dispatch_y = 32;
 		uint32_t current_time = 0;
-		uint32_t curr_sample_is_reset = 0;
+		uint32_t curr_sample = 0;
 	};
 
 	data create(const VkDevice device, const std::string current_path, const uint8_t max_frames_in_flight, const std::string name)
@@ -1256,7 +1256,7 @@ namespace vk_swapchain
 		std::vector<VkSemaphore> acq_sig_sems;
 		uint8_t max_frames_in_flight = 0;
 		uint32_t sc_image_count = 0;
-		uint8_t curr_frame = 0;
+		uint8_t frame_in_flight = 0;
 	};
 
 	data create(const VkDevice device, const vk_surface::data& surface, const vk_phydev::data& phy_dev, const VkSwapchainKHR old_swapchain, const std::string& name)

@@ -63,20 +63,20 @@ struct VulkanState
 	vk_image::data accum_tgt = {};
 	vk_image::data final_rndr = {};
 	uint32_t max_samples = 1024;
-	uint16_t curr_sample = 1;
+	uint32_t curr_sample = 1;
 };
 
 struct ImGuiState
 {
 	int tmp_render_dims[2] = { 1280, 720 };
 	int tmp_num_samples = 1024;
+	bool should_be_rendering = false;
 };
 
 struct RenderTargetState
 {
 	dim2d dims = { 1280, 720 };
 	float zoom_level = 1;
-	bool is_reset = false;
 };
 
 SDL_Window* window = nullptr;
@@ -87,6 +87,7 @@ RenderTargetState rt_state = {};
 pos2d last_mouse_pos = {};
 ImGuiState imgui_state = {};
 bool mouse_motion_tracking = false;
+bool is_rendering = false;
 
 #define SDL_CHECK(result)						\
 	if (!result) {									\
@@ -245,7 +246,6 @@ SDL_AppResult SDL_AppEvent(void* appstate, SDL_Event* event)
 		if (!io.WantCaptureMouse)
 		{
 			mouse_motion_tracking = false;
-			rt_state.is_reset = false;
 			last_mouse_pos = {};
 		}
 	}
@@ -259,7 +259,6 @@ SDL_AppResult SDL_AppEvent(void* appstate, SDL_Event* event)
 					pos2d(static_cast<float>(vk_state.surface_data.surf_caps.currentExtent.width), static_cast<float>(vk_state.surface_data.surf_caps.currentExtent.height))) * 2;
 
 				last_mouse_pos = { event->motion.x, event->motion.y };
-				rt_state.is_reset = true;
 			}
 		}
 	}
@@ -281,11 +280,6 @@ SDL_AppResult SDL_AppEvent(void* appstate, SDL_Event* event)
 	return SDL_APP_CONTINUE;
 }
 
-bool is_new_render_targets_required()
-{
-	return (vk_state.accum_tgt.dims.width != rt_state.dims.width) || (vk_state.accum_tgt.dims.height != rt_state.dims.height);
-}
-
 SDL_AppResult SDL_AppIterate(void* appstate)
 {
 	if (SDL_GetWindowFlags(window) & SDL_WINDOW_MINIMIZED)
@@ -295,32 +289,11 @@ SDL_AppResult SDL_AppIterate(void* appstate)
 
 	VkDevice device = vk_state.device_data.device;
 
-	if (rt_state.is_reset)
+	uint8_t frame_in_flight = vk_state.swapchain_data.frame_in_flight;
+
+	if (is_rendering)
 	{
-		VK_CHECK("device wait for accum target final render destroy", vkDeviceWaitIdle(device));
-
-		vk_image::destroy(vk_state.accum_tgt, vk_state.allocator, device);
-		vk_state.accum_tgt = vk_image::create(
-			vk_state.device_data.device,
-			{ rt_state.dims.width, rt_state.dims.height, 1 },
-			VK_FORMAT_R32G32B32A32_SFLOAT, VK_IMAGE_USAGE_STORAGE_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT,
-			vk_state.allocator, 0, "accum target");
-
-		vk_image::destroy(vk_state.final_rndr, vk_state.allocator, device);
-		vk_state.final_rndr = vk_image::create(
-			vk_state.device_data.device,
-			{ rt_state.dims.width, rt_state.dims.height, 1 },
-			VK_FORMAT_R32G32B32A32_SFLOAT, VK_IMAGE_USAGE_STORAGE_BIT | VK_IMAGE_USAGE_SAMPLED_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT,
-			vk_state.allocator, 0, "final render");
-
-		vk_state.curr_sample = 1;
-	}
-
-	uint8_t curr_frame = vk_state.swapchain_data.curr_frame;
-
-	if (vk_state.curr_sample <= vk_state.max_samples)
-	{
-		VkCommandBuffer cmpt_cmd_buff = vk_state.swapchain_data.cmpt_cmd_buffs[curr_frame];
+		VkCommandBuffer cmpt_cmd_buff = vk_state.swapchain_data.cmpt_cmd_buffs[frame_in_flight];
 
 		const VkCommandBufferBeginInfo cmpt_begin_info = {
 			.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO,
@@ -370,14 +343,14 @@ SDL_AppResult SDL_AppIterate(void* appstate)
 		const VkWriteDescriptorSet cmpt_desc_writes[] = {
 			{
 				.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
-				.dstSet = vk_state.cmpt_ppln.dss[curr_frame],
+				.dstSet = vk_state.cmpt_ppln.dss[frame_in_flight],
 				.descriptorCount = 1,
 				.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_IMAGE,
 				.pImageInfo = &vk_state.accum_tgt.desc_img_info,
 			},
 			{
 				.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
-				.dstSet = vk_state.cmpt_ppln.dss[curr_frame],
+				.dstSet = vk_state.cmpt_ppln.dss[frame_in_flight],
 				.dstBinding = 1,
 				.descriptorCount = 1,
 				.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_IMAGE,
@@ -392,7 +365,7 @@ SDL_AppResult SDL_AppIterate(void* appstate)
 			.stageFlags = VK_SHADER_STAGE_COMPUTE_BIT,
 			.layout = vk_state.cmpt_ppln.lyt,
 			.descriptorSetCount = 1,
-			.pDescriptorSets = &vk_state.cmpt_ppln.dss[curr_frame],
+			.pDescriptorSets = &vk_state.cmpt_ppln.dss[frame_in_flight],
 		};
 
 		vkCmdBindDescriptorSets2(cmpt_cmd_buff, &cmpt_ds_bi);
@@ -401,7 +374,7 @@ SDL_AppResult SDL_AppIterate(void* appstate)
 			.dispatch_x = rt_state.dims.width,
 			.dispatch_y = rt_state.dims.height,
 			.current_time = static_cast<uint32_t>(std::chrono::system_clock::now().time_since_epoch().count()),
-			.curr_sample_is_reset = static_cast<uint32_t>((rt_state.is_reset & 0x1) | (vk_state.curr_sample << 1)),
+			.curr_sample = vk_state.curr_sample,
 		};
 
 		const VkPushConstantsInfo cmpt_pc_info = {
@@ -436,7 +409,7 @@ SDL_AppResult SDL_AppIterate(void* appstate)
 		const VkSemaphoreSubmitInfo cmpt_sig_sem_infos[] = {
 			{
 				.sType = VK_STRUCTURE_TYPE_SEMAPHORE_SUBMIT_INFO,
-				.semaphore = vk_state.swapchain_data.cmpt_sig_sems[curr_frame],
+				.semaphore = vk_state.swapchain_data.cmpt_sig_sems[frame_in_flight],
 				.stageMask = VK_PIPELINE_STAGE_2_BOTTOM_OF_PIPE_BIT,
 			},
 		};
@@ -458,18 +431,18 @@ SDL_AppResult SDL_AppIterate(void* appstate)
 		.sType = VK_STRUCTURE_TYPE_ACQUIRE_NEXT_IMAGE_INFO_KHR,
 		.swapchain = vk_state.swapchain_data.swapchain,
 		.timeout = UINT64_MAX,
-		.semaphore = vk_state.swapchain_data.acq_sig_sems[curr_frame],
+		.semaphore = vk_state.swapchain_data.acq_sig_sems[frame_in_flight],
 		.deviceMask = 0x1,
 	};
 
 	uint32_t sc_img_idx = 0;
 	VK_CHECK("acq img idx", vkAcquireNextImage2KHR(device, &acq_info, &sc_img_idx));
 
-	VK_CHECK("reset rndr fnc", vkResetFences(device, 1, &vk_state.swapchain_data.rndr_fncs[curr_frame]));
+	VK_CHECK("reset rndr fnc", vkResetFences(device, 1, &vk_state.swapchain_data.rndr_fncs[frame_in_flight]));
 
-	VkCommandBuffer gfx_cmd_buff = vk_state.swapchain_data.gfx_cmd_buffs[curr_frame];
+	VkCommandBuffer gfx_cmd_buff = vk_state.swapchain_data.gfx_cmd_buffs[frame_in_flight];
 	VkImage curr_sc_img = vk_state.swapchain_data.images[sc_img_idx];
-	VkFence curr_rndr_fnc = vk_state.swapchain_data.rndr_fncs[curr_frame];
+	VkFence curr_rndr_fnc = vk_state.swapchain_data.rndr_fncs[frame_in_flight];
 
 	const VkCommandBufferBeginInfo gfx_begin_info = {
 		.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO,
@@ -477,13 +450,23 @@ SDL_AppResult SDL_AppIterate(void* appstate)
 	};
 	VK_CHECK("begin gfx cmd_buff", vkBeginCommandBuffer(gfx_cmd_buff, &gfx_begin_info));
 
-	if (vk_state.curr_sample <= vk_state.max_samples)
+	if (is_rendering)
 	{
 		change_image_layout(gfx_cmd_buff,
 			VK_PIPELINE_STAGE_2_TOP_OF_PIPE_BIT, 0,
 			VK_PIPELINE_STAGE_2_FRAGMENT_SHADER_BIT, VK_ACCESS_2_SHADER_READ_BIT,
 			VK_IMAGE_LAYOUT_GENERAL, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
 			vk_state.phy_dev_data.cmpt_q_fly_idx, vk_state.phy_dev_data.gfx_q_fly_idx,
+			vk_state.final_rndr.image
+		);
+	}
+	else
+	{
+		change_image_layout(gfx_cmd_buff,
+			VK_PIPELINE_STAGE_2_TOP_OF_PIPE_BIT, 0,
+			VK_PIPELINE_STAGE_2_FRAGMENT_SHADER_BIT, VK_ACCESS_2_SHADER_READ_BIT,
+			VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
+			VK_QUEUE_FAMILY_IGNORED, VK_QUEUE_FAMILY_IGNORED,
 			vk_state.final_rndr.image
 		);
 	}
@@ -535,7 +518,7 @@ SDL_AppResult SDL_AppIterate(void* appstate)
 		.stageFlags = VK_SHADER_STAGE_VERTEX_BIT,
 		.layout = vk_state.gfx_ppln.lyt,
 		.descriptorSetCount = 1,
-		.pDescriptorSets = &vk_state.gfx_ppln.dss[curr_frame],
+		.pDescriptorSets = &vk_state.gfx_ppln.dss[frame_in_flight],
 	};
 
 	vk_state.final_rndr.desc_img_info.imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
@@ -543,7 +526,7 @@ SDL_AppResult SDL_AppIterate(void* appstate)
 	const VkWriteDescriptorSet gfx_desc_writes[] = {
 		{
 			.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
-			.dstSet = vk_state.gfx_ppln.dss[curr_frame],
+			.dstSet = vk_state.gfx_ppln.dss[frame_in_flight],
 			.descriptorCount = 1,
 			.descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
 			.pImageInfo = &vk_state.final_rndr.desc_img_info,
@@ -600,25 +583,6 @@ SDL_AppResult SDL_AppIterate(void* appstate)
 
 	vkCmdDraw(gfx_cmd_buff, 6, 1, 0, 0);
 
-	std::vector<VkSemaphoreSubmitInfo> gfx_wait_sem_infos = {
-		{
-			.sType = VK_STRUCTURE_TYPE_SEMAPHORE_SUBMIT_INFO,
-			.semaphore = vk_state.swapchain_data.acq_sig_sems[curr_frame],
-			.stageMask = VK_PIPELINE_STAGE_2_TOP_OF_PIPE_BIT,
-		},
-	};
-
-	if (vk_state.curr_sample <= vk_state.max_samples)
-	{
-		gfx_wait_sem_infos.push_back(
-			{
-				.sType = VK_STRUCTURE_TYPE_SEMAPHORE_SUBMIT_INFO,
-				.semaphore = vk_state.swapchain_data.cmpt_sig_sems[curr_frame],
-				.stageMask = VK_PIPELINE_STAGE_2_TOP_OF_PIPE_BIT,
-			}
-		);
-	}
-
 	ImGui_ImplVulkan_NewFrame();
 	ImGui_ImplSDL3_NewFrame();
 	ImGui::NewFrame();
@@ -628,11 +592,7 @@ SDL_AppResult SDL_AppIterate(void* appstate)
 	if (ImGui::InputInt2("Render Dims", imgui_state.tmp_render_dims))
 	{
 		imgui_state.tmp_render_dims[0] = std::clamp(imgui_state.tmp_render_dims[0], 1, 8192);
-		rt_state.dims.width = imgui_state.tmp_render_dims[0];
-
 		imgui_state.tmp_render_dims[1] = std::clamp(imgui_state.tmp_render_dims[1], 1, 8192);
-		rt_state.dims.height = imgui_state.tmp_render_dims[1];
-		rt_state.is_reset = true;
 	}
 
 	if (ImGui::DragInt("Num Samples", &imgui_state.tmp_num_samples))
@@ -641,9 +601,11 @@ SDL_AppResult SDL_AppIterate(void* appstate)
 		{
 			imgui_state.tmp_num_samples = 1;
 		}
+	}
 
-		rt_state.is_reset = true;
-		vk_state.max_samples = imgui_state.tmp_num_samples;
+	if (ImGui::Button("Render"))
+	{
+		imgui_state.should_be_rendering = true;
 	}
 
 	ImGui::End();
@@ -666,6 +628,25 @@ SDL_AppResult SDL_AppIterate(void* appstate)
 		curr_sc_img);
 
 	VK_CHECK("end gfx cmd_buff", vkEndCommandBuffer(gfx_cmd_buff));
+
+	std::vector<VkSemaphoreSubmitInfo> gfx_wait_sem_infos = {
+		{
+			.sType = VK_STRUCTURE_TYPE_SEMAPHORE_SUBMIT_INFO,
+			.semaphore = vk_state.swapchain_data.acq_sig_sems[frame_in_flight],
+			.stageMask = VK_PIPELINE_STAGE_2_TOP_OF_PIPE_BIT,
+		},
+	};
+
+	if (is_rendering)
+	{
+		gfx_wait_sem_infos.push_back(
+			{
+				.sType = VK_STRUCTURE_TYPE_SEMAPHORE_SUBMIT_INFO,
+				.semaphore = vk_state.swapchain_data.cmpt_sig_sems[frame_in_flight],
+				.stageMask = VK_PIPELINE_STAGE_2_TOP_OF_PIPE_BIT,
+			}
+		);
+	}
 
 	const VkCommandBufferSubmitInfo gfx_cmd_buff_infos[] = {
 		{
@@ -693,13 +674,51 @@ SDL_AppResult SDL_AppIterate(void* appstate)
 		.pImageIndices = &sc_img_idx,
 	};
 
-	VK_CHECK("wait for rndr fnc", vkWaitForFences(device, 1, &vk_state.swapchain_data.rndr_fncs[curr_frame], VK_TRUE, UINT64_MAX));
+	VK_CHECK("wait for rndr fnc", vkWaitForFences(device, 1, &vk_state.swapchain_data.rndr_fncs[frame_in_flight], VK_TRUE, UINT64_MAX));
 	VK_CHECK("q present", vkQueuePresentKHR(vk_state.device_data.gfx_q, &present_info));
 
-	vk_state.swapchain_data.curr_frame = (curr_frame + 1) % vk_state.swapchain_data.max_frames_in_flight;
+	vk_state.swapchain_data.frame_in_flight = (frame_in_flight + 1) % vk_state.swapchain_data.max_frames_in_flight;
 
-	if (vk_state.curr_sample <= vk_state.max_samples)
-		++vk_state.curr_sample;
+	if (is_rendering)
+	{
+		if (++vk_state.curr_sample > vk_state.max_samples)
+		{
+			is_rendering = false;
+			vk_state.curr_sample = 1;
+		}
+	}
+
+	if (imgui_state.should_be_rendering)
+	{
+		vk_state.max_samples = imgui_state.tmp_num_samples;
+
+		if (rt_state.dims.width != imgui_state.tmp_render_dims[0] || rt_state.dims.height != imgui_state.tmp_render_dims[1])
+		{
+			rt_state.dims.width = imgui_state.tmp_render_dims[0];
+			rt_state.dims.height = imgui_state.tmp_render_dims[1];
+
+			VK_CHECK("device wait for accum target final render destroy", vkDeviceWaitIdle(device));
+
+			vk_image::destroy(vk_state.accum_tgt, vk_state.allocator, device);
+			vk_state.accum_tgt = vk_image::create(
+				vk_state.device_data.device,
+				{ rt_state.dims.width, rt_state.dims.height, 1 },
+				VK_FORMAT_R32G32B32A32_SFLOAT, VK_IMAGE_USAGE_STORAGE_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT,
+				vk_state.allocator, 0, "accum target");
+
+			vk_image::destroy(vk_state.final_rndr, vk_state.allocator, device);
+			vk_state.final_rndr = vk_image::create(
+				vk_state.device_data.device,
+				{ rt_state.dims.width, rt_state.dims.height, 1 },
+				VK_FORMAT_R32G32B32A32_SFLOAT, VK_IMAGE_USAGE_STORAGE_BIT | VK_IMAGE_USAGE_SAMPLED_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT,
+				vk_state.allocator, 0, "final render");
+
+			vk_state.curr_sample = 1;
+		}
+
+		imgui_state.should_be_rendering = false;
+		is_rendering = true;
+	}
 
 	return SDL_APP_CONTINUE;
 }
