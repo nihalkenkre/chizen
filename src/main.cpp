@@ -259,6 +259,8 @@ SDL_AppResult SDL_AppEvent(void* appstate, SDL_Event* event)
 					pos2d(static_cast<float>(vk_state.surface_data.surf_caps.currentExtent.width), static_cast<float>(vk_state.surface_data.surf_caps.currentExtent.height))) * 2;
 
 				last_mouse_pos = { event->motion.x, event->motion.y };
+		
+				imgui_state.should_be_rendering = true;
 			}
 		}
 	}
@@ -713,8 +715,9 @@ SDL_AppResult SDL_AppIterate(void* appstate)
 				VK_FORMAT_R32G32B32A32_SFLOAT, VK_IMAGE_USAGE_STORAGE_BIT | VK_IMAGE_USAGE_SAMPLED_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT,
 				vk_state.allocator, 0, "final render");
 
-			vk_state.curr_sample = 1;
 		}
+
+		vk_state.curr_sample = 1;
 
 		imgui_state.should_be_rendering = false;
 		is_rendering = true;
