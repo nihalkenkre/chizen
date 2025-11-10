@@ -1621,7 +1621,9 @@ namespace vk_image
 		const VkImageUsageFlags usage,
 		const VmaAllocator allocator,
 		const uint32_t id,
-		const std::string& name)
+		const std::string& name,
+		const VkSharingMode sharing_mode = VK_SHARING_MODE_EXCLUSIVE,
+		const std::vector<uint32_t> q_fly_idxs = {})
 	{
 		data d = {
 			.dims = {
@@ -1640,6 +1642,9 @@ namespace vk_image
 			.samples = VK_SAMPLE_COUNT_1_BIT,
 			.tiling = VK_IMAGE_TILING_OPTIMAL,
 			.usage = usage,
+			.sharingMode = sharing_mode,
+			.queueFamilyIndexCount = static_cast<uint32_t>(q_fly_idxs.size()),
+			.pQueueFamilyIndices = q_fly_idxs.data(),
 		};
 
 		const VmaAllocationCreateInfo alloc_ci = {

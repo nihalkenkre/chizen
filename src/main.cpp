@@ -69,7 +69,7 @@ struct VulkanState
 struct ImGuiState
 {
 	int tmp_render_dims[2] = { 1280, 720 };
-	int tmp_num_samples = 1024;
+	int tmp_max_samples = 1024;
 	bool should_be_rendering = false;
 };
 
@@ -138,7 +138,7 @@ SDL_AppResult SDL_AppInit(void** appstate, int argc, char** argv)
 	vk_state.final_rndr = vk_image::create(vk_state.device_data.device,
 		{ rt_state.dims.width, rt_state.dims.height, 1 },
 		VK_FORMAT_R32G32B32A32_SFLOAT, VK_IMAGE_USAGE_STORAGE_BIT | VK_IMAGE_USAGE_SAMPLED_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT,
-		vk_state.allocator, 0, "final render");
+		vk_state.allocator, 0, "final render", VK_SHARING_MODE_CONCURRENT, { vk_state.phy_dev_data.cmpt_q_fly_idx, vk_state.phy_dev_data.gfx_q_fly_idx });
 
 	vk_state.cmpt_ppln = vk_compute_pipeline::create(vk_state.device_data.device, current_path, vk_state.swapchain_data.max_frames_in_flight, "compute pipeline");
 	vk_state.gfx_ppln = vk_graphics_pipeline::create(vk_state.device_data.device, current_path, vk_state.surface_data.format.format, vk_state.swapchain_data.max_frames_in_flight, "graphics pipeline");
@@ -259,8 +259,9 @@ SDL_AppResult SDL_AppEvent(void* appstate, SDL_Event* event)
 					pos2d(static_cast<float>(vk_state.surface_data.surf_caps.currentExtent.width), static_cast<float>(vk_state.surface_data.surf_caps.currentExtent.height))) * 2;
 
 				last_mouse_pos = { event->motion.x, event->motion.y };
-		
+
 				imgui_state.should_be_rendering = true;
+				vk_state.curr_sample = 1;
 			}
 		}
 	}
@@ -394,14 +395,6 @@ SDL_AppResult SDL_AppIterate(void* appstate)
 
 		vkCmdDispatch(cmpt_cmd_buff, cmpt_pc.dispatch_x / 32 + 1, cmpt_pc.dispatch_y / 32 + 1, 1);
 
-		change_image_layout(cmpt_cmd_buff,
-			VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT | VK_PIPELINE_STAGE_2_CLEAR_BIT, VK_ACCESS_2_SHADER_STORAGE_WRITE_BIT | VK_ACCESS_2_TRANSFER_WRITE_BIT,
-			VK_PIPELINE_STAGE_2_BOTTOM_OF_PIPE_BIT, 0,
-			VK_IMAGE_LAYOUT_GENERAL, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
-			vk_state.phy_dev_data.cmpt_q_fly_idx, vk_state.phy_dev_data.gfx_q_fly_idx,
-			vk_state.final_rndr.image
-		);
-
 		VK_CHECK("end cmpt cmd buffer", vkEndCommandBuffer(cmpt_cmd_buff));
 
 		const VkCommandBufferSubmitInfo cmpt_cmd_buff_infos[] = {
@@ -456,26 +449,13 @@ SDL_AppResult SDL_AppIterate(void* appstate)
 	};
 	VK_CHECK("begin gfx cmd_buff", vkBeginCommandBuffer(gfx_cmd_buff, &gfx_begin_info));
 
-	if (is_rendering)
-	{
-		change_image_layout(gfx_cmd_buff,
-			VK_PIPELINE_STAGE_2_TOP_OF_PIPE_BIT, 0,
-			VK_PIPELINE_STAGE_2_FRAGMENT_SHADER_BIT, VK_ACCESS_2_SHADER_READ_BIT,
-			VK_IMAGE_LAYOUT_GENERAL, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
-			vk_state.phy_dev_data.cmpt_q_fly_idx, vk_state.phy_dev_data.gfx_q_fly_idx,
-			vk_state.final_rndr.image
-		);
-	}
-	else
-	{
-		change_image_layout(gfx_cmd_buff,
-			VK_PIPELINE_STAGE_2_TOP_OF_PIPE_BIT, 0,
-			VK_PIPELINE_STAGE_2_FRAGMENT_SHADER_BIT, VK_ACCESS_2_SHADER_READ_BIT,
-			VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
-			VK_QUEUE_FAMILY_IGNORED, VK_QUEUE_FAMILY_IGNORED,
-			vk_state.final_rndr.image
-		);
-	}
+	change_image_layout(gfx_cmd_buff,
+		VK_PIPELINE_STAGE_2_TOP_OF_PIPE_BIT | VK_PIPELINE_STAGE_2_CLEAR_BIT, VK_ACCESS_2_TRANSFER_WRITE_BIT,
+		VK_PIPELINE_STAGE_2_FRAGMENT_SHADER_BIT, VK_ACCESS_2_SHADER_READ_BIT,
+		VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
+		VK_QUEUE_FAMILY_IGNORED, VK_QUEUE_FAMILY_IGNORED,
+		vk_state.final_rndr.image
+	);
 
 	change_image_layout(gfx_cmd_buff,
 		VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, VK_ACCESS_2_SHADER_STORAGE_WRITE_BIT,
@@ -601,11 +581,11 @@ SDL_AppResult SDL_AppIterate(void* appstate)
 		imgui_state.tmp_render_dims[1] = std::clamp(imgui_state.tmp_render_dims[1], 1, 8192);
 	}
 
-	if (ImGui::DragInt("Num Samples", &imgui_state.tmp_num_samples))
+	if (ImGui::DragInt("Num Samples", &imgui_state.tmp_max_samples))
 	{
-		if (imgui_state.tmp_num_samples <= 0)
+		if (imgui_state.tmp_max_samples <= 0)
 		{
-			imgui_state.tmp_num_samples = 1;
+			imgui_state.tmp_max_samples = 1;
 		}
 	}
 
@@ -652,7 +632,7 @@ SDL_AppResult SDL_AppIterate(void* appstate)
 				.value = draw_sem_wait_value,
 				.stageMask = VK_PIPELINE_STAGE_2_TOP_OF_PIPE_BIT,
 			}
-		);
+			);
 	}
 
 	const VkCommandBufferSubmitInfo gfx_cmd_buff_infos[] = {
@@ -691,13 +671,15 @@ SDL_AppResult SDL_AppIterate(void* appstate)
 		if (++vk_state.curr_sample > vk_state.max_samples)
 		{
 			is_rendering = false;
-			vk_state.curr_sample = 1;
 		}
 	}
 
 	if (imgui_state.should_be_rendering)
 	{
-		vk_state.max_samples = imgui_state.tmp_num_samples;
+		if (static_cast<uint32_t>(imgui_state.tmp_max_samples) < vk_state.max_samples)
+			vk_state.curr_sample = 1;
+
+		vk_state.max_samples = imgui_state.tmp_max_samples;
 
 		if (rt_state.dims.width != imgui_state.tmp_render_dims[0] || rt_state.dims.height != imgui_state.tmp_render_dims[1])
 		{
@@ -718,10 +700,10 @@ SDL_AppResult SDL_AppIterate(void* appstate)
 				vk_state.device_data.device,
 				{ rt_state.dims.width, rt_state.dims.height, 1 },
 				VK_FORMAT_R32G32B32A32_SFLOAT, VK_IMAGE_USAGE_STORAGE_BIT | VK_IMAGE_USAGE_SAMPLED_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT,
-				vk_state.allocator, 0, "final render");
-		}
+				vk_state.allocator, 0, "final render", VK_SHARING_MODE_CONCURRENT, { vk_state.phy_dev_data.cmpt_q_fly_idx, vk_state.phy_dev_data.gfx_q_fly_idx });
 
-		vk_state.curr_sample = 1;
+			vk_state.curr_sample = 1;
+		}
 
 		imgui_state.should_be_rendering = false;
 		is_rendering = true;
