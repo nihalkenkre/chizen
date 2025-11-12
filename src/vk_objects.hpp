@@ -1409,7 +1409,7 @@ namespace vk_swapchain
 		d.images.resize(d.sc_image_count);
 		VK_CHECK("get swapchain images", vkGetSwapchainImagesKHR(device, d.swapchain, &d.sc_image_count, d.images.data()));
 
-		d.max_frames_in_flight = d.sc_image_count + 3;
+		d.max_frames_in_flight = d.sc_image_count + 2;
 
 		d.image_views.resize(d.sc_image_count);
 		d.gfx_cmd_buffs.resize(d.max_frames_in_flight);
