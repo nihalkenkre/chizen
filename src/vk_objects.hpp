@@ -1288,7 +1288,7 @@ namespace vk_image
 		};
 
 		const VmaAllocationCreateInfo alloc_ci = {
-			.requiredFlags = VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT,
+			.flags = VMA_MEMORY_USAGE_AUTO_PREFER_DEVICE,
 		};
 
 		VK_CHECK("create image", vmaCreateImage(allocator, &create_info, &alloc_ci, &d.image, &d.alloc, &d.alloc_info));
