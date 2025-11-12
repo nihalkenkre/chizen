@@ -1,7 +1,7 @@
 #version 460
 
 layout(set = 0, binding = 0, rgba32f) uniform image2D accum_target;
-layout(set=0, binding=1, rgba32f) uniform writeonly image2D final_render;
+layout(set=0, binding=1, rgba32f) uniform writeonly image2D gfx_final_render;
 
 layout(local_size_x = 32, local_size_y = 32, local_size_z = 1) in;
 
@@ -46,5 +46,5 @@ void main() {
    vec4 out_color = vec4(hash_x, hash_y, hash_z, 1);
 
    imageStore(accum_target, ivec2(thread_id.xy), out_color + in_color);
-   imageStore(final_render, ivec2(thread_id.xy), (out_color + in_color) / pc.curr_sample);
+   imageStore(gfx_final_render, ivec2(thread_id.xy), (out_color + in_color) / pc.curr_sample);
 }

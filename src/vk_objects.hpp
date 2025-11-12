@@ -1409,7 +1409,7 @@ namespace vk_swapchain
 		d.images.resize(d.sc_image_count);
 		VK_CHECK("get swapchain images", vkGetSwapchainImagesKHR(device, d.swapchain, &d.sc_image_count, d.images.data()));
 
-		d.max_frames_in_flight = d.sc_image_count;
+		d.max_frames_in_flight = d.sc_image_count + 3;
 
 		d.image_views.resize(d.sc_image_count);
 		d.gfx_cmd_buffs.resize(d.max_frames_in_flight);
@@ -1418,7 +1418,6 @@ namespace vk_swapchain
 		d.acq_sig_sems.resize(d.max_frames_in_flight);
 		d.frame_sems.resize(d.max_frames_in_flight);
 		d.frame_sem_vals.resize(d.max_frames_in_flight, 1);
-		//d.final_renders.resize(d.max_frames_in_flight);
 
 		VkImageViewCreateInfo image_view_create_info = {
 			.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO,
