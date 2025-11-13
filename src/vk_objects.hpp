@@ -81,112 +81,27 @@ uint32_t get_memory_type_id(const VkPhysicalDeviceMemoryProperties2 mem_props, c
 	return mem_id;
 }
 
-void copy_buffer_to_buffer(const VkBuffer src_buffer, const VkBuffer dst_buffer, const std::vector<VkBufferCopy> regions, const VkCommandBuffer cmd_buff, const VkQueue xfer_q)
-{
-	const VkCommandBufferBeginInfo begin_info = {
-		.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO,
-		.flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT,
-	};
-
-	VK_CHECK("begin command buffer", vkBeginCommandBuffer(cmd_buff, &begin_info));
-
-	vkCmdCopyBuffer(cmd_buff, src_buffer, dst_buffer, static_cast<uint32_t>(regions.size()), regions.data());
-
-	VK_CHECK("end command buffer", vkEndCommandBuffer(cmd_buff));
-
-	const VkSubmitInfo submit_infos[] = {
-		{
-			.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO,
-			.commandBufferCount = 1,
-			.pCommandBuffers = &cmd_buff,
-		},
-	};
-
-	VK_CHECK("queue submit", vkQueueSubmit(xfer_q, std::size(submit_infos), submit_infos, VK_NULL_HANDLE));
-	VK_CHECK("queue wait idle", vkQueueWaitIdle(xfer_q));
-	VK_CHECK("reset buffer copy cmd buff", vkResetCommandBuffer(cmd_buff, VK_COMMAND_BUFFER_RESET_RELEASE_RESOURCES_BIT));
-}
-
-void copy_buffer_to_image(
-	const VkBuffer src_buffer,
-	const VkImage dst_image,
-	const VkImageLayout dst_image_layout,
-	const std::vector<VkBufferImageCopy2>& regions,
+void insert_memory_barrier(
 	const VkCommandBuffer cmd_buff,
-	const VkQueue xfer_q)
+	const VkPipelineStageFlags2 src_stage_mask, const VkAccessFlags2 src_access_mask,
+	const VkPipelineStageFlags2 dst_stage_mask, const VkAccessFlags2 dst_access_mask
+	)
 {
-	const VkCommandBufferBeginInfo begin_info = {
-		.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO,
-		.flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT,
+	VkMemoryBarrier2 mem_bar = {
+		.sType = VK_STRUCTURE_TYPE_MEMORY_BARRIER_2,
+		.srcStageMask = src_stage_mask,
+		.srcAccessMask = src_access_mask,
+		.dstStageMask = dst_stage_mask,
+		.dstAccessMask = dst_access_mask,
 	};
 
-	VK_CHECK("begin command buffer", vkBeginCommandBuffer(cmd_buff, &begin_info));
-
-	const VkImageMemoryBarrier2 img_copy_bar = {
-		.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER_2,
-		.srcStageMask = VK_PIPELINE_STAGE_2_TOP_OF_PIPE_BIT,
-		.srcAccessMask = 0,
-		.dstStageMask = VK_PIPELINE_STAGE_2_TRANSFER_BIT,
-		.dstAccessMask = VK_ACCESS_2_TRANSFER_WRITE_BIT,
-		.oldLayout = VK_IMAGE_LAYOUT_UNDEFINED,
-		.newLayout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
-		.image = dst_image,
-		.subresourceRange = {
-			.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT,
-			.levelCount = 1,
-			.layerCount = 1,
-		}
-	};
-
-	VkDependencyInfo dependency_info = {
+	const VkDependencyInfo dep_info = {
 		.sType = VK_STRUCTURE_TYPE_DEPENDENCY_INFO,
-		.imageMemoryBarrierCount = 1,
-		.pImageMemoryBarriers = &img_copy_bar,
-	};
-	vkCmdPipelineBarrier2(cmd_buff, &dependency_info);
-
-	const VkCopyBufferToImageInfo2 copy_info = {
-		.sType = VK_STRUCTURE_TYPE_COPY_BUFFER_TO_IMAGE_INFO_2,
-		.srcBuffer = src_buffer,
-		.dstImage = dst_image,
-		.dstImageLayout = dst_image_layout,
-		.regionCount = static_cast<uint32_t>(regions.size()),
-		.pRegions = regions.data(),
-	};
-	vkCmdCopyBufferToImage2(cmd_buff, &copy_info);
-
-	const VkImageMemoryBarrier2 img_lyt_chng_bar = {
-		.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER_2,
-		.srcStageMask = VK_PIPELINE_STAGE_2_TRANSFER_BIT,
-		.srcAccessMask = VK_ACCESS_2_TRANSFER_WRITE_BIT,
-		.dstStageMask = VK_PIPELINE_STAGE_2_BOTTOM_OF_PIPE_BIT,
-		.dstAccessMask = 0,
-		.oldLayout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
-		.newLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
-		.image = dst_image,
-		.subresourceRange = {
-			.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT,
-			.levelCount = 1,
-			.layerCount = 1,
-		}
+		.memoryBarrierCount = 1,
+		.pMemoryBarriers = &mem_bar,
 	};
 
-	dependency_info.pImageMemoryBarriers = &img_lyt_chng_bar;
-	vkCmdPipelineBarrier2(cmd_buff, &dependency_info);
-
-	VK_CHECK("end command buffer", vkEndCommandBuffer(cmd_buff));
-
-	const VkSubmitInfo submit_infos[] = {
-		{
-			.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO,
-			.commandBufferCount = 1,
-			.pCommandBuffers = &cmd_buff,
-		}
-	};
-
-	VK_CHECK("queue submit", vkQueueSubmit(xfer_q, std::size(submit_infos), submit_infos, VK_NULL_HANDLE));
-	VK_CHECK("queue wait idle", vkQueueWaitIdle(xfer_q));
-	VK_CHECK("reset buffer copy cmd buff", vkResetCommandBuffer(cmd_buff, VK_COMMAND_BUFFER_RESET_RELEASE_RESOURCES_BIT));
+	vkCmdPipelineBarrier2(cmd_buff, &dep_info);
 }
 
 void change_image_layout(
@@ -1364,37 +1279,37 @@ namespace cmpt_swapchain
 {
 	struct data
 	{
-		VkCommandPool cmpt_cmd_pool = VK_NULL_HANDLE;
+		VkCommandPool cmd_pool = VK_NULL_HANDLE;
 
-		std::vector<VkCommandBuffer> cmpt_cmd_buffs;
-		std::vector<VkSemaphore> cmpt_frame_sems;
-		std::vector<uint64_t> cmpt_frame_sem_vals;
+		std::vector<VkCommandBuffer> cmd_buffs;
+		std::vector<VkSemaphore> frame_sems;
+		std::vector<uint64_t> frame_sem_vals;
 
-		uint8_t cmpt_frame_in_flight = 0;
+		uint8_t frame_in_flight = 0;
 		uint8_t max_frames_in_flight = 10;
 
-		vk_compute_pipeline::data cmpt_ppln_data = {};
+		vk_compute_pipeline::data ppln_data = {};
 	};
 
-	data create(const VkDevice device, const std::string& current_path, const uint32_t cmpt_q_fly_idx, const std::string& name)
+	data create(const VkDevice device, const std::string& current_path, const uint32_t q_fly_idx, const std::string& name)
 	{
 		data d = {};
 
-		d.cmpt_cmd_buffs.resize(d.max_frames_in_flight);
-		d.cmpt_frame_sems.resize(d.max_frames_in_flight);
-		d.cmpt_frame_sem_vals.resize(d.max_frames_in_flight, 1);
+		d.cmd_buffs.resize(d.max_frames_in_flight);
+		d.frame_sems.resize(d.max_frames_in_flight);
+		d.frame_sem_vals.resize(d.max_frames_in_flight, 1);
 
-		const VkCommandPoolCreateInfo cmpt_cmd_pool_ci = {
+		const VkCommandPoolCreateInfo cmd_pool_ci = {
 			.sType = VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO,
 			.flags = VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT,
-			.queueFamilyIndex = cmpt_q_fly_idx,
+			.queueFamilyIndex = q_fly_idx,
 		};
 
-		VK_CHECK("create command pool", vkCreateCommandPool(device, &cmpt_cmd_pool_ci, nullptr, &d.cmpt_cmd_pool));
+		VK_CHECK("create command pool", vkCreateCommandPool(device, &cmd_pool_ci, nullptr, &d.cmd_pool));
 
-		const VkCommandBufferAllocateInfo cmpt_cmd_buff_ai = {
+		const VkCommandBufferAllocateInfo cmd_buff_ai = {
 			.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO,
-			.commandPool = d.cmpt_cmd_pool,
+			.commandPool = d.cmd_pool,
 			.level = VK_COMMAND_BUFFER_LEVEL_PRIMARY,
 			.commandBufferCount = 1,
 		};
@@ -1412,19 +1327,48 @@ namespace cmpt_swapchain
 
 		for (uint8_t i = 0; i < d.max_frames_in_flight; ++i)
 		{
-			VK_CHECK("allocate cmpt command buffer", vkAllocateCommandBuffers(device, &cmpt_cmd_buff_ai, &d.cmpt_cmd_buffs[i]));
-			VK_CHECK("create cmpt frame semahpore", vkCreateSemaphore(device, &tl_sem_ci, nullptr, &d.cmpt_frame_sems[i]));
+			VK_CHECK("allocate cmpt command buffer", vkAllocateCommandBuffers(device, &cmd_buff_ai, &d.cmd_buffs[i]));
+			VK_CHECK("create cmpt frame semahpore", vkCreateSemaphore(device, &tl_sem_ci, nullptr, &d.frame_sems[i]));
 
 			const VkSemaphoreSignalInfo signal_info = {
 				.sType = VK_STRUCTURE_TYPE_SEMAPHORE_SIGNAL_INFO,
-				.semaphore = d.cmpt_frame_sems[i],
+				.semaphore = d.frame_sems[i],
 				.value = 1,
 			};
 
 			VK_CHECK("signal cmpt frame sem", vkSignalSemaphore(device, &signal_info));
 		}
 
-		d.cmpt_ppln_data = vk_compute_pipeline::create(device, current_path, d.max_frames_in_flight, "cmpt ppln");
+		d.ppln_data = vk_compute_pipeline::create(device, current_path, d.max_frames_in_flight, "cmpt ppln");
+
+#ifdef _DEBUG
+		std::string n(name);
+		VkDebugUtilsObjectNameInfoEXT name_info = {
+			.sType = VK_STRUCTURE_TYPE_DEBUG_UTILS_OBJECT_NAME_INFO_EXT,
+			.objectType = VK_OBJECT_TYPE_COMMAND_POOL,
+			.objectHandle = reinterpret_cast<uint64_t>(d.cmd_pool),
+			.pObjectName = n.append(" cmd pool").c_str(),
+		};
+
+		VK_CHECK("set cmpt cmd pool name", vkSetDebugUtilsObjectNameEXT(device, &name_info));
+
+		for (uint8_t i = 0; i < d.max_frames_in_flight; ++i)
+		{
+			n = name;
+			name_info.objectType = VK_OBJECT_TYPE_COMMAND_BUFFER;
+			name_info.objectHandle = reinterpret_cast<uint64_t>(d.cmd_buffs[i]);
+			name_info.pObjectName = n.append(" cmpt cmd buff ").append(std::to_string(i)).c_str();
+			VK_CHECK("setting swapchain cmpt command buffer name", vkSetDebugUtilsObjectNameEXT(device, &name_info));
+
+			n = name;
+			name_info.objectType = VK_OBJECT_TYPE_SEMAPHORE;
+			name_info.objectHandle = reinterpret_cast<uint64_t>(d.frame_sems[i]);
+			name_info.pObjectName = n.append(" cmpt frame sem ").c_str();
+			VK_CHECK("setting swapchain cmpt sig sem name", vkSetDebugUtilsObjectNameEXT(device, &name_info));
+
+		}
+
+#endif	// _DEBUG
 
 		return d;
 	}
@@ -1433,14 +1377,14 @@ namespace cmpt_swapchain
 	{
 		if (device != VK_NULL_HANDLE)
 		{
-			vkDestroyCommandPool(device, d.cmpt_cmd_pool, nullptr);
+			vkDestroyCommandPool(device, d.cmd_pool, nullptr);
 
 			for (uint8_t i = 0; i < d.max_frames_in_flight; ++i)
 			{
-				vkDestroySemaphore(device, d.cmpt_frame_sems[i], nullptr);
+				vkDestroySemaphore(device, d.frame_sems[i], nullptr);
 			}
 
-			vk_compute_pipeline::destroy(d.cmpt_ppln_data, device);
+			vk_compute_pipeline::destroy(d.ppln_data, device);
 		}
 	}
 }
@@ -1486,7 +1430,6 @@ namespace vk_swapchain
 
 		vk_swapchain::data d;
 		VK_CHECK("create swapchain", vkCreateSwapchainKHR(device, &create_info, nullptr, &d.swapchain));
-
 		VK_CHECK("get swapchain images", vkGetSwapchainImagesKHR(device, d.swapchain, &d.sc_image_count, nullptr));
 
 		d.images.resize(d.sc_image_count);
@@ -1581,12 +1524,6 @@ namespace vk_swapchain
 		name_info.pObjectName = n.append(" gfx command pool").c_str();
 		VK_CHECK("setting gfx swapchain cmd pool name", vkSetDebugUtilsObjectNameEXT(device, &name_info));
 
-		//n = name;
-		//name_info.objectType = VK_OBJECT_TYPE_COMMAND_POOL;
-		//name_info.objectHandle = reinterpret_cast<uint64_t>(d.cmpt_cmd_pool);
-		//name_info.pObjectName = n.append(" cmpt command pool").c_str();
-		//VK_CHECK("setting cmpt swapchain cmd pool name", vkSetDebugUtilsObjectNameEXT(device, &name_info));
-
 		for (uint32_t i = 0; i < d.sc_image_count; ++i)
 		{
 			n = name;
@@ -1610,23 +1547,17 @@ namespace vk_swapchain
 			name_info.pObjectName = n.append(" gfx cmd buff ").append(std::to_string(i)).c_str();
 			VK_CHECK("setting swapchain gfx command buffer name", vkSetDebugUtilsObjectNameEXT(device, &name_info));
 
-			//n = name;
-			//name_info.objectType = VK_OBJECT_TYPE_COMMAND_BUFFER;
-			//name_info.objectHandle = reinterpret_cast<uint64_t>(d.cmpt_cmd_buffs[i]);
-			//name_info.pObjectName = n.append(" cmpt cmd buff ").append(std::to_string(i)).c_str();
-			//VK_CHECK("setting swapchain cmpt command buffer name", vkSetDebugUtilsObjectNameEXT(device, &name_info));
-
 			n = name;
 			name_info.objectType = VK_OBJECT_TYPE_SEMAPHORE;
 			name_info.objectHandle = reinterpret_cast<uint64_t>(d.gfx_frame_sems[i]);
-			name_info.pObjectName = n.append(" rndr sig sem ").c_str();
+			name_info.pObjectName = n.append(" gfx frame sem ").c_str();
 			VK_CHECK("setting swapchain cmpt sig sem name", vkSetDebugUtilsObjectNameEXT(device, &name_info));
 
 			n = name;
 			name_info.objectType = VK_OBJECT_TYPE_SEMAPHORE;
 			name_info.objectHandle = reinterpret_cast<uint64_t>(d.present_wait_sems[i]);
-			name_info.pObjectName = n.append(" gfx sig sem ").append(std::to_string(i)).c_str();
-			VK_CHECK("setting swapchain gfx sig sem name", vkSetDebugUtilsObjectNameEXT(device, &name_info));
+			name_info.pObjectName = n.append(" present wait sem ").append(std::to_string(i)).c_str();
+			VK_CHECK("setting swapchain present wait sem name", vkSetDebugUtilsObjectNameEXT(device, &name_info));
 
 			n = name;
 			name_info.objectType = VK_OBJECT_TYPE_SEMAPHORE;
