@@ -91,7 +91,7 @@ pos2d last_mouse_pos = {};
 ImGuiState imgui_state = {};
 bool mouse_motion_tracking = false;
 bool is_rendering = false;
-bool is_shutdown = false;
+bool is_shutting_down = false;
 std::thread render_thread;
 
 #define SDL_CHECK(result)						\
@@ -395,30 +395,12 @@ void render()
 
 	VkDevice device = vk_state.device_data.device;
 
-	for (uint32_t s = vk_state.curr_sample; s < vk_state.max_samples; ++s)
+	uint32_t s = vk_state.curr_sample;
+
+	do 
 	{
-		if (is_shutdown)
-			break;
+		uint8_t frame_in_flight = 0;
 
-	}
-
-	std::println("rendering complete");
-
-	is_rendering = false;
-}
-
-SDL_AppResult SDL_AppIterate(void* appstate)
-{
-	if (SDL_GetWindowFlags(window) & SDL_WINDOW_MINIMIZED)
-	{
-		return SDL_APP_CONTINUE;
-	}
-
-	VkDevice device = vk_state.device_data.device;
-	uint8_t frame_in_flight = vk_state.swapchain_data.frame_in_flight;
-
-	if (is_rendering)
-	{
 		const VkSemaphoreWaitInfo cmpt_wait_info = {
 			.sType = VK_STRUCTURE_TYPE_SEMAPHORE_WAIT_INFO,
 			.semaphoreCount = 1,
@@ -450,7 +432,7 @@ SDL_AppResult SDL_AppIterate(void* appstate)
 			VK_QUEUE_FAMILY_IGNORED, VK_QUEUE_FAMILY_IGNORED,
 			vk_state.final_render.image);
 
-		if (vk_state.curr_sample == 1)
+		if (s == 1)
 		{
 			const VkClearColorValue clear_color = {
 				.float32 = {
@@ -509,7 +491,7 @@ SDL_AppResult SDL_AppIterate(void* appstate)
 			.dispatch_x = rt_state.dims.width,
 			.dispatch_y = rt_state.dims.height,
 			.current_time = static_cast<uint32_t>(std::chrono::system_clock::now().time_since_epoch().count()),
-			.curr_sample = vk_state.curr_sample,
+			.curr_sample = s,
 		};
 
 		const VkPushConstantsInfo cmpt_pc_info = {
@@ -566,7 +548,21 @@ SDL_AppResult SDL_AppIterate(void* appstate)
 		//std::println("frame in flight: {} cmpt wait val: {}, cmpt sig val: {}", frame_in_flight, cmpt_wait_sem_infos[0].value, cmpt_sig_sem_infos[0].value);
 
 		VK_CHECK("submit compute commamds", vkQueueSubmit2(vk_state.device_data.cmpt_q, std::size(cmpt_submit_infos), cmpt_submit_infos, VK_NULL_HANDLE));
+		VK_CHECK("wait cmpt q", vkQueueWaitIdle(vk_state.device_data.cmpt_q));
+	} while (++s < vk_state.max_samples && !is_shutting_down);
+
+	is_rendering = false;
+}
+
+SDL_AppResult SDL_AppIterate(void* appstate)
+{
+	if (SDL_GetWindowFlags(window) & SDL_WINDOW_MINIMIZED)
+	{
+		return SDL_APP_CONTINUE;
 	}
+
+	VkDevice device = vk_state.device_data.device;
+	uint8_t frame_in_flight = 0;// vk_state.swapchain_data.frame_in_flight;
 
 	if (!is_rendering)
 	{
@@ -608,55 +604,6 @@ SDL_AppResult SDL_AppIterate(void* appstate)
 			VK_IMAGE_LAYOUT_GENERAL, VK_IMAGE_LAYOUT_GENERAL,
 			VK_QUEUE_FAMILY_IGNORED, VK_QUEUE_FAMILY_IGNORED,
 			vk_state.final_render.image);
-
-	/*	change_image_layout(gfx_cmd_buff,
-			VK_PIPELINE_STAGE_2_FRAGMENT_SHADER_BIT, VK_ACCESS_2_SHADER_READ_BIT,
-			VK_PIPELINE_STAGE_2_BLIT_BIT, VK_ACCESS_2_TRANSFER_WRITE_BIT,
-			VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_GENERAL,
-			VK_QUEUE_FAMILY_IGNORED, VK_QUEUE_FAMILY_IGNORED,
-			vk_state.gfx_final_render.image);
-
-		const VkImageBlit2 regions[] = {
-			{
-				.sType = VK_STRUCTURE_TYPE_IMAGE_BLIT_2,
-				.srcSubresource = {
-					.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT,
-					.layerCount = 1,
-				},
-				.srcOffsets = {
-					{},
-					{static_cast<int32_t>(rt_state.dims.width), static_cast<int32_t>(rt_state.dims.height), 1},
-				},
-				.dstSubresource = {
-					.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT,
-					.layerCount = 1,
-				},
-				.dstOffsets = {
-					{},
-					{static_cast<int32_t>(rt_state.dims.width), static_cast<int32_t>(rt_state.dims.height), 1},
-				},
-			}
-		};
-
-		const VkBlitImageInfo2 blit_info = {
-			.sType = VK_STRUCTURE_TYPE_BLIT_IMAGE_INFO_2,
-			.srcImage = vk_state.cmpt_final_render.image,
-			.srcImageLayout = VK_IMAGE_LAYOUT_GENERAL,
-			.dstImage = vk_state.gfx_final_render.image,
-			.dstImageLayout = VK_IMAGE_LAYOUT_GENERAL,
-			.regionCount = std::size(regions),
-			.pRegions = regions,
-		};
-
-		vkCmdBlitImage2(gfx_cmd_buff, &blit_info);
-
-		change_image_layout(gfx_cmd_buff,
-			VK_PIPELINE_STAGE_2_BLIT_BIT, VK_ACCESS_2_TRANSFER_WRITE_BIT,
-			VK_PIPELINE_STAGE_2_FRAGMENT_SHADER_BIT, VK_ACCESS_2_SHADER_READ_BIT,
-			VK_IMAGE_LAYOUT_GENERAL, VK_IMAGE_LAYOUT_GENERAL,
-			VK_QUEUE_FAMILY_IGNORED, VK_QUEUE_FAMILY_IGNORED,
-			vk_state.gfx_final_render.image
-		);*/
 	}
 
 	change_image_layout(gfx_cmd_buff,
@@ -894,14 +841,6 @@ SDL_AppResult SDL_AppIterate(void* appstate)
 
 	vk_state.swapchain_data.frame_in_flight = (frame_in_flight + 1) % vk_state.swapchain_data.max_frames_in_flight;
 
-	if (is_rendering)
-	{
-		if (++vk_state.curr_sample > vk_state.max_samples)
-		{
-			is_rendering = false;
-		}
-	}
-
 	if (imgui_state.should_be_rendering)
 	{
 		if (static_cast<uint32_t>(imgui_state.tmp_max_samples) <= vk_state.max_samples)
@@ -1027,14 +966,15 @@ SDL_AppResult SDL_AppIterate(void* appstate)
 		}
 
 		imgui_state.should_be_rendering = false;
-		is_rendering = true;
 
-		//if (!is_rendering)
-		//{
-			//render_thread = std::thread(render);
-			//render_thread.detach();
-		//}
+		if (!is_rendering)
+		{
+			render_thread = std::thread(render);
+			render_thread.detach();
+		}
 	}
+
+	VK_CHECK("wait gfx q", vkQueueWaitIdle(vk_state.device_data.gfx_q));
 
 	return SDL_APP_CONTINUE;
 }
