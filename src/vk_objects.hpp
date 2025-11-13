@@ -1360,29 +1360,109 @@ namespace vk_image
 	}
 }
 
+namespace cmpt_swapchain
+{
+	struct data
+	{
+		VkCommandPool cmpt_cmd_pool = VK_NULL_HANDLE;
+
+		std::vector<VkCommandBuffer> cmpt_cmd_buffs;
+		std::vector<VkSemaphore> cmpt_frame_sems;
+		std::vector<uint64_t> cmpt_frame_sem_vals;
+
+		uint8_t cmpt_frame_in_flight = 0;
+		uint8_t max_frames_in_flight = 10;
+
+		vk_compute_pipeline::data cmpt_ppln_data = {};
+	};
+
+	data create(const VkDevice device, const std::string& current_path, const uint32_t cmpt_q_fly_idx, const std::string& name)
+	{
+		data d = {};
+
+		d.cmpt_cmd_buffs.resize(d.max_frames_in_flight);
+		d.cmpt_frame_sems.resize(d.max_frames_in_flight);
+		d.cmpt_frame_sem_vals.resize(d.max_frames_in_flight, 1);
+
+		const VkCommandPoolCreateInfo cmpt_cmd_pool_ci = {
+			.sType = VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO,
+			.flags = VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT,
+			.queueFamilyIndex = cmpt_q_fly_idx,
+		};
+
+		VK_CHECK("create command pool", vkCreateCommandPool(device, &cmpt_cmd_pool_ci, nullptr, &d.cmpt_cmd_pool));
+
+		const VkCommandBufferAllocateInfo cmpt_cmd_buff_ai = {
+			.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO,
+			.commandPool = d.cmpt_cmd_pool,
+			.level = VK_COMMAND_BUFFER_LEVEL_PRIMARY,
+			.commandBufferCount = 1,
+		};
+
+		const VkSemaphoreTypeCreateInfo sem_type_ci = {
+			.sType = VK_STRUCTURE_TYPE_SEMAPHORE_TYPE_CREATE_INFO,
+			.semaphoreType = VK_SEMAPHORE_TYPE_TIMELINE,
+			.initialValue = 0,
+		};
+
+		const VkSemaphoreCreateInfo tl_sem_ci = {
+			.sType = VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO,
+			.pNext = &sem_type_ci,
+		};
+
+		for (uint8_t i = 0; i < d.max_frames_in_flight; ++i)
+		{
+			VK_CHECK("allocate cmpt command buffer", vkAllocateCommandBuffers(device, &cmpt_cmd_buff_ai, &d.cmpt_cmd_buffs[i]));
+			VK_CHECK("create cmpt frame semahpore", vkCreateSemaphore(device, &tl_sem_ci, nullptr, &d.cmpt_frame_sems[i]));
+
+			const VkSemaphoreSignalInfo signal_info = {
+				.sType = VK_STRUCTURE_TYPE_SEMAPHORE_SIGNAL_INFO,
+				.semaphore = d.cmpt_frame_sems[i],
+				.value = 1,
+			};
+
+			VK_CHECK("signal cmpt frame sem", vkSignalSemaphore(device, &signal_info));
+		}
+
+		d.cmpt_ppln_data = vk_compute_pipeline::create(device, current_path, d.max_frames_in_flight, "cmpt ppln");
+
+		return d;
+	}
+
+	void destroy(data d, const VkDevice device)
+	{
+		if (device != VK_NULL_HANDLE)
+		{
+			vkDestroyCommandPool(device, d.cmpt_cmd_pool, nullptr);
+
+			for (uint8_t i = 0; i < d.max_frames_in_flight; ++i)
+			{
+				vkDestroySemaphore(device, d.cmpt_frame_sems[i], nullptr);
+			}
+
+			vk_compute_pipeline::destroy(d.cmpt_ppln_data, device);
+		}
+	}
+}
+
 namespace vk_swapchain
 {
 	struct data
 	{
 		VkSwapchainKHR swapchain = VK_NULL_HANDLE;
 		VkCommandPool gfx_cmd_pool = VK_NULL_HANDLE;
-		VkCommandPool cmpt_cmd_pool = VK_NULL_HANDLE;
 
 		std::vector<VkImage> images;
 		std::vector<VkImageView> image_views;
 		std::vector<VkCommandBuffer> gfx_cmd_buffs;
-		std::vector<VkCommandBuffer> cmpt_cmd_buffs;
 		std::vector<VkSemaphore> gfx_frame_sems;
 		std::vector<uint64_t> gfx_frame_sem_vals;
-		std::vector<VkSemaphore> cmpt_frame_sems;
-		std::vector<uint64_t> cmpt_frame_sem_vals;
 		std::vector<VkSemaphore> present_wait_sems;
 		std::vector<VkSemaphore> acq_sig_sems;
 
 		uint8_t max_frames_in_flight = 0;
 		uint32_t sc_image_count = 0;
 		uint8_t gfx_frame_in_flight = 0;
-		uint8_t cmpt_frame_in_flight = 0;
 	};
 
 	data create(const VkDevice device, const vk_surface::data& surface, const VmaAllocator allocator, const vk_phydev::data& phy_dev, const dim2d& rt_dims, const VkSwapchainKHR old_swapchain, const std::string& name)
@@ -1416,13 +1496,10 @@ namespace vk_swapchain
 
 		d.image_views.resize(d.sc_image_count);
 		d.gfx_cmd_buffs.resize(d.max_frames_in_flight);
-		d.cmpt_cmd_buffs.resize(d.max_frames_in_flight);
 		d.present_wait_sems.resize(d.max_frames_in_flight);
 		d.acq_sig_sems.resize(d.max_frames_in_flight);
 		d.gfx_frame_sems.resize(d.max_frames_in_flight);
 		d.gfx_frame_sem_vals.resize(d.max_frames_in_flight, 1);
-		d.cmpt_frame_sems.resize(d.max_frames_in_flight);
-		d.cmpt_frame_sem_vals.resize(d.max_frames_in_flight, 1);
 
 		VkImageViewCreateInfo image_view_create_info = {
 			.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO,
@@ -1449,24 +1526,9 @@ namespace vk_swapchain
 
 		VK_CHECK("create command pool", vkCreateCommandPool(device, &gfx_cmd_pool_ci, nullptr, &d.gfx_cmd_pool));
 
-		const VkCommandPoolCreateInfo cmpt_cmd_pool_ci = {
-			.sType = VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO,
-			.flags = VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT,
-			.queueFamilyIndex = phy_dev.cmpt_q_fly_idx,
-		};
-
-		VK_CHECK("create command pool", vkCreateCommandPool(device, &cmpt_cmd_pool_ci, nullptr, &d.cmpt_cmd_pool));
-
 		const VkCommandBufferAllocateInfo gfx_cmd_buff_ai = {
 			.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO,
 			.commandPool = d.gfx_cmd_pool,
-			.level = VK_COMMAND_BUFFER_LEVEL_PRIMARY,
-			.commandBufferCount = 1,
-		};
-
-		const VkCommandBufferAllocateInfo cmpt_cmd_buff_ai = {
-			.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO,
-			.commandPool = d.cmpt_cmd_pool,
 			.level = VK_COMMAND_BUFFER_LEVEL_PRIMARY,
 			.commandBufferCount = 1,
 		};
@@ -1489,23 +1551,18 @@ namespace vk_swapchain
 		for (uint8_t i = 0; i < d.max_frames_in_flight; ++i)
 		{
 			VK_CHECK("allocate gfx command buffer", vkAllocateCommandBuffers(device, &gfx_cmd_buff_ai, &d.gfx_cmd_buffs[i]));
-			VK_CHECK("allocate cmpt command buffer", vkAllocateCommandBuffers(device, &cmpt_cmd_buff_ai, &d.cmpt_cmd_buffs[i]));
 			VK_CHECK("create acq sig semahpore", vkCreateSemaphore(device, &bin_sem_ci, nullptr, &d.acq_sig_sems[i]));
-			VK_CHECK("create draw sig semahpore", vkCreateSemaphore(device, &bin_sem_ci, nullptr, &d.present_wait_sems[i]));
+			VK_CHECK("create present wait semahpore", vkCreateSemaphore(device, &bin_sem_ci, nullptr, &d.present_wait_sems[i]));
 
 			VK_CHECK("create gfx frame semahpore", vkCreateSemaphore(device, &tl_sem_ci, nullptr, &d.gfx_frame_sems[i]));
-			VK_CHECK("create cmpt frame semahpore", vkCreateSemaphore(device, &tl_sem_ci, nullptr, &d.cmpt_frame_sems[i]));
 
-			VkSemaphoreSignalInfo signal_info = {
+			const VkSemaphoreSignalInfo signal_info = {
 				.sType = VK_STRUCTURE_TYPE_SEMAPHORE_SIGNAL_INFO,
 				.semaphore = d.gfx_frame_sems[i],
 				.value = 1,
 			};
 
 			VK_CHECK("signal gfx frame sem", vkSignalSemaphore(device, &signal_info));
-
-			signal_info.semaphore = d.cmpt_frame_sems[i];
-			VK_CHECK("signal cmpt frame sem", vkSignalSemaphore(device, &signal_info));
 		}
 #ifdef _DEBUG
 		VkDebugUtilsObjectNameInfoEXT name_info = {
@@ -1524,11 +1581,11 @@ namespace vk_swapchain
 		name_info.pObjectName = n.append(" gfx command pool").c_str();
 		VK_CHECK("setting gfx swapchain cmd pool name", vkSetDebugUtilsObjectNameEXT(device, &name_info));
 
-		n = name;
-		name_info.objectType = VK_OBJECT_TYPE_COMMAND_POOL;
-		name_info.objectHandle = reinterpret_cast<uint64_t>(d.cmpt_cmd_pool);
-		name_info.pObjectName = n.append(" cmpt command pool").c_str();
-		VK_CHECK("setting cmpt swapchain cmd pool name", vkSetDebugUtilsObjectNameEXT(device, &name_info));
+		//n = name;
+		//name_info.objectType = VK_OBJECT_TYPE_COMMAND_POOL;
+		//name_info.objectHandle = reinterpret_cast<uint64_t>(d.cmpt_cmd_pool);
+		//name_info.pObjectName = n.append(" cmpt command pool").c_str();
+		//VK_CHECK("setting cmpt swapchain cmd pool name", vkSetDebugUtilsObjectNameEXT(device, &name_info));
 
 		for (uint32_t i = 0; i < d.sc_image_count; ++i)
 		{
@@ -1553,11 +1610,11 @@ namespace vk_swapchain
 			name_info.pObjectName = n.append(" gfx cmd buff ").append(std::to_string(i)).c_str();
 			VK_CHECK("setting swapchain gfx command buffer name", vkSetDebugUtilsObjectNameEXT(device, &name_info));
 
-			n = name;
-			name_info.objectType = VK_OBJECT_TYPE_COMMAND_BUFFER;
-			name_info.objectHandle = reinterpret_cast<uint64_t>(d.cmpt_cmd_buffs[i]);
-			name_info.pObjectName = n.append(" cmpt cmd buff ").append(std::to_string(i)).c_str();
-			VK_CHECK("setting swapchain cmpt command buffer name", vkSetDebugUtilsObjectNameEXT(device, &name_info));
+			//n = name;
+			//name_info.objectType = VK_OBJECT_TYPE_COMMAND_BUFFER;
+			//name_info.objectHandle = reinterpret_cast<uint64_t>(d.cmpt_cmd_buffs[i]);
+			//name_info.pObjectName = n.append(" cmpt cmd buff ").append(std::to_string(i)).c_str();
+			//VK_CHECK("setting swapchain cmpt command buffer name", vkSetDebugUtilsObjectNameEXT(device, &name_info));
 
 			n = name;
 			name_info.objectType = VK_OBJECT_TYPE_SEMAPHORE;
@@ -1587,7 +1644,6 @@ namespace vk_swapchain
 		if (device != VK_NULL_HANDLE)
 		{
 			vkDestroyCommandPool(device, d.gfx_cmd_pool, nullptr);
-			vkDestroyCommandPool(device, d.cmpt_cmd_pool, nullptr);
 
 			for (uint32_t i = 0; i < d.sc_image_count; ++i)
 			{
@@ -1599,7 +1655,6 @@ namespace vk_swapchain
 				vkDestroySemaphore(device, d.present_wait_sems[i], nullptr);
 				vkDestroySemaphore(device, d.acq_sig_sems[i], nullptr);
 				vkDestroySemaphore(device, d.gfx_frame_sems[i], nullptr);
-				vkDestroySemaphore(device, d.cmpt_frame_sems[i], nullptr);
 			}
 
 			vkDestroySwapchainKHR(device, d.swapchain, nullptr);
