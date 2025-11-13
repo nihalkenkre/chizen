@@ -89,10 +89,10 @@ pos2d delta_mouse = {};
 RenderTargetState rt_state = {};
 pos2d last_mouse_pos = {};
 ImGuiState imgui_state = {};
+std::thread render_thread;
 bool mouse_motion_tracking = false;
 bool is_rendering = false;
-bool is_shutting_down = false;
-std::thread render_thread;
+bool is_app_shutting_down = false;
 
 #define SDL_CHECK(result)						\
 	if (!result) {									\
@@ -308,7 +308,7 @@ SDL_AppResult SDL_AppInit(void** appstate, int argc, char** argv)
 		.Queue = vk_state.device_data.gfx_q,
 		.DescriptorPool = vk_state.imgui_pool,
 		.MinImageCount = vk_state.surface_data.surf_caps.minImageCount,
-		.ImageCount = vk_state.swapchain_data.max_frames_in_flight,
+		.ImageCount = vk_state.surface_data.surf_caps.minImageCount,
 		.PipelineInfoMain = {
 			.PipelineRenderingCreateInfo = {
 				.sType = VK_STRUCTURE_TYPE_PIPELINE_RENDERING_CREATE_INFO,
@@ -337,6 +337,7 @@ SDL_AppResult SDL_AppEvent(void* appstate, SDL_Event* event)
 
 	if (event->type == SDL_EVENT_QUIT)
 	{
+		is_app_shutting_down = true;
 		return SDL_APP_SUCCESS;
 	}
 	else if (event->type == SDL_EVENT_MOUSE_BUTTON_DOWN)
@@ -367,7 +368,6 @@ SDL_AppResult SDL_AppEvent(void* appstate, SDL_Event* event)
 				last_mouse_pos = { event->motion.x, event->motion.y };
 
 				imgui_state.should_be_rendering = true;
-				vk_state.curr_sample = 1;
 			}
 		}
 	}
@@ -397,20 +397,26 @@ void render()
 
 	uint32_t s = vk_state.curr_sample;
 
-	do 
+	do
 	{
-		uint8_t frame_in_flight = 0;
+		if (is_app_shutting_down)
+		{
+			VK_CHECK("cmpt queue idle", vkQueueWaitIdle(vk_state.device_data.cmpt_q));
+			break;
+		}
+
+		uint8_t cmpt_frame_in_flight = vk_state.swapchain_data.cmpt_frame_in_flight;
 
 		const VkSemaphoreWaitInfo cmpt_wait_info = {
 			.sType = VK_STRUCTURE_TYPE_SEMAPHORE_WAIT_INFO,
 			.semaphoreCount = 1,
-			.pSemaphores = &vk_state.swapchain_data.frame_sems[frame_in_flight],
-			.pValues = &vk_state.swapchain_data.frame_sem_vals[frame_in_flight],
+			.pSemaphores = &vk_state.swapchain_data.cmpt_frame_sems[cmpt_frame_in_flight],
+			.pValues = &vk_state.swapchain_data.cmpt_frame_sem_vals[cmpt_frame_in_flight],
 		};
 
 		VK_CHECK("wait before cmpt cmd buff", vkWaitSemaphores(device, &cmpt_wait_info, UINT64_MAX));
 
-		VkCommandBuffer cmpt_cmd_buff = vk_state.swapchain_data.cmpt_cmd_buffs[frame_in_flight];
+		VkCommandBuffer cmpt_cmd_buff = vk_state.swapchain_data.cmpt_cmd_buffs[cmpt_frame_in_flight];
 
 		const VkCommandBufferBeginInfo cmpt_begin_info = {
 			.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO,
@@ -460,14 +466,14 @@ void render()
 		const VkWriteDescriptorSet cmpt_desc_writes[] = {
 			{
 				.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
-				.dstSet = vk_state.cmpt_ppln.dss[frame_in_flight],
+				.dstSet = vk_state.cmpt_ppln.dss[cmpt_frame_in_flight],
 				.descriptorCount = 1,
 				.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_IMAGE,
 				.pImageInfo = &vk_state.accum_tgt.desc_img_info,
 			},
 			{
 				.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
-				.dstSet = vk_state.cmpt_ppln.dss[frame_in_flight],
+				.dstSet = vk_state.cmpt_ppln.dss[cmpt_frame_in_flight],
 				.dstBinding = 1,
 				.descriptorCount = 1,
 				.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_IMAGE,
@@ -482,7 +488,7 @@ void render()
 			.stageFlags = VK_SHADER_STAGE_COMPUTE_BIT,
 			.layout = vk_state.cmpt_ppln.lyt,
 			.descriptorSetCount = 1,
-			.pDescriptorSets = &vk_state.cmpt_ppln.dss[frame_in_flight],
+			.pDescriptorSets = &vk_state.cmpt_ppln.dss[cmpt_frame_in_flight],
 		};
 
 		vkCmdBindDescriptorSets2(cmpt_cmd_buff, &cmpt_ds_bi);
@@ -511,9 +517,9 @@ void render()
 		const VkSemaphoreSubmitInfo cmpt_wait_sem_infos[] = {
 			{
 				.sType = VK_STRUCTURE_TYPE_SEMAPHORE_SUBMIT_INFO,
-				.semaphore = vk_state.swapchain_data.frame_sems[frame_in_flight],
-				.value = vk_state.swapchain_data.frame_sem_vals[frame_in_flight],
-				.stageMask = VK_PIPELINE_STAGE_2_TOP_OF_PIPE_BIT,
+				.semaphore = vk_state.swapchain_data.cmpt_frame_sems[cmpt_frame_in_flight],
+				.value = vk_state.swapchain_data.cmpt_frame_sem_vals[cmpt_frame_in_flight],
+				.stageMask = VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT,
 			}
 		};
 
@@ -527,9 +533,9 @@ void render()
 		const VkSemaphoreSubmitInfo cmpt_sig_sem_infos[] = {
 			{
 				.sType = VK_STRUCTURE_TYPE_SEMAPHORE_SUBMIT_INFO,
-				.semaphore = vk_state.swapchain_data.frame_sems[frame_in_flight],
-				.value = ++vk_state.swapchain_data.frame_sem_vals[frame_in_flight],
-				.stageMask = VK_PIPELINE_STAGE_2_BOTTOM_OF_PIPE_BIT,
+				.semaphore = vk_state.swapchain_data.cmpt_frame_sems[cmpt_frame_in_flight],
+				.value = ++vk_state.swapchain_data.cmpt_frame_sem_vals[cmpt_frame_in_flight],
+				.stageMask = VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT,
 			},
 		};
 
@@ -545,11 +551,11 @@ void render()
 			},
 		};
 
-		//std::println("frame in flight: {} cmpt wait val: {}, cmpt sig val: {}", frame_in_flight, cmpt_wait_sem_infos[0].value, cmpt_sig_sem_infos[0].value);
-
 		VK_CHECK("submit compute commamds", vkQueueSubmit2(vk_state.device_data.cmpt_q, std::size(cmpt_submit_infos), cmpt_submit_infos, VK_NULL_HANDLE));
-		VK_CHECK("wait cmpt q", vkQueueWaitIdle(vk_state.device_data.cmpt_q));
-	} while (++s < vk_state.max_samples && !is_shutting_down);
+
+		vk_state.swapchain_data.cmpt_frame_in_flight = (cmpt_frame_in_flight + 1) % vk_state.swapchain_data.max_frames_in_flight;
+
+	} while (++s <= vk_state.max_samples);
 
 	is_rendering = false;
 }
@@ -562,32 +568,29 @@ SDL_AppResult SDL_AppIterate(void* appstate)
 	}
 
 	VkDevice device = vk_state.device_data.device;
-	uint8_t frame_in_flight = 0;// vk_state.swapchain_data.frame_in_flight;
+	uint8_t gfx_frame_in_flight = 0;// vk_state.swapchain_data.gfx_frame_in_flight;
 
-	if (!is_rendering)
-	{
-		const VkSemaphoreWaitInfo wait_info = {
-			.sType = VK_STRUCTURE_TYPE_SEMAPHORE_WAIT_INFO,
-			.semaphoreCount = 1,
-			.pSemaphores = &vk_state.swapchain_data.frame_sems[frame_in_flight],
-			.pValues = &vk_state.swapchain_data.frame_sem_vals[frame_in_flight],
-		};
+	const VkSemaphoreWaitInfo wait_info = {
+		.sType = VK_STRUCTURE_TYPE_SEMAPHORE_WAIT_INFO,
+		.semaphoreCount = 1,
+		.pSemaphores = &vk_state.swapchain_data.gfx_frame_sems[gfx_frame_in_flight],
+		.pValues = &vk_state.swapchain_data.gfx_frame_sem_vals[gfx_frame_in_flight],
+	};
 
-		VK_CHECK("wait acq img", vkWaitSemaphores(device, &wait_info, UINT64_MAX));
-	}
+	VK_CHECK("wait acq img", vkWaitSemaphores(device, &wait_info, UINT64_MAX));
 
 	const VkAcquireNextImageInfoKHR acq_info = {
 		.sType = VK_STRUCTURE_TYPE_ACQUIRE_NEXT_IMAGE_INFO_KHR,
 		.swapchain = vk_state.swapchain_data.swapchain,
 		.timeout = UINT64_MAX,
-		.semaphore = vk_state.swapchain_data.acq_sig_sems[frame_in_flight],
+		.semaphore = vk_state.swapchain_data.acq_sig_sems[gfx_frame_in_flight],
 		.deviceMask = 0x1,
 	};
 
 	uint32_t sc_img_idx = 0;
 	VK_CHECK("acq img idx", vkAcquireNextImage2KHR(device, &acq_info, &sc_img_idx));
 
-	VkCommandBuffer gfx_cmd_buff = vk_state.swapchain_data.gfx_cmd_buffs[frame_in_flight];
+	VkCommandBuffer gfx_cmd_buff = vk_state.swapchain_data.gfx_cmd_buffs[gfx_frame_in_flight];
 	VkImage curr_sc_img = vk_state.swapchain_data.images[sc_img_idx];
 
 	const VkCommandBufferBeginInfo gfx_begin_info = {
@@ -607,9 +610,9 @@ SDL_AppResult SDL_AppIterate(void* appstate)
 	}
 
 	change_image_layout(gfx_cmd_buff,
-		VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, VK_ACCESS_2_SHADER_STORAGE_WRITE_BIT,
+		VK_PIPELINE_STAGE_2_TOP_OF_PIPE_BIT, 0,
 		VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT, VK_ACCESS_2_COLOR_ATTACHMENT_WRITE_BIT_KHR,
-		VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_GENERAL,
+		VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
 		VK_QUEUE_FAMILY_IGNORED, VK_QUEUE_FAMILY_IGNORED,
 		curr_sc_img
 	);
@@ -653,7 +656,7 @@ SDL_AppResult SDL_AppIterate(void* appstate)
 		.stageFlags = VK_SHADER_STAGE_VERTEX_BIT,
 		.layout = vk_state.gfx_ppln.lyt,
 		.descriptorSetCount = 1,
-		.pDescriptorSets = &vk_state.gfx_ppln.dss[frame_in_flight],
+		.pDescriptorSets = &vk_state.gfx_ppln.dss[gfx_frame_in_flight],
 	};
 
 	vk_state.final_render.desc_img_info.imageLayout = VK_IMAGE_LAYOUT_GENERAL;
@@ -661,7 +664,7 @@ SDL_AppResult SDL_AppIterate(void* appstate)
 	const VkWriteDescriptorSet gfx_desc_writes[] = {
 		{
 			.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
-			.dstSet = vk_state.gfx_ppln.dss[frame_in_flight],
+			.dstSet = vk_state.gfx_ppln.dss[gfx_frame_in_flight],
 			.descriptorCount = 1,
 			.descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
 			.pImageInfo = &vk_state.final_render.desc_img_info,
@@ -758,7 +761,7 @@ SDL_AppResult SDL_AppIterate(void* appstate)
 	change_image_layout(gfx_cmd_buff,
 		VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT, VK_ACCESS_2_COLOR_ATTACHMENT_WRITE_BIT,
 		VK_PIPELINE_STAGE_2_BOTTOM_OF_PIPE_BIT, 0,
-		VK_IMAGE_LAYOUT_GENERAL, VK_IMAGE_LAYOUT_PRESENT_SRC_KHR,
+		VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL, VK_IMAGE_LAYOUT_PRESENT_SRC_KHR,
 		VK_QUEUE_FAMILY_IGNORED, VK_QUEUE_FAMILY_IGNORED,
 		curr_sc_img);
 
@@ -767,22 +770,16 @@ SDL_AppResult SDL_AppIterate(void* appstate)
 	std::vector<VkSemaphoreSubmitInfo> gfx_wait_sem_infos = {
 		{
 			.sType = VK_STRUCTURE_TYPE_SEMAPHORE_SUBMIT_INFO,
-			.semaphore = vk_state.swapchain_data.acq_sig_sems[frame_in_flight],
+			.semaphore = vk_state.swapchain_data.acq_sig_sems[gfx_frame_in_flight],
 			.stageMask = VK_PIPELINE_STAGE_2_TOP_OF_PIPE_BIT,
 		},
+		{
+			.sType = VK_STRUCTURE_TYPE_SEMAPHORE_SUBMIT_INFO,
+			.semaphore = vk_state.swapchain_data.gfx_frame_sems[gfx_frame_in_flight],
+			.value = vk_state.swapchain_data.gfx_frame_sem_vals[gfx_frame_in_flight],
+			.stageMask = VK_PIPELINE_STAGE_2_TOP_OF_PIPE_BIT,
+		}
 	};
-
-	if (is_rendering || imgui_state.should_be_rendering)
-	{
-		gfx_wait_sem_infos.push_back(
-			{
-				.sType = VK_STRUCTURE_TYPE_SEMAPHORE_SUBMIT_INFO,
-				.semaphore = vk_state.swapchain_data.frame_sems[frame_in_flight],
-				.value = vk_state.swapchain_data.frame_sem_vals[frame_in_flight],
-				.stageMask = VK_PIPELINE_STAGE_2_TOP_OF_PIPE_BIT,
-			}
-			);
-	}
 
 	const VkCommandBufferSubmitInfo gfx_cmd_buff_infos[] = {
 		{
@@ -794,13 +791,13 @@ SDL_AppResult SDL_AppIterate(void* appstate)
 	const VkSemaphoreSubmitInfo gfx_sig_sem_infos[] = {
 		{
 			.sType = VK_STRUCTURE_TYPE_SEMAPHORE_SUBMIT_INFO,
-			.semaphore = vk_state.swapchain_data.frame_sems[frame_in_flight],
-			.value = ++vk_state.swapchain_data.frame_sem_vals[frame_in_flight],
+			.semaphore = vk_state.swapchain_data.gfx_frame_sems[gfx_frame_in_flight],
+			.value = ++vk_state.swapchain_data.gfx_frame_sem_vals[gfx_frame_in_flight],
 			.stageMask = VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT,
 		},
 		{
 			.sType = VK_STRUCTURE_TYPE_SEMAPHORE_SUBMIT_INFO,
-			.semaphore = vk_state.swapchain_data.present_wait_sems[frame_in_flight],
+			.semaphore = vk_state.swapchain_data.present_wait_sems[gfx_frame_in_flight],
 			.stageMask = VK_PIPELINE_STAGE_2_BOTTOM_OF_PIPE_BIT,
 		},
 	};
@@ -817,21 +814,12 @@ SDL_AppResult SDL_AppIterate(void* appstate)
 		},
 	};
 
-	//if (is_rendering)
-	//{
-	//	std::println("rendering: frame_in_flight: {} gfx wait val: {}, gfx sig val: {}", frame_in_flight, gfx_wait_sem_infos[1].value, gfx_sig_sem_infos[0].value);
-	//}
-	//else
-	//{
-	//	std::println("frame_in_flight: {} gfx sig val: {}", frame_in_flight, gfx_sig_sem_infos[0].value);
-	//}
-
 	VK_CHECK("submit drawing commamds", vkQueueSubmit2(vk_state.device_data.gfx_q, std::size(gfx_submit_infos), gfx_submit_infos, VK_NULL_HANDLE));
 
 	const VkPresentInfoKHR present_info = {
 		.sType = VK_STRUCTURE_TYPE_PRESENT_INFO_KHR,
 		.waitSemaphoreCount = 1,
-		.pWaitSemaphores = &vk_state.swapchain_data.present_wait_sems[frame_in_flight],
+		.pWaitSemaphores = &vk_state.swapchain_data.present_wait_sems[gfx_frame_in_flight],
 		.swapchainCount = 1,
 		.pSwapchains = &vk_state.swapchain_data.swapchain,
 		.pImageIndices = &sc_img_idx,
@@ -839,7 +827,7 @@ SDL_AppResult SDL_AppIterate(void* appstate)
 
 	VK_CHECK("q present", vkQueuePresentKHR(vk_state.device_data.gfx_q, &present_info));
 
-	vk_state.swapchain_data.frame_in_flight = (frame_in_flight + 1) % vk_state.swapchain_data.max_frames_in_flight;
+	vk_state.swapchain_data.gfx_frame_in_flight = (gfx_frame_in_flight + 1) % vk_state.swapchain_data.max_frames_in_flight;
 
 	if (imgui_state.should_be_rendering)
 	{

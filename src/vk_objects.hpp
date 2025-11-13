@@ -1372,14 +1372,17 @@ namespace vk_swapchain
 		std::vector<VkImageView> image_views;
 		std::vector<VkCommandBuffer> gfx_cmd_buffs;
 		std::vector<VkCommandBuffer> cmpt_cmd_buffs;
-		std::vector<VkSemaphore> frame_sems;
-		std::vector<uint64_t> frame_sem_vals;
+		std::vector<VkSemaphore> gfx_frame_sems;
+		std::vector<uint64_t> gfx_frame_sem_vals;
+		std::vector<VkSemaphore> cmpt_frame_sems;
+		std::vector<uint64_t> cmpt_frame_sem_vals;
 		std::vector<VkSemaphore> present_wait_sems;
 		std::vector<VkSemaphore> acq_sig_sems;
 
 		uint8_t max_frames_in_flight = 0;
 		uint32_t sc_image_count = 0;
-		uint8_t frame_in_flight = 0;
+		uint8_t gfx_frame_in_flight = 0;
+		uint8_t cmpt_frame_in_flight = 0;
 	};
 
 	data create(const VkDevice device, const vk_surface::data& surface, const VmaAllocator allocator, const vk_phydev::data& phy_dev, const dim2d& rt_dims, const VkSwapchainKHR old_swapchain, const std::string& name)
@@ -1409,15 +1412,17 @@ namespace vk_swapchain
 		d.images.resize(d.sc_image_count);
 		VK_CHECK("get swapchain images", vkGetSwapchainImagesKHR(device, d.swapchain, &d.sc_image_count, d.images.data()));
 
-		d.max_frames_in_flight = d.sc_image_count + 2;
+		d.max_frames_in_flight = d.sc_image_count;
 
 		d.image_views.resize(d.sc_image_count);
 		d.gfx_cmd_buffs.resize(d.max_frames_in_flight);
 		d.cmpt_cmd_buffs.resize(d.max_frames_in_flight);
 		d.present_wait_sems.resize(d.max_frames_in_flight);
 		d.acq_sig_sems.resize(d.max_frames_in_flight);
-		d.frame_sems.resize(d.max_frames_in_flight);
-		d.frame_sem_vals.resize(d.max_frames_in_flight, 1);
+		d.gfx_frame_sems.resize(d.max_frames_in_flight);
+		d.gfx_frame_sem_vals.resize(d.max_frames_in_flight, 1);
+		d.cmpt_frame_sems.resize(d.max_frames_in_flight);
+		d.cmpt_frame_sem_vals.resize(d.max_frames_in_flight, 1);
 
 		VkImageViewCreateInfo image_view_create_info = {
 			.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO,
@@ -1488,15 +1493,19 @@ namespace vk_swapchain
 			VK_CHECK("create acq sig semahpore", vkCreateSemaphore(device, &bin_sem_ci, nullptr, &d.acq_sig_sems[i]));
 			VK_CHECK("create draw sig semahpore", vkCreateSemaphore(device, &bin_sem_ci, nullptr, &d.present_wait_sems[i]));
 
-			VK_CHECK("create rndr sig semahpore", vkCreateSemaphore(device, &tl_sem_ci, nullptr, &d.frame_sems[i]));
+			VK_CHECK("create gfx frame semahpore", vkCreateSemaphore(device, &tl_sem_ci, nullptr, &d.gfx_frame_sems[i]));
+			VK_CHECK("create cmpt frame semahpore", vkCreateSemaphore(device, &tl_sem_ci, nullptr, &d.cmpt_frame_sems[i]));
 
-			const VkSemaphoreSignalInfo signal_info = {
+			VkSemaphoreSignalInfo signal_info = {
 				.sType = VK_STRUCTURE_TYPE_SEMAPHORE_SIGNAL_INFO,
-				.semaphore = d.frame_sems[i],
+				.semaphore = d.gfx_frame_sems[i],
 				.value = 1,
 			};
 
-			VK_CHECK("signal frame sem", vkSignalSemaphore(device, &signal_info));
+			VK_CHECK("signal gfx frame sem", vkSignalSemaphore(device, &signal_info));
+
+			signal_info.semaphore = d.cmpt_frame_sems[i];
+			VK_CHECK("signal cmpt frame sem", vkSignalSemaphore(device, &signal_info));
 		}
 #ifdef _DEBUG
 		VkDebugUtilsObjectNameInfoEXT name_info = {
@@ -1552,7 +1561,7 @@ namespace vk_swapchain
 
 			n = name;
 			name_info.objectType = VK_OBJECT_TYPE_SEMAPHORE;
-			name_info.objectHandle = reinterpret_cast<uint64_t>(d.frame_sems[i]);
+			name_info.objectHandle = reinterpret_cast<uint64_t>(d.gfx_frame_sems[i]);
 			name_info.pObjectName = n.append(" rndr sig sem ").c_str();
 			VK_CHECK("setting swapchain cmpt sig sem name", vkSetDebugUtilsObjectNameEXT(device, &name_info));
 
@@ -1589,8 +1598,8 @@ namespace vk_swapchain
 			{
 				vkDestroySemaphore(device, d.present_wait_sems[i], nullptr);
 				vkDestroySemaphore(device, d.acq_sig_sems[i], nullptr);
-				vkDestroySemaphore(device, d.frame_sems[i], nullptr);
-				//vk_image::destroy(d.final_renders[i], allocator, device);
+				vkDestroySemaphore(device, d.gfx_frame_sems[i], nullptr);
+				vkDestroySemaphore(device, d.cmpt_frame_sems[i], nullptr);
 			}
 
 			vkDestroySwapchainKHR(device, d.swapchain, nullptr);
