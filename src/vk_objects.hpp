@@ -21,71 +21,56 @@ VKAPI_ATTR VkResult VKAPI_CALL vkSetDebugUtilsObjectNameEXT(
 	std::printf("%s %d\n", action, result);		\
 }
 
-struct dim2d
+void copy_buffer_to_buffer(const VkCommandBuffer xfer_cmd_buff, const VkQueue xfer_q, const VkBuffer src_buffer, const VkBuffer dst_buffer, const VkDeviceSize size)
 {
-	uint32_t width = 0;
-	uint32_t height = 0;
-};
+	const VkCommandBufferBeginInfo begin_info = {
+		.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO,
+		.flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT,
+	};
+	VK_CHECK("begin xfer cmd buff", vkBeginCommandBuffer(xfer_cmd_buff, &begin_info));
 
-dim2d operator+(const dim2d& lhs, const dim2d& rhs)
-{
-	return { lhs.width + rhs.width, lhs.height + rhs.height };
-}
-
-dim2d operator-(const dim2d& lhs, const dim2d& rhs)
-{
-	return { lhs.width - lhs.height, lhs.height - rhs.height };
-}
-
-void operator +=(dim2d& lhs, const dim2d& rhs)
-{
-	lhs.width += rhs.width;
-	lhs.height += rhs.height;
-}
-
-void operator -=(dim2d& lhs, const dim2d& rhs)
-{
-	lhs.width -= rhs.width;
-	lhs.height -= rhs.height;
-}
-
-dim2d operator*(const dim2d& lhs, const float multiplier)
-{
-	return { static_cast<uint32_t>(static_cast<float>(lhs.width) * multiplier), static_cast<uint32_t>(static_cast<float>(lhs.height) * multiplier) };
-}
-
-inline static VkDeviceSize ALIGNED_SIZE(VkDeviceSize value, VkDeviceSize alignment)
-{
-	return (value + alignment - 1) & ~(alignment - 1);
-}
-
-uint32_t get_memory_type_id(const VkPhysicalDeviceMemoryProperties2 mem_props, const VkMemoryRequirements2 mem_reqs, const uint32_t mem_prop_types)
-{
-	uint32_t mem_id = UINT32_MAX;
-
-	for (uint32_t mt = 0; mt < mem_props.memoryProperties.memoryTypeCount; ++mt)
-	{
-		if (mem_props.memoryProperties.memoryTypes[mt].propertyFlags & mem_prop_types)
+	const VkBufferCopy2 regions[] = {
 		{
-			if (mem_reqs.memoryRequirements.memoryTypeBits & (1 << mt))
-			{
-				if (mem_props.memoryProperties.memoryHeaps[mem_props.memoryProperties.memoryTypes[mt].heapIndex].size > mem_reqs.memoryRequirements.size)
-				{
-					mem_id = mt;
-					break;
-				}
-			}
-		}
-	}
+			.sType = VK_STRUCTURE_TYPE_BUFFER_COPY_2,
+			.size = size,
+		},
+	};
 
-	return mem_id;
+	const VkCopyBufferInfo2 copy_buff_info = {
+		.sType = VK_STRUCTURE_TYPE_COPY_BUFFER_INFO_2,
+		.srcBuffer = src_buffer,
+		.dstBuffer = dst_buffer,
+		.regionCount = std::size(regions),
+		.pRegions = regions,
+	};
+
+	vkCmdCopyBuffer2(xfer_cmd_buff, &copy_buff_info);
+	VK_CHECK("end xfer cmd buff", vkEndCommandBuffer(xfer_cmd_buff));
+
+	const VkCommandBufferSubmitInfo cmd_buff_infos[] = {
+		{
+			.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_SUBMIT_INFO,
+			.commandBuffer = xfer_cmd_buff,
+		},
+	};
+
+	const VkSubmitInfo2 submit_infos[] = {
+		{
+			.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO_2,
+			.commandBufferInfoCount = std::size(cmd_buff_infos),
+			.pCommandBufferInfos = cmd_buff_infos,
+		},
+	};
+
+	VK_CHECK("submit geom buffer xfer cmd", vkQueueSubmit2(xfer_q, std::size(submit_infos), submit_infos, VK_NULL_HANDLE));
+	VK_CHECK("wait xfer cmd buff", vkQueueWaitIdle(xfer_q));
 }
 
 void insert_memory_barrier(
 	const VkCommandBuffer cmd_buff,
 	const VkPipelineStageFlags2 src_stage_mask, const VkAccessFlags2 src_access_mask,
 	const VkPipelineStageFlags2 dst_stage_mask, const VkAccessFlags2 dst_access_mask
-	)
+)
 {
 	VkMemoryBarrier2 mem_bar = {
 		.sType = VK_STRUCTURE_TYPE_MEMORY_BARRIER_2,
@@ -384,6 +369,9 @@ namespace vk_device
 		std::vector<const char*> req_ext_names = {
 			VK_KHR_SWAPCHAIN_EXTENSION_NAME,
 			VK_KHR_MAINTENANCE_6_EXTENSION_NAME,
+			VK_KHR_ACCELERATION_STRUCTURE_EXTENSION_NAME,
+			VK_KHR_RAY_TRACING_PIPELINE_EXTENSION_NAME,
+			VK_KHR_DEFERRED_HOST_OPERATIONS_EXTENSION_NAME,
 		};
 
 		uint32_t property_count = 0;
@@ -448,8 +436,18 @@ namespace vk_device
 			}
 		}
 
+		VkPhysicalDeviceRayTracingPipelineFeaturesKHR rt_pipe_feats = {
+			.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_RAY_TRACING_PIPELINE_FEATURES_KHR,
+		};
+
+		VkPhysicalDeviceAccelerationStructureFeaturesKHR accel_struct_feats = {
+			.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_ACCELERATION_STRUCTURE_FEATURES_KHR,
+			.pNext = &rt_pipe_feats,
+		};
+
 		VkPhysicalDeviceDynamicRenderingFeatures dyn_rend_feats = {
 			.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_DYNAMIC_RENDERING_FEATURES,
+			.pNext = &accel_struct_feats,
 		};
 
 		VkPhysicalDeviceSynchronization2Features sync2_feats = {
@@ -1166,7 +1164,7 @@ namespace vk_image
 		VkDeviceSize desc_offset = 0;
 		VmaAllocation alloc = VK_NULL_HANDLE;
 		VmaAllocationInfo alloc_info = {};
-		dim2d dims = {};
+		uint32_t dims[2];
 	};
 
 	data create(
@@ -1177,13 +1175,12 @@ namespace vk_image
 		const VmaAllocator allocator,
 		const uint32_t id,
 		const std::string& name,
-		const VkSharingMode sharing_mode = VK_SHARING_MODE_EXCLUSIVE,
 		const std::vector<uint32_t> q_fly_idxs = {})
 	{
 		data d = {
 			.dims = {
-				.width = extent.width,
-				.height = extent.height,
+				extent.width,
+				extent.height,
 			},
 		};
 
@@ -1197,7 +1194,7 @@ namespace vk_image
 			.samples = VK_SAMPLE_COUNT_1_BIT,
 			.tiling = VK_IMAGE_TILING_OPTIMAL,
 			.usage = usage,
-			.sharingMode = sharing_mode,
+			.sharingMode = VK_SHARING_MODE_CONCURRENT,
 			.queueFamilyIndexCount = static_cast<uint32_t>(q_fly_idxs.size()),
 			.pQueueFamilyIndices = q_fly_idxs.data(),
 		};
@@ -1264,7 +1261,7 @@ namespace vk_image
 		return d;
 	}
 
-	void destroy(const data d, const VmaAllocator allocator, const VkDevice device)
+	void destroy(const data d, const VmaAllocator& allocator, const VkDevice device)
 	{
 		if (device != VK_NULL_HANDLE)
 		{
@@ -1289,9 +1286,56 @@ namespace cmpt_swapchain
 		uint8_t max_frames_in_flight = 10;
 
 		vk_compute_pipeline::data ppln_data = {};
+		vk_image::data accum_target = {};
+		vk_image::data final_render = {};
 	};
 
-	data create(const VkDevice device, const std::string& current_path, const uint32_t q_fly_idx, const std::string& name)
+	void initialize_image_layouts(cmpt_swapchain::data d, const VkDevice device, const VkCommandBuffer xfer_cmd_buff, const VkQueue xfer_q)
+	{
+		const VkCommandBufferBeginInfo xfer_cmd_buff_bi = {
+			.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO,
+		};
+
+		VK_CHECK("begin xfer cmd buff", vkBeginCommandBuffer(xfer_cmd_buff, &xfer_cmd_buff_bi));
+
+		change_image_layout(xfer_cmd_buff,
+			VK_PIPELINE_STAGE_2_TOP_OF_PIPE_BIT, 0,
+			VK_PIPELINE_STAGE_2_BOTTOM_OF_PIPE_BIT, 0,
+			VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_GENERAL,
+			VK_QUEUE_FAMILY_IGNORED, VK_QUEUE_FAMILY_IGNORED,
+			d.accum_target.image
+		);
+
+		change_image_layout(xfer_cmd_buff,
+			VK_PIPELINE_STAGE_2_TOP_OF_PIPE_BIT, 0,
+			VK_PIPELINE_STAGE_2_BOTTOM_OF_PIPE_BIT, 0,
+			VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_GENERAL,
+			VK_QUEUE_FAMILY_IGNORED, VK_QUEUE_FAMILY_IGNORED,
+			d.final_render.image
+		);
+
+		VK_CHECK("end xfer cmd buff", vkEndCommandBuffer(xfer_cmd_buff));
+
+		const VkCommandBufferSubmitInfo cmd_buff_infos[] = {
+			{
+				.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_SUBMIT_INFO,
+				.commandBuffer = xfer_cmd_buff,
+			}
+		};
+
+		const VkSubmitInfo2 submit_infos[] = {
+			{
+				.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO_2,
+				.commandBufferInfoCount = std::size(cmd_buff_infos),
+				.pCommandBufferInfos = cmd_buff_infos,
+			},
+		};
+
+		VK_CHECK("submit xfer cmd buff", vkQueueSubmit2(xfer_q, std::size(submit_infos), submit_infos, VK_NULL_HANDLE));
+		VK_CHECK("wait for device", vkDeviceWaitIdle(device));
+	}
+
+	data create(const VkDevice device, const VkExtent3D& extent, const VmaAllocator& allocator, const std::string& current_path, const uint32_t q_fly_idx, const std::vector<uint32_t> q_fly_idxs, const VkCommandBuffer xfer_cmd_buff, const VkQueue xfer_q, const std::string& name)
 	{
 		data d = {};
 
@@ -1340,6 +1384,10 @@ namespace cmpt_swapchain
 		}
 
 		d.ppln_data = vk_compute_pipeline::create(device, current_path, d.max_frames_in_flight, "cmpt ppln");
+		d.accum_target = vk_image::create(device, extent, VK_FORMAT_R32G32B32A32_SFLOAT, VK_IMAGE_USAGE_STORAGE_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT, allocator, 0, "accum target", q_fly_idxs);
+		d.final_render = vk_image::create(device, extent, VK_FORMAT_R32G32B32A32_SFLOAT, VK_IMAGE_USAGE_STORAGE_BIT | VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT, allocator, 0, "final target", q_fly_idxs);
+
+		initialize_image_layouts(d, device, xfer_cmd_buff, xfer_q);
 
 #ifdef _DEBUG
 		std::string n(name);
@@ -1365,7 +1413,6 @@ namespace cmpt_swapchain
 			name_info.objectHandle = reinterpret_cast<uint64_t>(d.frame_sems[i]);
 			name_info.pObjectName = n.append(" cmpt frame sem ").c_str();
 			VK_CHECK("setting swapchain cmpt sig sem name", vkSetDebugUtilsObjectNameEXT(device, &name_info));
-
 		}
 
 #endif	// _DEBUG
@@ -1373,7 +1420,7 @@ namespace cmpt_swapchain
 		return d;
 	}
 
-	void destroy(data d, const VkDevice device)
+	void destroy(data d, const VmaAllocator& allocator, const VkDevice device)
 	{
 		if (device != VK_NULL_HANDLE)
 		{
@@ -1384,8 +1431,22 @@ namespace cmpt_swapchain
 				vkDestroySemaphore(device, d.frame_sems[i], nullptr);
 			}
 
+			vk_image::destroy(d.accum_target, allocator, device);
+			vk_image::destroy(d.final_render, allocator, device);
+
 			vk_compute_pipeline::destroy(d.ppln_data, device);
 		}
+	}
+
+	void recreate_render_targets(data& d, const VkDevice device, const VkExtent3D& extent, const VmaAllocator& allocator, const std::vector<uint32_t>& q_fly_idxs, const VkCommandBuffer xfer_cmd_buff, const VkQueue xfer_q)
+	{
+		vk_image::destroy(d.accum_target, allocator, device);
+		d.accum_target = vk_image::create(device, extent, VK_FORMAT_R32G32B32A32_SFLOAT, VK_IMAGE_USAGE_STORAGE_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT, allocator, 0, "accum target", q_fly_idxs);
+
+		vk_image::destroy(d.final_render, allocator, device);
+		d.final_render = vk_image::create(device, extent, VK_FORMAT_R32G32B32A32_SFLOAT, VK_IMAGE_USAGE_STORAGE_BIT | VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT, allocator, 0, "final target", q_fly_idxs);
+
+		initialize_image_layouts(d, device, xfer_cmd_buff, xfer_q);
 	}
 }
 
@@ -1409,7 +1470,7 @@ namespace vk_swapchain
 		uint8_t gfx_frame_in_flight = 0;
 	};
 
-	data create(const VkDevice device, const vk_surface::data& surface, const VmaAllocator allocator, const vk_phydev::data& phy_dev, const dim2d& rt_dims, const VkSwapchainKHR old_swapchain, const std::string& name)
+	data create(const VkDevice device, const vk_surface::data& surface, const uint32_t gfx_q_fly_idx, const VkSwapchainKHR old_swapchain, const std::string& name)
 	{
 		VkSwapchainCreateInfoKHR create_info = {
 			.sType = VK_STRUCTURE_TYPE_SWAPCHAIN_CREATE_INFO_KHR,
@@ -1421,7 +1482,7 @@ namespace vk_swapchain
 			.imageArrayLayers = 1,
 			.imageUsage = surface.surf_caps.supportedUsageFlags,
 			.queueFamilyIndexCount = 1,
-			.pQueueFamilyIndices = &phy_dev.gfx_q_fly_idx,
+			.pQueueFamilyIndices = &gfx_q_fly_idx,
 			.preTransform = surface.surf_caps.currentTransform,
 			.compositeAlpha = VK_COMPOSITE_ALPHA_OPAQUE_BIT_KHR,
 			.presentMode = surface.present_mode,
@@ -1464,7 +1525,7 @@ namespace vk_swapchain
 		const VkCommandPoolCreateInfo gfx_cmd_pool_ci = {
 			.sType = VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO,
 			.flags = VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT,
-			.queueFamilyIndex = phy_dev.gfx_q_fly_idx,
+			.queueFamilyIndex = gfx_q_fly_idx,
 		};
 
 		VK_CHECK("create command pool", vkCreateCommandPool(device, &gfx_cmd_pool_ci, nullptr, &d.gfx_cmd_pool));
@@ -1570,7 +1631,7 @@ namespace vk_swapchain
 		return d;
 	}
 
-	void destroy(vk_swapchain::data d, const VmaAllocator allocator, const VkDevice device)
+	void destroy(vk_swapchain::data d, const VkDevice device)
 	{
 		if (device != VK_NULL_HANDLE)
 		{
@@ -1590,6 +1651,12 @@ namespace vk_swapchain
 
 			vkDestroySwapchainKHR(device, d.swapchain, nullptr);
 		}
+	}
+
+	data recreate_swapchain(const vk_swapchain::data data, const VkDevice device, const vk_surface::data surf_data, const uint32_t gfx_q_fly_idx, const std::string& name)
+	{
+		vk_swapchain::destroy(data, device);
+		return vk_swapchain::create(device, surf_data, gfx_q_fly_idx, VK_NULL_HANDLE, "swapchain");
 	}
 };
 
