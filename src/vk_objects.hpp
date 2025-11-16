@@ -673,7 +673,6 @@ namespace vk_compute_pipeline
 	{
 		uint32_t dispatch_x = 32;
 		uint32_t dispatch_y = 32;
-		uint32_t current_time = 0;
 		uint32_t curr_sample = 0;
 	};
 
@@ -716,6 +715,12 @@ namespace vk_compute_pipeline
 				.descriptorCount = 1,
 				.stageFlags = VK_SHADER_STAGE_COMPUTE_BIT,
 			},
+			{
+				.binding = 2,
+				.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,
+				.descriptorCount = 1,
+				.stageFlags = VK_SHADER_STAGE_COMPUTE_BIT,
+			}
 		};
 
 		const VkDescriptorSetLayoutCreateInfo dsl_ci = {
@@ -1272,6 +1277,61 @@ namespace vk_image
 	}
 }
 
+namespace vk_buffer
+{
+	struct data
+	{
+		VkBuffer buffer = VK_NULL_HANDLE;
+		VmaAllocation allocation = VK_NULL_HANDLE;
+		VmaAllocationInfo alloc_info = {};
+		VkDescriptorBufferInfo desc_info = {};
+	};
+
+	data create(const VkDevice device, const VmaAllocator& allocator, const VkDeviceSize size, const VkBufferUsageFlags usage, const VmaAllocationCreateFlags vma_alloc_create_flags, const VmaMemoryUsage vma_mem_usage, const std::string& name)
+	{
+		data d = {};
+
+		const VkBufferCreateInfo create_info = {
+			.sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO,
+			.size = size,
+			.usage = usage,
+		};
+
+		const VmaAllocationCreateInfo alloc_ci = {
+			.flags = vma_alloc_create_flags,
+			.usage = vma_mem_usage,
+		};
+
+		VK_CHECK(std::string("create buffer").append(name).c_str(), vmaCreateBuffer(allocator, &create_info, &alloc_ci, &d.buffer, &d.allocation, &d.alloc_info));
+
+		d.desc_info = {
+			.buffer = d.buffer,
+			.range = VK_WHOLE_SIZE,
+		};
+
+#ifdef _DEBUG
+		const VkDebugUtilsObjectNameInfoEXT name_info = {
+			.sType = VK_STRUCTURE_TYPE_DEBUG_UTILS_OBJECT_NAME_INFO_EXT,
+			.objectType = VK_OBJECT_TYPE_BUFFER,
+			.objectHandle = reinterpret_cast<uint64_t>(d.buffer),
+			.pObjectName = name.c_str(),
+		};
+
+		VK_CHECK("setting buffer name", vkSetDebugUtilsObjectNameEXT(device, &name_info));
+#endif // _DEBUG
+
+		return d;
+	}
+
+	void destroy(data d, const VmaAllocator allocator, const VkDevice device)
+	{
+		if (device != VK_NULL_HANDLE)
+		{
+			vmaDestroyBuffer(allocator, d.buffer, d.allocation);
+		}
+	}
+}
+
 namespace cmpt_swapchain
 {
 	struct data
@@ -1283,14 +1343,15 @@ namespace cmpt_swapchain
 		std::vector<uint64_t> frame_sem_vals;
 
 		uint8_t frame_in_flight = 0;
-		uint8_t max_frames_in_flight = 10;
+		uint8_t max_frames_in_flight = 5;
 
 		vk_compute_pipeline::data ppln_data = {};
 		vk_image::data accum_target = {};
 		vk_image::data final_render = {};
+		vk_buffer::data rand_states = {};
 	};
 
-	void initialize_image_layouts(cmpt_swapchain::data d, const VkDevice device, const VkCommandBuffer xfer_cmd_buff, const VkQueue xfer_q)
+	void initialize_image_layouts(cmpt_swapchain::data& d, const VkDevice device, const VkCommandBuffer xfer_cmd_buff, const VkQueue xfer_q)
 	{
 		const VkCommandBufferBeginInfo xfer_cmd_buff_bi = {
 			.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO,
@@ -1333,6 +1394,24 @@ namespace cmpt_swapchain
 
 		VK_CHECK("submit xfer cmd buff", vkQueueSubmit2(xfer_q, std::size(submit_infos), submit_infos, VK_NULL_HANDLE));
 		VK_CHECK("wait for device", vkDeviceWaitIdle(device));
+	}
+
+	void initialize_rand_states(data& d, const VkDevice device, const VmaAllocator allocator, const VkExtent3D& extent, const VkCommandBuffer xfer_cmd_buff, const VkQueue xfer_q)
+	{
+		vk_buffer::data staging_buffer = vk_buffer::create(device, allocator, d.rand_states.alloc_info.size, VK_BUFFER_USAGE_TRANSFER_SRC_BIT, VMA_ALLOCATION_CREATE_HOST_ACCESS_SEQUENTIAL_WRITE_BIT | VMA_ALLOCATION_CREATE_MAPPED_BIT, VMA_MEMORY_USAGE_AUTO_PREFER_HOST, "staging rand states buffer");
+
+		for (uint32_t st = 0; st < 4 * extent.width * extent.height;)
+		{
+			uint32_t rand_val = rand();
+			while (rand_val < 128)
+				rand_val = rand();
+
+			((uint32_t*)staging_buffer.alloc_info.pMappedData)[st++] = rand_val;
+		}
+
+		copy_buffer_to_buffer(xfer_cmd_buff, xfer_q, staging_buffer.buffer, d.rand_states.buffer, d.rand_states.alloc_info.size);
+
+		vk_buffer::destroy(staging_buffer, allocator, device);
 	}
 
 	data create(const VkDevice device, const VkExtent3D& extent, const VmaAllocator& allocator, const std::string& current_path, const uint32_t q_fly_idx, const std::vector<uint32_t> q_fly_idxs, const VkCommandBuffer xfer_cmd_buff, const VkQueue xfer_q, const std::string& name)
@@ -1386,8 +1465,10 @@ namespace cmpt_swapchain
 		d.ppln_data = vk_compute_pipeline::create(device, current_path, d.max_frames_in_flight, "cmpt ppln");
 		d.accum_target = vk_image::create(device, extent, VK_FORMAT_R32G32B32A32_SFLOAT, VK_IMAGE_USAGE_STORAGE_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT, allocator, 0, "accum target", q_fly_idxs);
 		d.final_render = vk_image::create(device, extent, VK_FORMAT_R32G32B32A32_SFLOAT, VK_IMAGE_USAGE_STORAGE_BIT | VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT, allocator, 0, "final target", q_fly_idxs);
+		d.rand_states = vk_buffer::create(device, allocator, sizeof(uint32_t) * 4 * extent.width * extent.height, VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_STORAGE_BUFFER_BIT, 0, VMA_MEMORY_USAGE_AUTO_PREFER_DEVICE, "rand states");
 
 		initialize_image_layouts(d, device, xfer_cmd_buff, xfer_q);
+		initialize_rand_states(d, device, allocator, extent, xfer_cmd_buff, xfer_q);
 
 #ifdef _DEBUG
 		std::string n(name);
@@ -1433,6 +1514,7 @@ namespace cmpt_swapchain
 
 			vk_image::destroy(d.accum_target, allocator, device);
 			vk_image::destroy(d.final_render, allocator, device);
+			vk_buffer::destroy(d.rand_states, allocator, device);
 
 			vk_compute_pipeline::destroy(d.ppln_data, device);
 		}
@@ -1447,6 +1529,10 @@ namespace cmpt_swapchain
 		d.final_render = vk_image::create(device, extent, VK_FORMAT_R32G32B32A32_SFLOAT, VK_IMAGE_USAGE_STORAGE_BIT | VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT, allocator, 0, "final target", q_fly_idxs);
 
 		initialize_image_layouts(d, device, xfer_cmd_buff, xfer_q);
+
+		vk_buffer::destroy(d.rand_states, allocator, device);
+		d.rand_states = vk_buffer::create(device, allocator, sizeof(uint32_t) * 4 * extent.width * extent.height, VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_STORAGE_BUFFER_BIT, 0, VMA_MEMORY_USAGE_AUTO_PREFER_DEVICE, "rand states");
+		initialize_rand_states(d, device, allocator, extent, xfer_cmd_buff, xfer_q);
 	}
 }
 
@@ -1730,51 +1816,4 @@ namespace vk_fence
 	}
 }
 
-namespace vk_buffer
-{
-	struct data
-	{
-		VkBuffer buffer = VK_NULL_HANDLE;
-		VmaAllocation allocation = VK_NULL_HANDLE;
-		VmaAllocationInfo alloc_info = {};
-	};
 
-	data create(const VkDevice device, const VmaAllocator& allocator, const VkDeviceSize size, const VkBufferUsageFlags usage, const VmaAllocationCreateFlags vma_alloc_create_flags, const VmaMemoryUsage vma_mem_usage, const std::string& name)
-	{
-		data d = {};
-
-		const VkBufferCreateInfo create_info = {
-			.sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO,
-			.size = size,
-			.usage = usage,
-		};
-
-		const VmaAllocationCreateInfo alloc_ci = {
-			.flags = vma_alloc_create_flags,
-			.usage = vma_mem_usage,
-		};
-
-		VK_CHECK(std::string("create buffer").append(name).c_str(), vmaCreateBuffer(allocator, &create_info, &alloc_ci, &d.buffer, &d.allocation, &d.alloc_info));
-
-#ifdef _DEBUG
-		const VkDebugUtilsObjectNameInfoEXT name_info = {
-			.sType = VK_STRUCTURE_TYPE_DEBUG_UTILS_OBJECT_NAME_INFO_EXT,
-			.objectType = VK_OBJECT_TYPE_BUFFER,
-			.objectHandle = reinterpret_cast<uint64_t>(d.buffer),
-			.pObjectName = name.c_str(),
-		};
-
-		VK_CHECK("setting buffer name", vkSetDebugUtilsObjectNameEXT(device, &name_info));
-#endif // _DEBUG
-
-		return d;
-	}
-
-	void destroy(data d, const VmaAllocator allocator, const VkDevice device)
-	{
-		if (device != VK_NULL_HANDLE)
-		{
-			vmaDestroyBuffer(allocator, d.buffer, d.allocation);
-		}
-	}
-}

@@ -319,6 +319,14 @@ void render()
 				.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_IMAGE,
 				.pImageInfo = &vk_state.cmpt_swapchain_data.final_render.desc_img_info,
 			},
+			{
+				.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
+				.dstSet = vk_state.cmpt_swapchain_data.ppln_data.dss[frame_in_flight],
+				.dstBinding = 2,
+				.descriptorCount = 1,
+				.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,
+				.pBufferInfo = &vk_state.cmpt_swapchain_data.rand_states.desc_info,
+			},
 		};
 
 		vkUpdateDescriptorSets(device, std::size(cmpt_desc_writes), cmpt_desc_writes, 0, nullptr);
@@ -336,7 +344,6 @@ void render()
 		const vk_compute_pipeline::PushConstants cmpt_pc = {
 			.dispatch_x = rt_state.dims.width,
 			.dispatch_y = rt_state.dims.height,
-			.current_time = static_cast<uint32_t>(std::chrono::system_clock::now().time_since_epoch().count()),
 			.curr_sample = s,
 		};
 
