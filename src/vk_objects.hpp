@@ -1351,7 +1351,7 @@ namespace cmpt_swapchain
 		vk_buffer::data rand_states = {};
 	};
 
-	void initialize_image_layouts(cmpt_swapchain::data& d, const VkDevice device, const VkCommandBuffer xfer_cmd_buff, const VkQueue xfer_q)
+	void initialize_resources(cmpt_swapchain::data& d, const VkDevice device, const VmaAllocator allocator, const VkExtent3D& extent, const VkCommandBuffer xfer_cmd_buff, const VkQueue xfer_q)
 	{
 		const VkCommandBufferBeginInfo xfer_cmd_buff_bi = {
 			.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO,
@@ -1375,6 +1375,34 @@ namespace cmpt_swapchain
 			d.final_render.image
 		);
 
+		vk_buffer::data staging_buffer = vk_buffer::create(device, allocator, d.rand_states.alloc_info.size, VK_BUFFER_USAGE_TRANSFER_SRC_BIT, VMA_ALLOCATION_CREATE_HOST_ACCESS_SEQUENTIAL_WRITE_BIT | VMA_ALLOCATION_CREATE_MAPPED_BIT, VMA_MEMORY_USAGE_AUTO_PREFER_HOST, "staging rand states buffer");
+
+		for (uint32_t st = 0; st < 4 * extent.width * extent.height;)
+		{
+			uint32_t rand_val = rand();
+			while (rand_val < 128)
+				rand_val = rand();
+
+			((uint32_t*)staging_buffer.alloc_info.pMappedData)[st++] = rand_val;
+		}
+
+		const VkBufferCopy2 regions[] = {
+			{
+				.sType = VK_STRUCTURE_TYPE_BUFFER_COPY_2,
+				.size = d.rand_states.alloc_info.size,
+			},
+		};
+
+		const VkCopyBufferInfo2 copy_buff_info = {
+			.sType = VK_STRUCTURE_TYPE_COPY_BUFFER_INFO_2,
+			.srcBuffer = staging_buffer.buffer,
+			.dstBuffer = d.rand_states.buffer,
+			.regionCount = std::size(regions),
+			.pRegions = regions,
+		};
+
+		vkCmdCopyBuffer2(xfer_cmd_buff, &copy_buff_info);
+
 		VK_CHECK("end xfer cmd buff", vkEndCommandBuffer(xfer_cmd_buff));
 
 		const VkCommandBufferSubmitInfo cmd_buff_infos[] = {
@@ -1394,23 +1422,6 @@ namespace cmpt_swapchain
 
 		VK_CHECK("submit xfer cmd buff", vkQueueSubmit2(xfer_q, std::size(submit_infos), submit_infos, VK_NULL_HANDLE));
 		VK_CHECK("wait for device", vkDeviceWaitIdle(device));
-	}
-
-	void initialize_rand_states(data& d, const VkDevice device, const VmaAllocator allocator, const VkExtent3D& extent, const VkCommandBuffer xfer_cmd_buff, const VkQueue xfer_q)
-	{
-		vk_buffer::data staging_buffer = vk_buffer::create(device, allocator, d.rand_states.alloc_info.size, VK_BUFFER_USAGE_TRANSFER_SRC_BIT, VMA_ALLOCATION_CREATE_HOST_ACCESS_SEQUENTIAL_WRITE_BIT | VMA_ALLOCATION_CREATE_MAPPED_BIT, VMA_MEMORY_USAGE_AUTO_PREFER_HOST, "staging rand states buffer");
-
-		for (uint32_t st = 0; st < 4 * extent.width * extent.height;)
-		{
-			uint32_t rand_val = rand();
-			while (rand_val < 128)
-				rand_val = rand();
-
-			((uint32_t*)staging_buffer.alloc_info.pMappedData)[st++] = rand_val;
-		}
-
-		copy_buffer_to_buffer(xfer_cmd_buff, xfer_q, staging_buffer.buffer, d.rand_states.buffer, d.rand_states.alloc_info.size);
-
 		vk_buffer::destroy(staging_buffer, allocator, device);
 	}
 
@@ -1467,8 +1478,7 @@ namespace cmpt_swapchain
 		d.final_render = vk_image::create(device, extent, VK_FORMAT_R32G32B32A32_SFLOAT, VK_IMAGE_USAGE_STORAGE_BIT | VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT, allocator, 0, "final target", q_fly_idxs);
 		d.rand_states = vk_buffer::create(device, allocator, sizeof(uint32_t) * 4 * extent.width * extent.height, VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_STORAGE_BUFFER_BIT, 0, VMA_MEMORY_USAGE_AUTO_PREFER_DEVICE, "rand states");
 
-		initialize_image_layouts(d, device, xfer_cmd_buff, xfer_q);
-		initialize_rand_states(d, device, allocator, extent, xfer_cmd_buff, xfer_q);
+		initialize_resources(d, device, allocator, extent, xfer_cmd_buff, xfer_q);
 
 #ifdef _DEBUG
 		std::string n(name);
@@ -1528,11 +1538,10 @@ namespace cmpt_swapchain
 		vk_image::destroy(d.final_render, allocator, device);
 		d.final_render = vk_image::create(device, extent, VK_FORMAT_R32G32B32A32_SFLOAT, VK_IMAGE_USAGE_STORAGE_BIT | VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT, allocator, 0, "final target", q_fly_idxs);
 
-		initialize_image_layouts(d, device, xfer_cmd_buff, xfer_q);
+		initialize_resources(d, device, allocator, extent, xfer_cmd_buff, xfer_q);
 
 		vk_buffer::destroy(d.rand_states, allocator, device);
 		d.rand_states = vk_buffer::create(device, allocator, sizeof(uint32_t) * 4 * extent.width * extent.height, VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_STORAGE_BUFFER_BIT, 0, VMA_MEMORY_USAGE_AUTO_PREFER_DEVICE, "rand states");
-		initialize_rand_states(d, device, allocator, extent, xfer_cmd_buff, xfer_q);
 	}
 }
 
