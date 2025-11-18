@@ -33,7 +33,12 @@ if exist %output_dir:/=\%\shaders (
    rmdir %output_dir:/=\%\shaders /s /q
 )
 
-: copy build spv to target dir
+: copy built spv to target dir
 echo copying spv to %output_dir:/=\%\shaders
 cd .. 
 xcopy /y /i /s .\shaders\*.spv %output_dir:/=\%\shaders 
+
+
+: copy slang shaders to target dir
+echo copying slang to %output_dir:/=\%\shaders\slang
+xcopy /y /i /s .\shaders\slang\*.slang %output_dir:/=\%\shaders\slang

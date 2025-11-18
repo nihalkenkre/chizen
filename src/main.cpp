@@ -274,7 +274,7 @@ void render()
 			VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT | VK_PIPELINE_STAGE_2_CLEAR_BIT, VK_ACCESS_2_SHADER_STORAGE_WRITE_BIT | VK_ACCESS_2_TRANSFER_WRITE_BIT
 		);
 		insert_memory_barrier(cmpt_cmd_buff,
-			VK_PIPELINE_STAGE_2_CLEAR_BIT | VK_PIPELINE_STAGE_2_BLIT_BIT, VK_ACCESS_2_TRANSFER_WRITE_BIT | VK_ACCESS_2_TRANSFER_READ_BIT,
+			VK_PIPELINE_STAGE_2_CLEAR_BIT, VK_ACCESS_2_TRANSFER_WRITE_BIT,
 			VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT | VK_PIPELINE_STAGE_2_CLEAR_BIT, VK_ACCESS_2_SHADER_STORAGE_WRITE_BIT | VK_ACCESS_2_TRANSFER_WRITE_BIT
 		);
 
@@ -299,9 +299,6 @@ void render()
 		}
 
 		vkCmdBindPipeline(cmpt_cmd_buff, VK_PIPELINE_BIND_POINT_COMPUTE, vk_state.cmpt_swapchain_data.ppln_data.pipe);
-
-		vk_state.cmpt_swapchain_data.accum_target.desc_img_info.imageLayout = VK_IMAGE_LAYOUT_GENERAL;
-		vk_state.cmpt_swapchain_data.final_render.desc_img_info.imageLayout = VK_IMAGE_LAYOUT_GENERAL;
 
 		const VkWriteDescriptorSet cmpt_desc_writes[] = {
 			{

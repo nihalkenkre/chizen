@@ -680,16 +680,54 @@ namespace vk_compute_pipeline
 	{
 		data d = {};
 
-		const std::string shader_path = std::string(current_path).append("/shaders/render.comp.glsl.spv");
-		std::vector<char> shader_code(std::filesystem::file_size(shader_path));
-		std::ifstream shader_file(shader_path.c_str(), std::ios::binary | std::ios::in);
+		Slang::ComPtr<slang::IGlobalSession> slang_global_session;
+		SLANG_CHECK("create global session", slang::createGlobalSession(slang_global_session.writeRef()));
 
-		shader_file.read(shader_code.data(), shader_code.size());
+		slang::TargetDesc target_desc = {
+			.format = SLANG_SPIRV,
+			.profile = slang_global_session->findProfile("spirv_1_6"),
+		};
+		slang::SessionDesc session_desc = {
+			.targets = &target_desc,
+			.targetCount = 1,
+		};
+
+		Slang::ComPtr<slang::ISession> compile_session;
+		SLANG_CHECK("create compile session", slang_global_session->createSession(session_desc, compile_session.writeRef()));
+
+		const std::string slang_shader_path = std::string(current_path).append("/shaders/slang/render.slang");
+
+		Slang::ComPtr<slang::IBlob> diagnostic_blob;
+		slang::IModule* slang_module = compile_session->loadModule(slang_shader_path.c_str(), diagnostic_blob.writeRef());
+
+		if (diagnostic_blob != nullptr)
+		{
+			std::println("{}", reinterpret_cast<const char*>(diagnostic_blob->getBufferPointer()));
+		}
+
+		Slang::ComPtr<slang::IEntryPoint> entry_point;
+		slang_module->findEntryPointByName("compute_main", entry_point.writeRef());
+
+		std::array<slang::IComponentType*, 2> component_types = {
+			slang_module, entry_point
+		};
+
+		Slang::ComPtr<slang::IComponentType> composed_program;
+		diagnostic_blob.setNull();
+		SLANG_CHECK("create program", compile_session->createCompositeComponentType(component_types.data(), component_types.size(), composed_program.writeRef(), diagnostic_blob.writeRef()));
+
+		Slang::ComPtr<slang::IComponentType> linked_program;
+		diagnostic_blob.setNull();
+		SLANG_CHECK("link program", composed_program->link(linked_program.writeRef(), diagnostic_blob.writeRef()));
+
+		Slang::ComPtr<slang::IBlob> spirv_code;
+		diagnostic_blob.setNull();
+		SLANG_CHECK("get spirv code", composed_program->getEntryPointCode(0, 0, spirv_code.writeRef(), diagnostic_blob.writeRef()));
 
 		const VkShaderModuleCreateInfo mod_ci = {
 			.sType = VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO,
-			.codeSize = shader_code.size(),
-			.pCode = reinterpret_cast<const uint32_t*>(shader_code.data()),
+			.codeSize = spirv_code->getBufferSize(),
+			.pCode = reinterpret_cast<const uint32_t*>(spirv_code->getBufferPointer()),
 		};
 
 		VkShaderModule mod = VK_NULL_HANDLE;
@@ -867,31 +905,76 @@ namespace vk_graphics_pipeline
 	{
 		data d = {};
 
-		const std::string vert_shader_path = std::string(current_path).append("/shaders/display.vert.glsl.spv");
-		std::vector<char> vert_shader_code(std::filesystem::file_size(vert_shader_path));
-		std::ifstream vert_shader_file(vert_shader_path.c_str(), std::ios::binary | std::ios::in);
+		Slang::ComPtr<slang::IGlobalSession> slang_global_session;
+		SLANG_CHECK("create global session", slang::createGlobalSession(slang_global_session.writeRef()));
 
-		vert_shader_file.read(vert_shader_code.data(), vert_shader_code.size());
+		slang::TargetDesc target_desc = {
+			.format = SLANG_SPIRV,
+			.profile = slang_global_session->findProfile("spirv_1_6"),
+		};
+		slang::SessionDesc session_desc = {
+			.targets = &target_desc,
+			.targetCount = 1,
+		};
+
+		Slang::ComPtr<slang::ISession> compile_session;
+		SLANG_CHECK("create compile session", slang_global_session->createSession(session_desc, compile_session.writeRef()));
+
+		const std::string slang_shader_path = std::string(current_path).append("/shaders/slang/display.slang");
+
+		Slang::ComPtr<slang::IBlob> diagnostic_blob;
+		slang::IModule* slang_module = compile_session->loadModule(slang_shader_path.c_str(), diagnostic_blob.writeRef());
+
+		if (diagnostic_blob != nullptr)
+		{
+			std::println("{}", reinterpret_cast<const char*>(diagnostic_blob->getBufferPointer()));
+		}
+
+		Slang::ComPtr<slang::IEntryPoint> vert_entry_point;
+		slang_module->findEntryPointByName("vertex_main", vert_entry_point.writeRef());
+
+		std::array<slang::IComponentType*, 2> vert_component_types = { slang_module, vert_entry_point };
+		Slang::ComPtr<slang::IComponentType> vert_composed_program;
+		diagnostic_blob.setNull();
+		SLANG_CHECK("create program", compile_session->createCompositeComponentType(vert_component_types.data(), vert_component_types.size(), vert_composed_program.writeRef(), diagnostic_blob.writeRef()));
+
+		Slang::ComPtr<slang::IComponentType> vert_linked_program;
+		diagnostic_blob.setNull();
+		SLANG_CHECK("link program", vert_composed_program->link(vert_linked_program.writeRef(), diagnostic_blob.writeRef()));
+
+		Slang::ComPtr<slang::IBlob> vert_spirv_code;
+		diagnostic_blob.setNull();
+		SLANG_CHECK("get spirv code", vert_composed_program->getEntryPointCode(0, 0, vert_spirv_code.writeRef(), diagnostic_blob.writeRef()));
 
 		const VkShaderModuleCreateInfo vert_mod_ci = {
 			.sType = VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO,
-			.codeSize = vert_shader_code.size(),
-			.pCode = reinterpret_cast<const uint32_t*>(vert_shader_code.data()),
+			.codeSize = vert_spirv_code->getBufferSize(),
+			.pCode = reinterpret_cast<const uint32_t*>(vert_spirv_code->getBufferPointer()),
 		};
 
 		VkShaderModule vert_mod = VK_NULL_HANDLE;
 		VK_CHECK("create vert shader module", vkCreateShaderModule(device, &vert_mod_ci, nullptr, &vert_mod));
 
-		const std::string frag_shader_path = std::string(current_path).append("/shaders/display.frag.glsl.spv");
-		std::vector<char> frag_shader_code(std::filesystem::file_size(frag_shader_path));
-		std::ifstream frag_shader_file(frag_shader_path.c_str(), std::ios::binary | std::ios::in);
+		Slang::ComPtr<slang::IEntryPoint> frag_entry_point;
+		slang_module->findEntryPointByName("fragment_main", frag_entry_point.writeRef());
 
-		frag_shader_file.read(frag_shader_code.data(), frag_shader_code.size());
+		std::array<slang::IComponentType*, 2> frag_component_types = { slang_module, frag_entry_point };
+		Slang::ComPtr<slang::IComponentType> frag_composed_program;
+		diagnostic_blob.setNull();
+		SLANG_CHECK("create program", compile_session->createCompositeComponentType(frag_component_types.data(), frag_component_types.size(), frag_composed_program.writeRef(), diagnostic_blob.writeRef()));
+
+		Slang::ComPtr<slang::IComponentType> frag_linked_program;
+		diagnostic_blob.setNull();
+		SLANG_CHECK("link program", frag_composed_program->link(frag_linked_program.writeRef(), diagnostic_blob.writeRef()));
+
+		Slang::ComPtr<slang::IBlob> frag_spirv_code;
+		diagnostic_blob.setNull();
+		SLANG_CHECK("get spirv code", frag_composed_program->getEntryPointCode(0, 0, frag_spirv_code.writeRef(), diagnostic_blob.writeRef()));
 
 		const VkShaderModuleCreateInfo frag_mod_ci = {
 			.sType = VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO,
-			.codeSize = frag_shader_code.size(),
-			.pCode = reinterpret_cast<const uint32_t*>(frag_shader_code.data()),
+			.codeSize = frag_spirv_code->getBufferSize(),
+			.pCode = reinterpret_cast<const uint32_t*>(frag_spirv_code->getBufferPointer()),
 		};
 
 		VkShaderModule frag_mod = VK_NULL_HANDLE;
@@ -1233,6 +1316,7 @@ namespace vk_image
 		d.desc_img_info = {
 			.sampler = d.sampler,
 			.imageView = d.image_view,
+			.imageLayout = VK_IMAGE_LAYOUT_GENERAL,
 		};
 
 #ifdef _DEBUG
