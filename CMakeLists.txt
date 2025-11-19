@@ -2,16 +2,18 @@ cmake_minimum_required(VERSION 3.10)
 project(chizen LANGUAGES CXX)
 set(CMAKE_POSITION_INDEPENDENT_CODE ON)
 
-# add_subdirectory(SDL)
 find_package(Vulkan REQUIRED)
 
 file(GLOB PROJECT_SRCS src/*)
-file(GLOB SHADER_SRCS shaders/*)
-list(FILTER SHADER_SRCS EXCLUDE REGEX "spv")
+list(FILTER PROJECT_SRCS EXCLUDE REGEX "imgui")
+file(GLOB GLSL_SHADER_SRCS shaders/glsl/*)
+list(FILTER GLSL_SHADER_SRCS EXCLUDE REGEX "spv|imgui")
+file(GLOB SLANG_SHADER_SRCS shaders/slang/*)
 file(GLOB IMGUI_SRCS imgui/*.cpp imgui/*.h imgui/backends/imgui_impl_sdl3.* imgui/backends/imgui_impl_vulkan.*)
 file(GLOB IMGUI_FILE_DLG_SRCS ImGuiFileDialog/ImGuiFileDialog*.*)
 
-source_group("Shaders" FILES ${SHADER_SRCS})
+source_group("Shaders/GLSL" FILES ${GLSL_SHADER_SRCS})
+source_group("Shaders/Slang" FILES ${SLANG_SHADER_SRCS})
 source_group("ImGui" FILES ${IMGUI_SRCS})
 source_group("ImGuiFileDialog" FILES ${IMGUI_FILE_DLG_SRCS})
 
@@ -23,7 +25,7 @@ elseif (CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang")
    set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -fno-exceptions")
 endif()
 
-add_executable(${PROJECT_NAME} ${PROJECT_SRCS} ${SHADER_SRCS} ${IMGUI_SRCS} ${IMGUI_FILE_DLG_SRCS})
+add_executable(${PROJECT_NAME} ${PROJECT_SRCS} ${GLSL_SHADER_SRCS} ${SLANG_SHADER_SRCS} ${IMGUI_SRCS} ${IMGUI_FILE_DLG_SRCS})
 
 target_precompile_headers(${PROJECT_NAME} PRIVATE 
                                        <vector>

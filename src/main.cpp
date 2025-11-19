@@ -19,6 +19,9 @@ struct VulkanState
 	vk_buffer::data geom_buffer = {};
 	uint32_t max_samples = 1024;
 	uint32_t curr_sample = 1;
+
+	ray_tracing_pipeline rt_pipeline = {};
+	ray_tracer rt = {};
 };
 
 struct ImGuiState
@@ -93,6 +96,8 @@ SDL_AppResult SDL_AppInit(void** appstate, int argc, char** argv)
 		{ vk_state.phy_dev_data.cmpt_q_fly_idx, vk_state.phy_dev_data.gfx_q_fly_idx , vk_state.phy_dev_data.xfer_q_fly_idx }, vk_state.xfer_cmd_pool_data.cmd_buffs[0], vk_state.device_data.xfer_q, "cmpt swapchain");
 
 	vk_state.gfx_ppln = vk_graphics_pipeline::create(vk_state.device_data.device, current_path, vk_state.surface_data.format.format, vk_state.swapchain_data.max_frames_in_flight, "graphics pipeline");
+	vk_state.rt_pipeline = ray_tracing_pipeline_create(vk_state.device_data.device, vk_state.allocator, current_path, vk_state.phy_dev_data.rt_props, "rt pipeline");
+	vk_state.rt = ray_tracer_create(vk_state.device_data.device, { rt_state.dims.width, rt_state.dims.height, 1 }, vk_state.allocator, current_path, vk_state.phy_dev_data.cmpt_q_fly_idx, { vk_state.phy_dev_data.cmpt_q_fly_idx, vk_state.phy_dev_data.gfx_q_fly_idx, vk_state.phy_dev_data.xfer_q_fly_idx }, vk_state.xfer_cmd_pool_data.cmd_buffs[0], vk_state.device_data.xfer_q, "rt");
 
 	float verts[] = {
 		// Positions (X, Y) | UVs (U, V)
@@ -723,6 +728,9 @@ void SDL_AppQuit(void* appstate, SDL_AppResult result)
 	vk_command_pool::destroy(vk_state.xfer_cmd_pool_data, device);
 	vk_swapchain::destroy(vk_state.swapchain_data, device);
 	cmpt_swapchain::destroy(vk_state.cmpt_swapchain_data, vk_state.allocator, device);
+
+	ray_tracing_pipeline_destroy(vk_state.rt_pipeline, vk_state.allocator, device);
+	ray_tracer_destroy(vk_state.rt, vk_state.allocator, device);
 
 	vmaDestroyAllocator(vk_state.allocator);
 
