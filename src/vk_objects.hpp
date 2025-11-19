@@ -219,6 +219,7 @@ namespace vk_phydev
 		uint32_t cmpt_q_fly_idx = 0;
 		VkPhysicalDeviceProperties2 props = {};
 		VkPhysicalDeviceMemoryProperties2 mem_props = {};
+		VkPhysicalDeviceRayTracingPipelinePropertiesKHR rt_props = { .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_RAY_TRACING_PIPELINE_PROPERTIES_KHR };
 	};
 
 	data get_phy_dev(const VkInstance instance, vk_surface::data* surface)
@@ -242,6 +243,7 @@ namespace vk_phydev
 		{
 			VkPhysicalDeviceProperties2 props = {
 				.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_PROPERTIES_2,
+				.pNext = &d.rt_props,
 			};
 
 			vkGetPhysicalDeviceProperties2(phy_dev, &props);
@@ -271,38 +273,6 @@ namespace vk_phydev
 						vkGetPhysicalDeviceMemoryProperties2(phy_dev, &d.mem_props);
 
 						VK_CHECK("get surface caps", vkGetPhysicalDeviceSurfaceCapabilitiesKHR(phy_dev, surface->surface, &surface->surf_caps));
-
-						{
-							uint32_t surf_forms_count = 0;
-							VK_CHECK("get surface formats", vkGetPhysicalDeviceSurfaceFormatsKHR(phy_dev, surface->surface, &surf_forms_count, nullptr));
-
-							std::vector<VkSurfaceFormatKHR> surf_forms(surf_forms_count);
-							VK_CHECK("get surface formats", vkGetPhysicalDeviceSurfaceFormatsKHR(phy_dev, surface->surface, &surf_forms_count, surf_forms.data()));
-
-							auto it = std::find_if(surf_forms.begin(), surf_forms.end(), [](const VkSurfaceFormatKHR frm)
-								{ return (frm.format == VK_FORMAT_R8G8B8A8_UNORM) && (frm.colorSpace == VK_COLOR_SPACE_SRGB_NONLINEAR_KHR); });
-
-							if (it != surf_forms.end())
-							{
-								surface->format = *it;
-							}
-						}
-
-						{
-							uint32_t present_modes_count = 0;
-							VK_CHECK("get present modes", vkGetPhysicalDeviceSurfacePresentModesKHR(phy_dev, surface->surface, &present_modes_count, nullptr));
-
-							std::vector<VkPresentModeKHR> present_modes(present_modes_count);
-							VK_CHECK("get surface formats", vkGetPhysicalDeviceSurfacePresentModesKHR(phy_dev, surface->surface, &present_modes_count, present_modes.data()));
-
-							auto it = std::find_if(present_modes.begin(), present_modes.end(), [](const VkPresentModeKHR mode)
-								{ return mode == VK_PRESENT_MODE_MAILBOX_KHR; });
-
-							if (it != present_modes.end())
-							{
-								surface->present_mode = *it;
-							}
-						}
 
 						break;
 					}
@@ -345,6 +315,38 @@ namespace vk_phydev
 					{
 						d.cmpt_q_fly_idx = q;
 						break;
+					}
+				}
+
+				{
+					uint32_t surf_forms_count = 0;
+					VK_CHECK("get surface formats", vkGetPhysicalDeviceSurfaceFormatsKHR(phy_dev, surface->surface, &surf_forms_count, nullptr));
+
+					std::vector<VkSurfaceFormatKHR> surf_forms(surf_forms_count);
+					VK_CHECK("get surface formats", vkGetPhysicalDeviceSurfaceFormatsKHR(phy_dev, surface->surface, &surf_forms_count, surf_forms.data()));
+
+					auto it = std::find_if(surf_forms.begin(), surf_forms.end(), [](const VkSurfaceFormatKHR frm)
+						{ return (frm.format == VK_FORMAT_R8G8B8A8_UNORM) && (frm.colorSpace == VK_COLOR_SPACE_SRGB_NONLINEAR_KHR); });
+
+					if (it != surf_forms.end())
+					{
+						surface->format = *it;
+					}
+				}
+
+				{
+					uint32_t present_modes_count = 0;
+					VK_CHECK("get present modes", vkGetPhysicalDeviceSurfacePresentModesKHR(phy_dev, surface->surface, &present_modes_count, nullptr));
+
+					std::vector<VkPresentModeKHR> present_modes(present_modes_count);
+					VK_CHECK("get surface formats", vkGetPhysicalDeviceSurfacePresentModesKHR(phy_dev, surface->surface, &present_modes_count, present_modes.data()));
+
+					auto it = std::find_if(present_modes.begin(), present_modes.end(), [](const VkPresentModeKHR mode)
+						{ return mode == VK_PRESENT_MODE_MAILBOX_KHR; });
+
+					if (it != present_modes.end())
+					{
+						surface->present_mode = *it;
 					}
 				}
 			}
@@ -458,7 +460,6 @@ namespace vk_device
 		VkPhysicalDeviceVulkan12Features feats12 = {
 			.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_2_FEATURES,
 			.pNext = &sync2_feats,
-			.timelineSemaphore = true,
 		};
 
 		VkPhysicalDeviceFeatures2 feats2 = {
@@ -1263,7 +1264,7 @@ namespace vk_image
 		const VmaAllocator allocator,
 		const uint32_t id,
 		const std::string& name,
-		const std::vector<uint32_t> q_fly_idxs = {})
+		const std::vector<uint32_t>& q_fly_idxs = {})
 	{
 		data d = {
 			.dims = {
@@ -1509,7 +1510,7 @@ namespace cmpt_swapchain
 		vk_buffer::destroy(staging_buffer, allocator, device);
 	}
 
-	data create(const VkDevice device, const VkExtent3D& extent, const VmaAllocator& allocator, const std::string& current_path, const uint32_t q_fly_idx, const std::vector<uint32_t> q_fly_idxs, const VkCommandBuffer xfer_cmd_buff, const VkQueue xfer_q, const std::string& name)
+	data create(const VkDevice device, const VkExtent3D& extent, const VmaAllocator& allocator, const std::string& current_path, const uint32_t q_fly_idx, const std::vector<uint32_t>& q_fly_idxs, const VkCommandBuffer xfer_cmd_buff, const VkQueue xfer_q, const std::string& name)
 	{
 		data d = {};
 
