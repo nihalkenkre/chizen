@@ -44,7 +44,7 @@ float delta_mouse[2];
 RenderTargetState rt_state = {};
 float last_mouse_pos[2];
 ImGuiState imgui_state = {};
-std::thread render_thread;
+std::thread ray_trace_thread;
 bool mouse_motion_tracking = false;
 bool is_rendering = false;
 bool should_stop_rendering = false;
@@ -90,14 +90,17 @@ SDL_AppResult SDL_AppInit(void** appstate, int argc, char** argv)
 	VK_CHECK("create vma allocator", vmaCreateAllocator(&vma_alloc_ci, &vk_state.allocator));
 
 	vk_state.swapchain_data = vk_swapchain::create(vk_state.device_data.device, vk_state.surface_data, vk_state.phy_dev_data.gfx_q_fly_idx, VK_NULL_HANDLE, "swapchain");
-	vk_state.cmpt_swapchain_data = cmpt_swapchain::create(vk_state.device_data.device, 
-		{ rt_state.dims.width, rt_state.dims.height, 1 }, 
-		vk_state.allocator, current_path, vk_state.phy_dev_data.cmpt_q_fly_idx, 
+	vk_state.cmpt_swapchain_data = cmpt_swapchain::create(vk_state.device_data.device,
+		{ rt_state.dims.width, rt_state.dims.height, 1 },
+		vk_state.allocator, current_path, vk_state.phy_dev_data.cmpt_q_fly_idx,
 		{ vk_state.phy_dev_data.cmpt_q_fly_idx, vk_state.phy_dev_data.gfx_q_fly_idx , vk_state.phy_dev_data.xfer_q_fly_idx }, vk_state.xfer_cmd_pool_data.cmd_buffs[0], vk_state.device_data.xfer_q, "cmpt swapchain");
 
 	vk_state.gfx_ppln = vk_graphics_pipeline::create(vk_state.device_data.device, current_path, vk_state.surface_data.format.format, vk_state.swapchain_data.max_frames_in_flight, "graphics pipeline");
 	vk_state.rt_pipeline = ray_tracing_pipeline_create(vk_state.device_data.device, vk_state.allocator, current_path, vk_state.phy_dev_data.rt_props, "rt pipeline");
-	vk_state.rt = ray_tracer_create(vk_state.device_data.device, { rt_state.dims.width, rt_state.dims.height, 1 }, vk_state.allocator, current_path, vk_state.phy_dev_data.cmpt_q_fly_idx, { vk_state.phy_dev_data.cmpt_q_fly_idx, vk_state.phy_dev_data.gfx_q_fly_idx, vk_state.phy_dev_data.xfer_q_fly_idx }, vk_state.xfer_cmd_pool_data.cmd_buffs[0], vk_state.device_data.xfer_q, "rt");
+	vk_state.rt = ray_tracer_create(vk_state.device_data.device, 
+		{ rt_state.dims.width, rt_state.dims.height, 1 }, vk_state.allocator, current_path, vk_state.phy_dev_data.cmpt_q_fly_idx, 
+		{ vk_state.phy_dev_data.cmpt_q_fly_idx, vk_state.phy_dev_data.gfx_q_fly_idx, vk_state.phy_dev_data.xfer_q_fly_idx }, 
+		vk_state.xfer_cmd_pool_data.cmd_buffs[0], vk_state.device_data.xfer_q, vk_state.rt_pipeline.desc_set_layouts[0], "rt");
 
 	float verts[] = {
 		// Positions (X, Y) | UVs (U, V)
@@ -112,8 +115,13 @@ SDL_AppResult SDL_AppInit(void** appstate, int argc, char** argv)
 
 	size_t verts_size = std::size(verts) * sizeof(float);
 
-	vk_state.geom_buffer = vk_buffer::create(vk_state.device_data.device, vk_state.allocator, verts_size, VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_INDEX_BUFFER_BIT | VK_BUFFER_USAGE_VERTEX_BUFFER_BIT, 0, VMA_MEMORY_USAGE_AUTO_PREFER_DEVICE, "geom buffer");
-	vk_buffer::data geom_staging_buffer = vk_buffer::create(vk_state.device_data.device, vk_state.allocator, verts_size, VK_BUFFER_USAGE_TRANSFER_SRC_BIT, VMA_ALLOCATION_CREATE_HOST_ACCESS_SEQUENTIAL_WRITE_BIT | VMA_ALLOCATION_CREATE_MAPPED_BIT, VMA_MEMORY_USAGE_AUTO_PREFER_HOST, "staging geom buffer");
+	vk_state.geom_buffer = vk_buffer::create(vk_state.device_data.device, vk_state.allocator, verts_size, 
+		VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_INDEX_BUFFER_BIT | VK_BUFFER_USAGE_VERTEX_BUFFER_BIT, 
+		0, VMA_MEMORY_USAGE_AUTO_PREFER_DEVICE, "geom buffer");
+	vk_buffer::data geom_staging_buffer = vk_buffer::create(vk_state.device_data.device, vk_state.allocator, verts_size, 
+		VK_BUFFER_USAGE_TRANSFER_SRC_BIT, 
+		VMA_ALLOCATION_CREATE_HOST_ACCESS_SEQUENTIAL_WRITE_BIT | VMA_ALLOCATION_CREATE_MAPPED_BIT, VMA_MEMORY_USAGE_AUTO_PREFER_HOST, 
+		"staging geom buffer");
 
 	memcpy(geom_staging_buffer.alloc_info.pMappedData, verts, verts_size);
 
@@ -214,9 +222,9 @@ SDL_AppResult SDL_AppEvent(void* appstate, SDL_Event* event)
 			if (mouse_motion_tracking)
 			{
 				delta_mouse[0] += ((last_mouse_pos[0] - event->motion.x) / static_cast<float>(vk_state.surface_data.surf_caps.currentExtent.width)) * 2,
-				delta_mouse[1] += ((last_mouse_pos[1] - event->motion.y) / static_cast<float>(vk_state.surface_data.surf_caps.currentExtent.height)) * 2,
+					delta_mouse[1] += ((last_mouse_pos[1] - event->motion.y) / static_cast<float>(vk_state.surface_data.surf_caps.currentExtent.height)) * 2,
 
-				last_mouse_pos[0] = event->motion.x;
+					last_mouse_pos[0] = event->motion.x;
 				last_mouse_pos[1] = event->motion.y;
 
 				imgui_state.should_be_rendering = true;
@@ -240,6 +248,177 @@ SDL_AppResult SDL_AppEvent(void* appstate, SDL_Event* event)
 	return SDL_APP_CONTINUE;
 }
 
+void ray_trace()
+{
+	is_rendering = true;
+
+	VkDevice device = vk_state.device_data.device;
+	uint32_t s = vk_state.curr_sample;
+
+	do
+	{
+		if (is_app_shutting_down || should_stop_rendering)
+		{
+			VK_CHECK("rt queue idle", vkQueueWaitIdle(vk_state.device_data.cmpt_q));
+			break;
+		}
+
+		uint8_t frame_in_flight = vk_state.rt.frame_in_flight;
+
+		const VkSemaphoreWaitInfo rt_wait_info = {
+			.sType = VK_STRUCTURE_TYPE_SEMAPHORE_WAIT_INFO,
+			.semaphoreCount = 1,
+			.pSemaphores = &vk_state.rt.frame_sems[frame_in_flight],
+			.pValues = &vk_state.rt.frame_sem_vals[frame_in_flight],
+		};
+
+		VK_CHECK("wait before rt cmd buff", vkWaitSemaphores(device, &rt_wait_info, UINT64_MAX));
+
+		VkCommandBuffer rt_cmd_buff = vk_state.rt.cmd_buffs[frame_in_flight];
+
+		const VkCommandBufferBeginInfo rt_begin_info = {
+			.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO,
+			.flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT,
+		};
+		VK_CHECK("begin rt cmd_buff", vkBeginCommandBuffer(rt_cmd_buff, &rt_begin_info));
+
+		insert_memory_barrier(rt_cmd_buff,
+			VK_PIPELINE_STAGE_2_CLEAR_BIT, VK_ACCESS_2_TRANSFER_WRITE_BIT,
+			VK_PIPELINE_STAGE_2_RAY_TRACING_SHADER_BIT_KHR | VK_PIPELINE_STAGE_2_CLEAR_BIT, VK_ACCESS_2_SHADER_STORAGE_WRITE_BIT | VK_ACCESS_2_TRANSFER_WRITE_BIT
+		);
+		insert_memory_barrier(rt_cmd_buff,
+			VK_PIPELINE_STAGE_2_CLEAR_BIT, VK_ACCESS_2_TRANSFER_WRITE_BIT,
+			VK_PIPELINE_STAGE_2_RAY_TRACING_SHADER_BIT_KHR | VK_PIPELINE_STAGE_2_CLEAR_BIT, VK_ACCESS_2_SHADER_STORAGE_WRITE_BIT | VK_ACCESS_2_TRANSFER_WRITE_BIT
+		);
+
+		if (s == 1)
+		{
+			const VkClearColorValue clear_color = {
+				.float32 = {
+					0, 0, 0, 1,
+				},
+			};
+
+			const VkImageSubresourceRange ranges[] = {
+				{
+					.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT,
+					.levelCount = 1,
+					.layerCount = 1,
+				},
+			};
+
+			vkCmdClearColorImage(rt_cmd_buff, vk_state.rt.accum_target.image, VK_IMAGE_LAYOUT_GENERAL, &clear_color, std::size(ranges), ranges);
+			vkCmdClearColorImage(rt_cmd_buff, vk_state.rt.final_render.image, VK_IMAGE_LAYOUT_GENERAL, &clear_color, std::size(ranges), ranges);
+		}
+
+		vkCmdBindPipeline(rt_cmd_buff, VK_PIPELINE_BIND_POINT_RAY_TRACING_KHR, vk_state.rt_pipeline.pipeline);
+
+		const VkWriteDescriptorSet rt_desc_writes[] = {
+			{
+				.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
+				.dstSet = vk_state.rt.dss[frame_in_flight],
+				.descriptorCount = 1,
+				.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_IMAGE,
+				.pImageInfo = &vk_state.rt.accum_target.desc_img_info,
+			},
+			{
+				.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
+				.dstSet = vk_state.rt.dss[frame_in_flight],
+				.dstBinding = 1,
+				.descriptorCount = 1,
+				.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_IMAGE,
+				.pImageInfo = &vk_state.rt.final_render.desc_img_info,
+			},
+			{
+				.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
+				.dstSet = vk_state.rt.dss[frame_in_flight],
+				.dstBinding = 2,
+				.descriptorCount = 1,
+				.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,
+				.pBufferInfo = &vk_state.rt.rand_states.desc_info,
+			},
+		};
+
+		vkUpdateDescriptorSets(device, std::size(rt_desc_writes), rt_desc_writes, 0, nullptr);
+
+		const VkBindDescriptorSetsInfo rt_ds_bi = {
+			.sType = VK_STRUCTURE_TYPE_BIND_DESCRIPTOR_SETS_INFO,
+			.stageFlags = VK_SHADER_STAGE_RAYGEN_BIT_KHR,
+			.layout = vk_state.rt_pipeline.pipeline_layout,
+			.descriptorSetCount = 1,
+			.pDescriptorSets = &vk_state.rt.dss[frame_in_flight],
+		};
+
+		vkCmdBindDescriptorSets2(rt_cmd_buff, &rt_ds_bi);
+
+		const ray_tracing_pipeline::PushConstants rt_pc = {
+			.current_sample = s,
+		};
+
+		const VkPushConstantsInfo rt_pc_info = {
+			.sType = VK_STRUCTURE_TYPE_PUSH_CONSTANTS_INFO,
+			.layout = vk_state.rt_pipeline.pipeline_layout,
+			.stageFlags = VK_SHADER_STAGE_RAYGEN_BIT_KHR,
+			.size = sizeof(ray_tracing_pipeline::PushConstants),
+			.pValues = &rt_pc,
+		};
+
+		vkCmdPushConstants2(rt_cmd_buff, &rt_pc_info);
+
+		const VkBufferDeviceAddressInfo rg_info = {
+			.sType = VK_STRUCTURE_TYPE_BUFFER_DEVICE_ADDRESS_INFO,
+			.buffer = vk_state.rt_pipeline.rg_sbt.buffer,
+		};
+
+		const VkStridedDeviceAddressRegionKHR rg_sbt = {
+			.deviceAddress = vkGetBufferDeviceAddress(device, &rg_info),
+			.stride = vk_state.phy_dev_data.rt_props.shaderGroupHandleSize,
+			.size = vk_state.phy_dev_data.rt_props.shaderGroupHandleSize,
+		};
+
+		const VkStridedDeviceAddressRegionKHR ms_sbt = {};
+		const VkStridedDeviceAddressRegionKHR ch_sbt = {};
+		const VkStridedDeviceAddressRegionKHR cl_sbt = {};
+
+		vkCmdTraceRaysKHR(rt_cmd_buff, &rg_sbt, &ms_sbt, &ch_sbt, &cl_sbt, rt_state.dims.width, rt_state.dims.height, 1);
+
+		VK_CHECK("end rt cmd buffer", vkEndCommandBuffer(rt_cmd_buff));
+
+		const VkCommandBufferSubmitInfo rt_cmd_buff_infos[] = {
+			{
+				.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_SUBMIT_INFO,
+				.commandBuffer = rt_cmd_buff,
+			},
+		};
+
+		const VkSemaphoreSubmitInfo rt_sig_sem_infos[] = {
+			{
+				.sType = VK_STRUCTURE_TYPE_SEMAPHORE_SUBMIT_INFO,
+				.semaphore = vk_state.rt.frame_sems[frame_in_flight],
+				.value = ++vk_state.rt.frame_sem_vals[frame_in_flight],
+				.stageMask = VK_PIPELINE_STAGE_2_RAY_TRACING_SHADER_BIT_KHR,
+			},
+		};
+
+		const VkSubmitInfo2 rt_submit_infos[] = {
+			{
+				.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO_2,
+				.commandBufferInfoCount = std::size(rt_cmd_buff_infos),
+				.pCommandBufferInfos = rt_cmd_buff_infos,
+				.signalSemaphoreInfoCount = std::size(rt_sig_sem_infos),
+				.pSignalSemaphoreInfos = rt_sig_sem_infos,
+			},
+		};
+
+		VK_CHECK("submit rt commamds", vkQueueSubmit2(vk_state.device_data.cmpt_q, std::size(rt_submit_infos), rt_submit_infos, VK_NULL_HANDLE));
+
+		vk_state.rt.frame_in_flight = (frame_in_flight + 1) % vk_state.rt.max_frames_in_flight;
+	} while (++s <= vk_state.max_samples);
+
+	is_rendering = false;
+}
+
+/*
 void render()
 {
 	is_rendering = true;
@@ -363,14 +542,14 @@ void render()
 
 		VK_CHECK("end cmpt cmd buffer", vkEndCommandBuffer(cmpt_cmd_buff));
 
-		const VkSemaphoreSubmitInfo cmpt_wait_sem_infos[] = {
-			{
-				.sType = VK_STRUCTURE_TYPE_SEMAPHORE_SUBMIT_INFO,
-				.semaphore = vk_state.cmpt_swapchain_data.frame_sems[frame_in_flight],
-				.value = vk_state.cmpt_swapchain_data.frame_sem_vals[frame_in_flight],
-				.stageMask = VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT,
-			}
-		};
+		//const VkSemaphoreSubmitInfo cmpt_wait_sem_infos[] = {
+		//	{
+		//		.sType = VK_STRUCTURE_TYPE_SEMAPHORE_SUBMIT_INFO,
+		//		.semaphore = vk_state.cmpt_swapchain_data.frame_sems[frame_in_flight],
+		//		.value = vk_state.cmpt_swapchain_data.frame_sem_vals[frame_in_flight],
+		//		.stageMask = VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT,
+		//	}
+		//};
 
 		const VkCommandBufferSubmitInfo cmpt_cmd_buff_infos[] = {
 			{
@@ -391,8 +570,8 @@ void render()
 		const VkSubmitInfo2 cmpt_submit_infos[] = {
 			{
 				.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO_2,
-				.waitSemaphoreInfoCount = std::size(cmpt_wait_sem_infos),
-				.pWaitSemaphoreInfos = cmpt_wait_sem_infos,
+				//.waitSemaphoreInfoCount = std::size(cmpt_wait_sem_infos),
+				//.pWaitSemaphoreInfos = cmpt_wait_sem_infos,
 				.commandBufferInfoCount = std::size(cmpt_cmd_buff_infos),
 				.pCommandBufferInfos = cmpt_cmd_buff_infos,
 				.signalSemaphoreInfoCount = std::size(cmpt_sig_sem_infos),
@@ -407,6 +586,7 @@ void render()
 
 	is_rendering = false;
 }
+*/
 
 SDL_AppResult SDL_AppIterate(void* appstate)
 {
@@ -497,22 +677,22 @@ SDL_AppResult SDL_AppIterate(void* appstate)
 
 	vkCmdBindPipeline(gfx_cmd_buff, VK_PIPELINE_BIND_POINT_GRAPHICS, vk_state.gfx_ppln.pipe);
 
-	const VkBindDescriptorSetsInfo gfx_ds_bi = {
-		.sType = VK_STRUCTURE_TYPE_BIND_DESCRIPTOR_SETS_INFO,
-		.stageFlags = VK_SHADER_STAGE_VERTEX_BIT,
-		.layout = vk_state.gfx_ppln.lyt,
-		.descriptorSetCount = 1,
-		.pDescriptorSets = &vk_state.gfx_ppln.dss[frame_in_flight],
-	};
-
 	const VkWriteDescriptorSet gfx_desc_writes[] = {
 		{
 			.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
 			.dstSet = vk_state.gfx_ppln.dss[frame_in_flight],
 			.descriptorCount = 1,
 			.descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
-			.pImageInfo = &vk_state.cmpt_swapchain_data.final_render.desc_img_info,
+			.pImageInfo = &vk_state.rt.final_render.desc_img_info,
 		},
+	};
+
+	const VkBindDescriptorSetsInfo gfx_ds_bi = {
+		.sType = VK_STRUCTURE_TYPE_BIND_DESCRIPTOR_SETS_INFO,
+		.stageFlags = VK_SHADER_STAGE_VERTEX_BIT,
+		.layout = vk_state.gfx_ppln.lyt,
+		.descriptorSetCount = 1,
+		.pDescriptorSets = &vk_state.gfx_ppln.dss[frame_in_flight],
 	};
 
 	vkUpdateDescriptorSets(device, std::size(gfx_desc_writes), gfx_desc_writes, 0, nullptr);
@@ -671,7 +851,7 @@ SDL_AppResult SDL_AppIterate(void* appstate)
 
 	VK_CHECK("q present", vkQueuePresentKHR(vk_state.device_data.gfx_q, &present_info));
 
-	vk_state.swapchain_data.gfx_frame_in_flight = (frame_in_flight + 1) % vk_state.swapchain_data.max_frames_in_flight;
+	vk_state.swapchain_data.frame_in_flight = (frame_in_flight + 1) % vk_state.swapchain_data.max_frames_in_flight;
 
 	if (imgui_state.should_be_rendering)
 	{
@@ -691,7 +871,7 @@ SDL_AppResult SDL_AppIterate(void* appstate)
 
 			VK_CHECK("device wait", vkDeviceWaitIdle(device));
 
-			cmpt_swapchain::recreate_render_targets(vk_state.cmpt_swapchain_data, device, { rt_state.dims.width, rt_state.dims.height, 1 }, vk_state.allocator, { vk_state.phy_dev_data.cmpt_q_fly_idx, vk_state.phy_dev_data.gfx_q_fly_idx, vk_state.phy_dev_data.xfer_q_fly_idx }, vk_state.xfer_cmd_pool_data.cmd_buffs[0], vk_state.device_data.xfer_q);
+			ray_tracer_recreate_render_targets(vk_state.rt, device, { rt_state.dims.width, rt_state.dims.height, 1 }, vk_state.allocator, { vk_state.phy_dev_data.cmpt_q_fly_idx, vk_state.phy_dev_data.gfx_q_fly_idx, vk_state.phy_dev_data.xfer_q_fly_idx }, vk_state.xfer_cmd_pool_data.cmd_buffs[0], vk_state.device_data.xfer_q);
 
 			vk_state.curr_sample = 1;
 		}
@@ -700,12 +880,12 @@ SDL_AppResult SDL_AppIterate(void* appstate)
 
 		if (!is_rendering)
 		{
-			render_thread = std::thread(render);
-			render_thread.detach();
+			ray_trace_thread = std::thread(ray_trace);
+			ray_trace_thread.detach();
 		}
 	}
 
-	VK_CHECK("wait gfx q", vkQueueWaitIdle(vk_state.device_data.gfx_q));
+	VK_CHECK("wait gfx q", vkQueueWaitIdle(vk_state.device_data.gfx_q)); // Comment this line if using the gfx_frame_in_flight index
 
 	return SDL_APP_CONTINUE;
 }

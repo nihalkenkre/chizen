@@ -3,6 +3,7 @@
 extern "C" PFN_vkSetDebugUtilsObjectNameEXT vk_SetDebugUtilsObjectNameEXT = nullptr;
 extern "C" PFN_vkGetRayTracingShaderGroupHandlesKHR vk_GetRayTracingShaderGroupHandlesKHR = nullptr;
 extern "C" PFN_vkCreateRayTracingPipelinesKHR vk_CreateRayTracingPipelinesKHR = nullptr;
+extern "C" PFN_vkCmdTraceRaysKHR vk_CmdTraceRaysKHR = nullptr;
 
 VKAPI_ATTR VkResult VKAPI_CALL vkSetDebugUtilsObjectNameEXT(
 	VkDevice                                    device,
@@ -21,6 +22,11 @@ VKAPI_ATTR VkResult VKAPI_CALL vkCreateRayTracingPipelinesKHR(VkDevice device, V
 	return vk_CreateRayTracingPipelinesKHR(device, deferredOperation, pipelineCache, createInfoCount, pCreateInfos, pAllocator, pPipelines);
 }
 
+VKAPI_ATTR void VKAPI_CALL vkCmdTraceRaysKHR(VkCommandBuffer commandBuffer, const VkStridedDeviceAddressRegionKHR* pRaygenShaderBindingTable, const VkStridedDeviceAddressRegionKHR* pMissShaderBindingTable, const VkStridedDeviceAddressRegionKHR* pHitShaderBindingTable, const VkStridedDeviceAddressRegionKHR* pCallableShaderBindingTable, uint32_t width, uint32_t height, uint32_t depth)
+{
+	return vk_CmdTraceRaysKHR(commandBuffer, pRaygenShaderBindingTable, pMissShaderBindingTable, pHitShaderBindingTable, pCallableShaderBindingTable, width, height, depth);
+}
+
 #define VK_CHECK(action, result)						\
 	if (result != VK_SUCCESS)							\
 	{															\
@@ -31,6 +37,11 @@ VKAPI_ATTR VkResult VKAPI_CALL vkCreateRayTracingPipelinesKHR(VkDevice device, V
 	if (result != SLANG_OK)								\
 {																\
 	std::printf("%s %d\n", action, result);		\
+}
+
+inline static VkDeviceSize ALIGNED_SIZE(VkDeviceSize size, VkDeviceSize alignment)
+{
+	return (size + alignment - 1) & ~(alignment - 1);
 }
 
 void copy_buffer_to_buffer(const VkCommandBuffer xfer_cmd_buff, const VkQueue xfer_q, const VkBuffer src_buffer, const VkBuffer dst_buffer, const VkDeviceSize size)
@@ -496,6 +507,7 @@ namespace vk_device
 
 		vk_GetRayTracingShaderGroupHandlesKHR = reinterpret_cast<PFN_vkGetRayTracingShaderGroupHandlesKHR>(vkGetDeviceProcAddr(d.device, "vkGetRayTracingShaderGroupHandlesKHR"));
 		vk_CreateRayTracingPipelinesKHR = reinterpret_cast<PFN_vkCreateRayTracingPipelinesKHR>(vkGetDeviceProcAddr(d.device, "vkCreateRayTracingPipelinesKHR"));
+		vk_CmdTraceRaysKHR = reinterpret_cast<PFN_vkCmdTraceRaysKHR>(vkGetDeviceProcAddr(d.device, "vkCmdTraceRaysKHR"));
 
 		VkDeviceQueueInfo2 queue_info = {
 			.sType = VK_STRUCTURE_TYPE_DEVICE_QUEUE_INFO_2,
@@ -924,13 +936,30 @@ namespace vk_graphics_pipeline
 		Slang::ComPtr<slang::IGlobalSession> slang_global_session;
 		SLANG_CHECK("create global session", slang::createGlobalSession(slang_global_session.writeRef()));
 
-		slang::TargetDesc target_desc = {
-			.format = SLANG_SPIRV,
-			.profile = slang_global_session->findProfile("spirv_1_6"),
+		const slang::TargetDesc target_descs[] = {
+			{
+				.format = SLANG_SPIRV,
+				.profile = slang_global_session->findProfile("spirv_1_6"),
+			}
 		};
+
+#ifdef _DEBUG
+		slang::CompilerOptionEntry compiler_options[] = {
+			{
+				.name = slang::CompilerOptionName::DebugInformation,
+				.value = {
+					.kind = slang::CompilerOptionValueKind::Int,
+					.intValue0 = SLANG_DEBUG_INFO_LEVEL_MAXIMAL,
+				}
+			},
+		};
+#endif	// _DEBUG
+
 		slang::SessionDesc session_desc = {
-			.targets = &target_desc,
-			.targetCount = 1,
+			.targets = target_descs,
+			.targetCount = std::size(target_descs),
+			.compilerOptionEntries = compiler_options,
+			.compilerOptionEntryCount = std::size(compiler_options),
 		};
 
 		Slang::ComPtr<slang::ISession> compile_session;
@@ -1662,7 +1691,7 @@ namespace vk_swapchain
 
 		uint8_t max_frames_in_flight = 0;
 		uint32_t sc_image_count = 0;
-		uint8_t gfx_frame_in_flight = 0;
+		uint8_t frame_in_flight = 0;
 	};
 
 	data create(const VkDevice device, const vk_surface::data& surface, const uint32_t gfx_q_fly_idx, const VkSwapchainKHR old_swapchain, const std::string& name)
@@ -1925,18 +1954,20 @@ namespace vk_fence
 	}
 }
 
-
 struct ray_tracing_pipeline
 {
-	struct PushContanst
+	struct PushConstants
 	{
-		uint32_t current_sample;
+		uint32_t current_sample = 0;
 	};
 
 	VkPipeline pipeline = VK_NULL_HANDLE;
 	VkPipelineLayout pipeline_layout = VK_NULL_HANDLE;
 	std::vector<VkDescriptorSetLayout> desc_set_layouts;
 	vk_buffer::data rg_sbt = {};
+	vk_buffer::data ms_sbt = {};
+	vk_buffer::data ch_sbt = {};
+	vk_buffer::data cl_sbt = {};
 };
 
 ray_tracing_pipeline ray_tracing_pipeline_create(const VkDevice device, const VmaAllocator allocator, const std::string& current_path, const VkPhysicalDeviceRayTracingPipelinePropertiesKHR& ray_tracing_props, const std::string& name)
@@ -1947,17 +1978,36 @@ ray_tracing_pipeline ray_tracing_pipeline_create(const VkDevice device, const Vm
 	Slang::ComPtr<slang::IGlobalSession> slang_global_session;
 	SLANG_CHECK("create global session", slang::createGlobalSession(slang_global_session.writeRef()));
 
-	slang::TargetDesc target_desc = {
-		.format = SLANG_SPIRV,
-		.profile = slang_global_session->findProfile("spirv_1_6"),
+	const slang::TargetDesc target_descs[] = {
+		{
+			.format = SLANG_SPIRV,
+			.profile = slang_global_session->findProfile("spirv_1_6"),
+		}
 	};
-	slang::SessionDesc session_desc = {
-		.targets = &target_desc,
-		.targetCount = 1,
+
+#ifdef _DEBUG
+	slang::CompilerOptionEntry compiler_options[] = {
+		{
+			.name = slang::CompilerOptionName::DebugInformation,
+			.value = {
+				.kind = slang::CompilerOptionValueKind::Int,
+				.intValue0 = SLANG_DEBUG_INFO_LEVEL_MAXIMAL,
+			},
+		}
+	};
+#endif	// _DEBUG
+
+	slang::SessionDesc compile_session_desc = {
+		.targets = target_descs,
+		.targetCount = std::size(target_descs),
+#ifdef _DEBUG
+		.compilerOptionEntries = compiler_options,
+		.compilerOptionEntryCount = std::size(compiler_options),
+#endif	// _DEBUG
 	};
 
 	Slang::ComPtr<slang::ISession> compile_session;
-	SLANG_CHECK("create compile session", slang_global_session->createSession(session_desc, compile_session.writeRef()));
+	SLANG_CHECK("create compile session", slang_global_session->createSession(compile_session_desc, compile_session.writeRef()));
 
 	const std::string slang_shader_path = std::string(current_path).append("/shaders/slang/raytrace.slang");
 
@@ -1980,9 +2030,9 @@ ray_tracing_pipeline ray_tracing_pipeline_create(const VkDevice device, const Vm
 	diagnostic_blob.setNull();
 	SLANG_CHECK("create program", compile_session->createCompositeComponentType(rg_component_types.data(), rg_component_types.size(), rg_composed_program.writeRef(), diagnostic_blob.writeRef()));
 
-	Slang::ComPtr<slang::IComponentType> linked_program;
+	Slang::ComPtr<slang::IComponentType> rg_linked_program;
 	diagnostic_blob.setNull();
-	SLANG_CHECK("link program", rg_composed_program->link(linked_program.writeRef(), diagnostic_blob.writeRef()));
+	SLANG_CHECK("link program", rg_composed_program->link(rg_linked_program.writeRef(), diagnostic_blob.writeRef()));
 
 	Slang::ComPtr<slang::IBlob> rg_spirv_code;
 	diagnostic_blob.setNull();
@@ -1997,6 +2047,62 @@ ray_tracing_pipeline ray_tracing_pipeline_create(const VkDevice device, const Vm
 	VkShaderModule rg_mod = VK_NULL_HANDLE;
 	VK_CHECK("create shader module", vkCreateShaderModule(device, &rg_mod_ci, nullptr, &rg_mod));
 
+	Slang::ComPtr<slang::IEntryPoint> ms_entry_point;
+	slang_module->findEntryPointByName("miss", ms_entry_point.writeRef());
+
+	std::array<slang::IComponentType*, 2> ms_component_types = {
+		slang_module, ms_entry_point
+	};
+
+	Slang::ComPtr<slang::IComponentType> ms_composed_program;
+	diagnostic_blob.setNull();
+	SLANG_CHECK("create program", compile_session->createCompositeComponentType(ms_component_types.data(), ms_component_types.size(), ms_composed_program.writeRef(), diagnostic_blob.writeRef()));
+
+	Slang::ComPtr<slang::IComponentType> ms_linked_program;
+	diagnostic_blob.setNull();
+	SLANG_CHECK("link program", ms_composed_program->link(ms_linked_program.writeRef(), diagnostic_blob.writeRef()));
+
+	Slang::ComPtr<slang::IBlob> ms_spirv_code;
+	diagnostic_blob.setNull();
+	SLANG_CHECK("get spirv code", ms_composed_program->getEntryPointCode(0, 0, ms_spirv_code.writeRef(), diagnostic_blob.writeRef()));
+
+	const VkShaderModuleCreateInfo ms_mod_ci = {
+		.sType = VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO,
+		.codeSize = ms_spirv_code->getBufferSize(),
+		.pCode = reinterpret_cast<const uint32_t*>(ms_spirv_code->getBufferPointer()),
+	};
+
+	VkShaderModule ms_mod = VK_NULL_HANDLE;
+	VK_CHECK("create shader module", vkCreateShaderModule(device, &ms_mod_ci, nullptr, &ms_mod));
+
+	Slang::ComPtr<slang::IEntryPoint> ch_entry_point;
+	slang_module->findEntryPointByName("closesthit", ch_entry_point.writeRef());
+
+	std::array<slang::IComponentType*, 2> ch_component_types = {
+		slang_module, ch_entry_point
+	};
+
+	Slang::ComPtr<slang::IComponentType> ch_composed_program;
+	diagnostic_blob.setNull();
+	SLANG_CHECK("create program", compile_session->createCompositeComponentType(ch_component_types.data(), ch_component_types.size(), ch_composed_program.writeRef(), diagnostic_blob.writeRef()));
+
+	Slang::ComPtr<slang::IComponentType> ch_linked_program;
+	diagnostic_blob.setNull();
+	SLANG_CHECK("link program", ch_composed_program->link(ch_linked_program.writeRef(), diagnostic_blob.writeRef()));
+
+	Slang::ComPtr<slang::IBlob> ch_spirv_code;
+	diagnostic_blob.setNull();
+	SLANG_CHECK("get spirv code", ch_composed_program->getEntryPointCode(0, 0, ch_spirv_code.writeRef(), diagnostic_blob.writeRef()));
+
+	const VkShaderModuleCreateInfo ch_mod_ci = {
+		.sType = VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO,
+		.codeSize = ch_spirv_code->getBufferSize(),
+		.pCode = reinterpret_cast<const uint32_t*>(ch_spirv_code->getBufferPointer()),
+	};
+
+	VkShaderModule ch_mod = VK_NULL_HANDLE;
+	VK_CHECK("create shader module", vkCreateShaderModule(device, &ch_mod_ci, nullptr, &ch_mod));
+
 	const VkDescriptorSetLayoutBinding bindings[] = {
 		{
 			.binding = 0,
@@ -2010,6 +2116,12 @@ ray_tracing_pipeline ray_tracing_pipeline_create(const VkDevice device, const Vm
 			.descriptorCount = 1,
 			.stageFlags = VK_SHADER_STAGE_RAYGEN_BIT_KHR,
 		},
+		{
+			.binding = 2,
+			.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,
+			.descriptorCount = 1,
+			.stageFlags = VK_SHADER_STAGE_RAYGEN_BIT_KHR,
+		}
 	};
 
 	const VkDescriptorSetLayoutCreateInfo dsl_ci = {
@@ -2023,7 +2135,7 @@ ray_tracing_pipeline ray_tracing_pipeline_create(const VkDevice device, const Vm
 	const VkPushConstantRange pc_ranges[] = {
 		{
 			.stageFlags = VK_SHADER_STAGE_RAYGEN_BIT_KHR,
-			.size = sizeof(ray_tracing_pipeline::PushContanst),
+			.size = sizeof(ray_tracing_pipeline::PushConstants),
 		},
 	};
 
@@ -2044,14 +2156,42 @@ ray_tracing_pipeline ray_tracing_pipeline_create(const VkDevice device, const Vm
 			.module = rg_mod,
 			.pName = "main",
 		},
+		{
+			.sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO,
+			.stage = VK_SHADER_STAGE_MISS_BIT_KHR,
+			.module = ms_mod,
+			.pName = "main",
+		},
+		{
+			.sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO,
+			.stage = VK_SHADER_STAGE_CLOSEST_HIT_BIT_KHR,
+			.module = ch_mod,
+			.pName = "main",
+		},
 	};
 
-	VkRayTracingShaderGroupCreateInfoKHR shader_groups[] = {
+	const VkRayTracingShaderGroupCreateInfoKHR shader_groups[] = {
 		{
 			.sType = VK_STRUCTURE_TYPE_RAY_TRACING_SHADER_GROUP_CREATE_INFO_KHR,
 			.type = VK_RAY_TRACING_SHADER_GROUP_TYPE_GENERAL_KHR,
 			.generalShader = 0,
 			.closestHitShader = VK_SHADER_UNUSED_KHR,
+			.anyHitShader = VK_SHADER_UNUSED_KHR,
+			.intersectionShader = VK_SHADER_UNUSED_KHR,
+		},
+		{
+			.sType = VK_STRUCTURE_TYPE_RAY_TRACING_SHADER_GROUP_CREATE_INFO_KHR,
+			.type = VK_RAY_TRACING_SHADER_GROUP_TYPE_GENERAL_KHR,
+			.generalShader = 1,
+			.closestHitShader = VK_SHADER_UNUSED_KHR,
+			.anyHitShader = VK_SHADER_UNUSED_KHR,
+			.intersectionShader = VK_SHADER_UNUSED_KHR,
+		},
+		{
+			.sType = VK_STRUCTURE_TYPE_RAY_TRACING_SHADER_GROUP_CREATE_INFO_KHR,
+			.type = VK_RAY_TRACING_SHADER_GROUP_TYPE_TRIANGLES_HIT_GROUP_KHR,
+			.generalShader = VK_SHADER_UNUSED_KHR,
+			.closestHitShader = 2,
 			.anyHitShader = VK_SHADER_UNUSED_KHR,
 			.intersectionShader = VK_SHADER_UNUSED_KHR,
 		},
@@ -2068,22 +2208,44 @@ ray_tracing_pipeline ray_tracing_pipeline_create(const VkDevice device, const Vm
 			.layout = rt_pipeline.pipeline_layout,
 		},
 	};
+
 	VK_CHECK("create rt pipeline", vkCreateRayTracingPipelinesKHR(device, VK_NULL_HANDLE, VK_NULL_HANDLE, std::size(create_infos), create_infos, nullptr, &rt_pipeline.pipeline));
 
-	const uint32_t sbt_size = ray_tracing_props.shaderGroupHandleSize;
+	const uint32_t aligned_handle_size = static_cast<uint32_t>(ALIGNED_SIZE(ray_tracing_props.shaderGroupHandleSize, ray_tracing_props.shaderGroupHandleAlignment));
+	const uint32_t sbt_size = aligned_handle_size * std::size(shader_groups);
 
 	std::vector<uint8_t> shader_handle_storage(sbt_size);
-	VK_CHECK("get rt shader handles", vkGetRayTracingShaderGroupHandlesKHR(device, rt_pipeline.pipeline, 0, 1, sbt_size, shader_handle_storage.data()));
+	VK_CHECK("get rt shader handles", vkGetRayTracingShaderGroupHandlesKHR(device, rt_pipeline.pipeline, 0, std::size(shader_groups), sbt_size, shader_handle_storage.data()));
 
 	rt_pipeline.rg_sbt = vk_buffer::create(
-		device, allocator, ray_tracing_props.shaderGroupHandleSize,
+		device, allocator, aligned_handle_size,
 		VK_BUFFER_USAGE_SHADER_BINDING_TABLE_BIT_KHR | VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT,
 		VMA_ALLOCATION_CREATE_HOST_ACCESS_SEQUENTIAL_WRITE_BIT | VMA_ALLOCATION_CREATE_MAPPED_BIT,
 		VMA_MEMORY_USAGE_AUTO_PREFER_HOST, "rb sbt");
+	//rt_pipeline.ms_sbt = vk_buffer::create(
+	//	device, allocator, aligned_handle_size,
+	//	VK_BUFFER_USAGE_SHADER_BINDING_TABLE_BIT_KHR | VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT,
+	//	VMA_ALLOCATION_CREATE_HOST_ACCESS_SEQUENTIAL_WRITE_BIT | VMA_ALLOCATION_CREATE_MAPPED_BIT,
+	//	VMA_MEMORY_USAGE_AUTO_PREFER_HOST, "ms sbt");
+	//rt_pipeline.ch_sbt = vk_buffer::create(
+	//	device, allocator, aligned_handle_size,
+	//	VK_BUFFER_USAGE_SHADER_BINDING_TABLE_BIT_KHR | VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT,
+	//	VMA_ALLOCATION_CREATE_HOST_ACCESS_SEQUENTIAL_WRITE_BIT | VMA_ALLOCATION_CREATE_MAPPED_BIT,
+	//	VMA_MEMORY_USAGE_AUTO_PREFER_HOST, "ch sbt");
+	//rt_pipeline.cl_sbt = vk_buffer::create(
+	//	device, allocator, ray_tracing_props.shaderGroupHandleSize,
+	//	VK_BUFFER_USAGE_SHADER_BINDING_TABLE_BIT_KHR | VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT,
+	//	VMA_ALLOCATION_CREATE_HOST_ACCESS_SEQUENTIAL_WRITE_BIT | VMA_ALLOCATION_CREATE_MAPPED_BIT,
+	//	VMA_MEMORY_USAGE_AUTO_PREFER_HOST, "cl sbt");
 
-	memcpy(rt_pipeline.rg_sbt.alloc_info.pMappedData, shader_handle_storage.data(), ray_tracing_props.shaderGroupHandleSize);
+	memcpy(reinterpret_cast<uint8_t*>(rt_pipeline.rg_sbt.alloc_info.pMappedData), shader_handle_storage.data(), ray_tracing_props.shaderGroupHandleSize);
+	//memcpy(reinterpret_cast<uint8_t*>(rt_pipeline.ms_sbt.alloc_info.pMappedData), shader_handle_storage.data() + aligned_handle_size, ray_tracing_props.shaderGroupHandleSize);
+	//memcpy(reinterpret_cast<uint8_t*>(rt_pipeline.rg_sbt.alloc_info.pMappedData), shader_handle_storage.data() + (aligned_handle_size * 2), ray_tracing_props.shaderGroupHandleSize);
+	//memcpy(reinterpret_cast<uint8_t*>(rt_pipeline.rg_sbt.alloc_info.pMappedData) + (aligned_handle_size * 3), shader_handle_storage.data() + (aligned_handle_size * 3), ray_tracing_props.shaderGroupHandleSize);
 
 	vkDestroyShaderModule(device, rg_mod, nullptr);
+	vkDestroyShaderModule(device, ms_mod, nullptr);
+	vkDestroyShaderModule(device, ch_mod, nullptr);
 
 	return rt_pipeline;
 }
@@ -2099,6 +2261,8 @@ void ray_tracing_pipeline_destroy(ray_tracing_pipeline rt_pipeline, const VmaAll
 			vkDestroyDescriptorSetLayout(device, dsl, nullptr);
 
 		vk_buffer::destroy(rt_pipeline.rg_sbt, allocator, device);
+		vk_buffer::destroy(rt_pipeline.ms_sbt, allocator, device);
+		vk_buffer::destroy(rt_pipeline.ch_sbt, allocator, device);
 	}
 }
 
@@ -2109,6 +2273,9 @@ struct ray_tracer
 	std::vector<VkCommandBuffer> cmd_buffs;
 	std::vector<VkSemaphore> frame_sems;
 	std::vector<uint64_t> frame_sem_vals;
+
+	VkDescriptorPool dsp = VK_NULL_HANDLE;
+	std::vector<VkDescriptorSet> dss;
 
 	uint8_t frame_in_flight = 0;
 	uint8_t max_frames_in_flight = 5;
@@ -2192,13 +2359,14 @@ void ray_tracer_initialize_resources(ray_tracer& rt_pipeline, const VkDevice dev
 	vk_buffer::destroy(staging_buffer, allocator, device);
 }
 
-ray_tracer ray_tracer_create(const VkDevice device, const VkExtent3D& extent, const VmaAllocator& allocator, const std::string& current_path, const uint32_t q_fly_idx, const std::vector<uint32_t>& q_fly_idxs, const VkCommandBuffer xfer_cmd_buff, const VkQueue xfer_q, const std::string& name)
+ray_tracer ray_tracer_create(const VkDevice device, const VkExtent3D& extent, const VmaAllocator& allocator, const std::string& current_path, const uint32_t q_fly_idx, const std::vector<uint32_t>& q_fly_idxs, const VkCommandBuffer xfer_cmd_buff, const VkQueue xfer_q, const VkDescriptorSetLayout& dsl, const std::string& name)
 {
 	ray_tracer d = {};
 
 	d.cmd_buffs.resize(d.max_frames_in_flight);
 	d.frame_sems.resize(d.max_frames_in_flight);
 	d.frame_sem_vals.resize(d.max_frames_in_flight, 1);
+	d.dss.resize(d.max_frames_in_flight);
 
 	const VkCommandPoolCreateInfo cmd_pool_ci = {
 		.sType = VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO,
@@ -2243,6 +2411,34 @@ ray_tracer ray_tracer_create(const VkDevice device, const VkExtent3D& extent, co
 	d.accum_target = vk_image::create(device, extent, VK_FORMAT_R32G32B32A32_SFLOAT, VK_IMAGE_USAGE_STORAGE_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT, allocator, 0, "accum target", q_fly_idxs);
 	d.final_render = vk_image::create(device, extent, VK_FORMAT_R32G32B32A32_SFLOAT, VK_IMAGE_USAGE_STORAGE_BIT | VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT, allocator, 0, "final target", q_fly_idxs);
 	d.rand_states = vk_buffer::create(device, allocator, sizeof(uint32_t) * 4 * extent.width * extent.height, VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_STORAGE_BUFFER_BIT, 0, VMA_MEMORY_USAGE_AUTO_PREFER_DEVICE, "rand states");
+
+	const VkDescriptorPoolSize pool_sizes[] = {
+		{
+			.type = VK_DESCRIPTOR_TYPE_STORAGE_IMAGE,
+			.descriptorCount = 1,
+		},
+	};
+
+	const VkDescriptorPoolCreateInfo dp_ci = {
+		.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO,
+		.maxSets = d.max_frames_in_flight,
+		.poolSizeCount = std::size(pool_sizes),
+		.pPoolSizes = pool_sizes,
+	};
+
+	VK_CHECK("create dsp", vkCreateDescriptorPool(device, &dp_ci, nullptr, &d.dsp));
+
+	const VkDescriptorSetAllocateInfo ds_ai = {
+		.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO,
+		.descriptorPool = d.dsp,
+		.descriptorSetCount = 1,
+		.pSetLayouts = &dsl,
+	};
+
+	for (uint8_t fr = 0; fr < d.max_frames_in_flight; ++fr)
+	{
+		VK_CHECK("allocate ds", vkAllocateDescriptorSets(device, &ds_ai, &d.dss[fr]));
+	}
 
 	ray_tracer_initialize_resources(d, device, allocator, extent, xfer_cmd_buff, xfer_q);
 
@@ -2299,6 +2495,8 @@ void ray_tracer_destroy(ray_tracer rt, const VmaAllocator& allocator, const VkDe
 
 		for (auto& sem : rt.frame_sems)
 			vkDestroySemaphore(device, sem, nullptr);
+
+		vkDestroyDescriptorPool(device, rt.dsp, nullptr);
 
 		vk_image::destroy(rt.accum_target, allocator, device);
 		vk_image::destroy(rt.final_render, allocator, device);
