@@ -1,62 +1,178 @@
-#include "vk_objects.hpp"
+//#include "vk_objects.hpp"
+#include "app.hpp"
+#include "utils.hpp"
 
 #define VMA_IMPLEMENTATION
 #include <vma/vk_mem_alloc.h>
 
-struct VulkanState
+//struct VulkanState
+//{
+//	VkInstance instance = VK_NULL_HANDLE;
+//	VmaAllocator allocator = VK_NULL_HANDLE;
+//	vk_surface::data surface_data = {};
+//	vk_phydev::data phy_dev_data = {};
+//	vk_device::data device_data = {};
+//	vk_swapchain::data swapchain_data = {};
+//	cmpt_swapchain::data cmpt_swapchain_data = {};
+//	vk_command_pool::data xfer_cmd_pool_data = {};
+//	float clear_color[4] = { 0,0,0,0 };
+//	VkDescriptorPool imgui_pool = VK_NULL_HANDLE;
+//	vk_graphics_pipeline::data gfx_ppln = {};
+//	vk_buffer::data geom_buffer = {};
+//	uint32_t max_samples = 1024;
+//	uint32_t curr_sample = 1;
+//
+//	ray_tracing_pipeline rt_pipeline = {};
+//	ray_tracer rt = {};
+//};
+//
+//struct ImGuiState
+//{
+//	int tmp_render_dims[2] = { 1280, 720 };
+//	int tmp_max_samples = 1024;
+//	bool should_be_rendering = false;
+//};
+//
+//struct RenderTargetState
+//{
+//	VkExtent2D dims = { 1280, 720 };
+//	float zoom_level = 1;
+//};
+//
+//SDL_Window* window = nullptr;
+//std::string current_path;
+//VulkanState vk_state = {};
+//float delta_mouse[2];
+//RenderTargetState rt_state = {};
+//float last_mouse_pos[2];
+//ImGuiState imgui_state = {};
+//std::thread ray_trace_thread;
+//bool mouse_motion_tracking = false;
+//bool is_rendering = false;
+//bool should_stop_rendering = false;
+//bool is_app_shutting_down = false;
+
+SDL_AppResult SDL_AppInit(void** appstate, int argc, char** argv)
 {
-	VkInstance instance = VK_NULL_HANDLE;
-	VmaAllocator allocator = VK_NULL_HANDLE;
-	vk_surface::data surface_data = {};
-	vk_phydev::data phy_dev_data = {};
-	vk_device::data device_data = {};
-	vk_swapchain::data swapchain_data = {};
-	cmpt_swapchain::data cmpt_swapchain_data = {};
-	vk_command_pool::data xfer_cmd_pool_data = {};
-	float clear_color[4] = { 0,0,0,0 };
-	VkDescriptorPool imgui_pool = VK_NULL_HANDLE;
-	vk_graphics_pipeline::data gfx_ppln = {};
-	vk_buffer::data geom_buffer = {};
-	uint32_t max_samples = 1024;
-	uint32_t curr_sample = 1;
+	SDL_CHECK(SDL_Init(SDL_INIT_VIDEO));
 
-	ray_tracing_pipeline rt_pipeline = {};
-	ray_tracer rt = {};
-};
+	SDL_Window* window = SDL_CreateWindow("Chizen", 1280, 720, SDL_WINDOW_RESIZABLE | SDL_WINDOW_VULKAN);
 
-struct ImGuiState
-{
-	int tmp_render_dims[2] = { 1280, 720 };
-	int tmp_max_samples = 1024;
-	bool should_be_rendering = false;
-};
-
-struct RenderTargetState
-{
-	VkExtent2D dims = { 1280, 720 };
-	float zoom_level = 1;
-};
-
-SDL_Window* window = nullptr;
-std::string current_path;
-VulkanState vk_state = {};
-float delta_mouse[2];
-RenderTargetState rt_state = {};
-float last_mouse_pos[2];
-ImGuiState imgui_state = {};
-std::thread ray_trace_thread;
-bool mouse_motion_tracking = false;
-bool is_rendering = false;
-bool should_stop_rendering = false;
-bool is_app_shutting_down = false;
-
-#define SDL_CHECK(result)						\
-	if (!result) {									\
-		SDL_Log("%s\n", SDL_GetError());		\
-		return SDL_APP_FAILURE;					\
+	if (window == nullptr)
+	{
+		SDL_Log("%s\n", SDL_GetError());
+		return SDL_APP_FAILURE;
 	}
 
+	//static App app(window);
+	static App app = App_Create(window, std::filesystem::path(std::string(argv[0])).parent_path().string());
+	*appstate = &app;
 
+	SDL_CHECK(ImGui_ImplSDL3_InitForVulkan(window));
+
+	return SDL_APP_CONTINUE;
+}
+
+SDL_AppResult SDL_AppEvent(void* appstate, SDL_Event* event)
+{
+	App* app = reinterpret_cast<App*>(appstate);
+
+	ImGui_ImplSDL3_ProcessEvent(event);
+	ImGuiIO& io = ImGui::GetIO();
+
+	if (SDL_GetWindowFlags(app->Window) & SDL_WINDOW_MINIMIZED)
+	{
+		return SDL_APP_CONTINUE;
+	}
+
+	if (event->type == SDL_EVENT_QUIT)
+	{
+		return SDL_APP_SUCCESS;
+	}
+	else if (event->type == SDL_EVENT_MOUSE_BUTTON_DOWN)
+	{
+		if (!io.WantCaptureMouse)
+		{
+			app->IsTrackingMouse = true;
+
+			app->LastMousePosition[0] = event->motion.x;
+			app->LastMousePosition[1] = event->motion.y;
+		}
+	}
+	else if (event->type == SDL_EVENT_MOUSE_MOTION)
+	{
+		if (!io.WantCaptureMouse)
+		{
+			if (app->IsTrackingMouse)
+			{
+				app->DeltaMousePosition[0] += ((app->LastMousePosition[0] - event->motion.x) / static_cast<float>(app->VulkanInterface.SurfaceData.SurfaceCapabilities.surfaceCapabilities.currentExtent.width)) * 2;
+				app->DeltaMousePosition[1] += ((app->LastMousePosition[1] - event->motion.y) / static_cast<float>(app->VulkanInterface.SurfaceData.SurfaceCapabilities.surfaceCapabilities.currentExtent.height)) * 2;
+
+				app->LastMousePosition[0] = event->motion.x;
+				app->LastMousePosition[1] = event->motion.y;
+			}
+		}
+	}
+	else if (event->type == SDL_EVENT_MOUSE_BUTTON_UP)
+	{
+		if (!io.WantCaptureMouse)
+		{
+			app->LastMousePosition[0] = 0;
+			app->LastMousePosition[1] = 0;
+
+			app->IsTrackingMouse = false;
+		}
+	}
+	else if (event->type == SDL_EVENT_MOUSE_WHEEL)
+	{
+		app->ZoomLevel = std::max(0.01f, app->ZoomLevel + event->wheel.y / 20.f);
+	}
+
+	return SDL_APP_CONTINUE;
+}
+
+SDL_AppResult SDL_AppIterate(void* appstate)
+{
+	App* app = reinterpret_cast<App*>(appstate);
+
+	if (SDL_GetWindowFlags(app->Window) & SDL_WINDOW_MINIMIZED)
+	{
+		return SDL_APP_CONTINUE;
+	}
+
+	if (app->ImGUIState.StartRaytracing)
+	{
+		if (app->IsRaytracing) App_StopRaytracing(app);
+
+		if (app->RenderTargetExtent.width != app->ImGUIState.TempRenderTargetExtent[0] ||
+			app->RenderTargetExtent.height != app->ImGUIState.TempRenderTargetExtent[1])
+		{
+			app->RenderTargetExtent.width = app->ImGUIState.TempRenderTargetExtent[0];
+			app->RenderTargetExtent.height = app->ImGUIState.TempRenderTargetExtent[1];
+			App_RecreateRenderTarget(app);
+		}
+		
+		if (app->MaxSamples != app->ImGUIState.TempMaxSamples)
+		{
+			app->MaxSamples = app->ImGUIState.TempMaxSamples;
+		}
+
+		App_Raytrace(app);
+	}
+
+	App_Display(app);
+
+	return SDL_APP_CONTINUE;
+}
+
+void SDL_AppQuit(void* appstate, SDL_AppResult result)
+{
+	App* app = reinterpret_cast<App*>(appstate);
+
+	App_Destroy(app);
+}
+
+/*
 SDL_AppResult SDL_AppInit(void** appstate, int argc, char** argv)
 {
 	current_path = std::filesystem::path(std::string(argv[0])).parent_path().string();
@@ -97,9 +213,9 @@ SDL_AppResult SDL_AppInit(void** appstate, int argc, char** argv)
 
 	vk_state.gfx_ppln = vk_graphics_pipeline::create(vk_state.device_data.device, current_path, vk_state.surface_data.format.format, vk_state.swapchain_data.max_frames_in_flight, "graphics pipeline");
 	vk_state.rt_pipeline = ray_tracing_pipeline_create(vk_state.device_data.device, vk_state.allocator, current_path, vk_state.phy_dev_data.rt_props, "rt pipeline");
-	vk_state.rt = ray_tracer_create(vk_state.device_data.device, 
-		{ rt_state.dims.width, rt_state.dims.height, 1 }, vk_state.allocator, current_path, vk_state.phy_dev_data.cmpt_q_fly_idx, 
-		{ vk_state.phy_dev_data.cmpt_q_fly_idx, vk_state.phy_dev_data.gfx_q_fly_idx, vk_state.phy_dev_data.xfer_q_fly_idx }, 
+	vk_state.rt = ray_tracer_create(vk_state.device_data.device,
+		{ rt_state.dims.width, rt_state.dims.height, 1 }, vk_state.allocator, current_path, vk_state.phy_dev_data.cmpt_q_fly_idx,
+		{ vk_state.phy_dev_data.cmpt_q_fly_idx, vk_state.phy_dev_data.gfx_q_fly_idx, vk_state.phy_dev_data.xfer_q_fly_idx },
 		vk_state.xfer_cmd_pool_data.cmd_buffs[0], vk_state.device_data.xfer_q, vk_state.rt_pipeline.desc_set_layouts[0], "rt");
 
 	float verts[] = {
@@ -115,12 +231,12 @@ SDL_AppResult SDL_AppInit(void** appstate, int argc, char** argv)
 
 	size_t verts_size = std::size(verts) * sizeof(float);
 
-	vk_state.geom_buffer = vk_buffer::create(vk_state.device_data.device, vk_state.allocator, verts_size, 
-		VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_INDEX_BUFFER_BIT | VK_BUFFER_USAGE_VERTEX_BUFFER_BIT, 
+	vk_state.geom_buffer = vk_buffer::create(vk_state.device_data.device, vk_state.allocator, verts_size,
+		VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_INDEX_BUFFER_BIT | VK_BUFFER_USAGE_VERTEX_BUFFER_BIT,
 		0, VMA_MEMORY_USAGE_AUTO_PREFER_DEVICE, "geom buffer");
-	vk_buffer::data geom_staging_buffer = vk_buffer::create(vk_state.device_data.device, vk_state.allocator, verts_size, 
-		VK_BUFFER_USAGE_TRANSFER_SRC_BIT, 
-		VMA_ALLOCATION_CREATE_HOST_ACCESS_SEQUENTIAL_WRITE_BIT | VMA_ALLOCATION_CREATE_MAPPED_BIT, VMA_MEMORY_USAGE_AUTO_PREFER_HOST, 
+	vk_buffer::data geom_staging_buffer = vk_buffer::create(vk_state.device_data.device, vk_state.allocator, verts_size,
+		VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
+		VMA_ALLOCATION_CREATE_HOST_ACCESS_SEQUENTIAL_WRITE_BIT | VMA_ALLOCATION_CREATE_MAPPED_BIT, VMA_MEMORY_USAGE_AUTO_PREFER_HOST,
 		"staging geom buffer");
 
 	memcpy(geom_staging_buffer.alloc_info.pMappedData, verts, verts_size);
@@ -282,10 +398,6 @@ void ray_trace()
 		};
 		VK_CHECK("begin rt cmd_buff", vkBeginCommandBuffer(rt_cmd_buff, &rt_begin_info));
 
-		insert_memory_barrier(rt_cmd_buff,
-			VK_PIPELINE_STAGE_2_CLEAR_BIT, VK_ACCESS_2_TRANSFER_WRITE_BIT,
-			VK_PIPELINE_STAGE_2_RAY_TRACING_SHADER_BIT_KHR | VK_PIPELINE_STAGE_2_CLEAR_BIT, VK_ACCESS_2_SHADER_STORAGE_WRITE_BIT | VK_ACCESS_2_TRANSFER_WRITE_BIT
-		);
 		insert_memory_barrier(rt_cmd_buff,
 			VK_PIPELINE_STAGE_2_CLEAR_BIT, VK_ACCESS_2_TRANSFER_WRITE_BIT,
 			VK_PIPELINE_STAGE_2_RAY_TRACING_SHADER_BIT_KHR | VK_PIPELINE_STAGE_2_CLEAR_BIT, VK_ACCESS_2_SHADER_STORAGE_WRITE_BIT | VK_ACCESS_2_TRANSFER_WRITE_BIT
@@ -586,7 +698,7 @@ void render()
 
 	is_rendering = false;
 }
-*/
+
 
 SDL_AppResult SDL_AppIterate(void* appstate)
 {
@@ -918,3 +1030,4 @@ void SDL_AppQuit(void* appstate, SDL_AppResult result)
 	SDL_Vulkan_DestroySurface(vk_state.instance, vk_state.surface_data.surface, nullptr);
 	vk_instance::destroy(vk_state.instance);
 }
+*/
