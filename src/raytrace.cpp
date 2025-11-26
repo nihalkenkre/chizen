@@ -507,7 +507,6 @@ void Raytrace_Render(Raytrace* r, bool* is_rendering, const uint32_t max_samples
 	uint32_t s = 1;
 
 	do {
-		if (r->StopRendering) break;
 
 		const VkSemaphoreWaitInfo wait_info = {
 			.sType = VK_STRUCTURE_TYPE_SEMAPHORE_WAIT_INFO,
@@ -517,6 +516,8 @@ void Raytrace_Render(Raytrace* r, bool* is_rendering, const uint32_t max_samples
 		};
 
 		VK_CHECK("wait acq img", vkWaitSemaphores(device, &wait_info, UINT64_MAX));
+
+		if (r->StopRendering) break;
 
 		const VkCommandBufferBeginInfo rt_begin_info = {
 			.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO,
@@ -651,6 +652,8 @@ void Raytrace_Render(Raytrace* r, bool* is_rendering, const uint32_t max_samples
 
 		FrameObjects_NextFrame(r->FrameObjects);
 	} while (++s <= max_samples);
+
+	VK_CHECK("raytrace queue wait idle", vkQueueWaitIdle(r->ComputeQueue));
 
 	*is_rendering = false;
 	r->StopRendering = false;
