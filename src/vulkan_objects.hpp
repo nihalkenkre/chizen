@@ -1,45 +1,5 @@
 #pragma once
 
-//class vk_instance
-//{
-//public:
-//	vk_instance() : instance(VK_NULL_HANDLE) { std::println("vk_instance ctor def"); }
-//	vk_instance(const char* const* extensions, const uint32_t extensions_count);
-//
-//	vk_instance(const vk_instance& other) = delete;
-//	vk_instance& operator=(const vk_instance& other) = delete;
-//
-//	vk_instance(vk_instance&& other) noexcept;
-//	vk_instance& operator=(vk_instance&& other) noexcept;
-//
-//	~vk_instance() noexcept;
-//
-//	VkInstance instance;
-//};
-//
-//class vk_surface
-//{
-//public:
-//	vk_surface() : surface(VK_NULL_HANDLE), instance(VK_NULL_HANDLE) { std::println("vk_surface ctor def"); }
-//	vk_surface(SDL_Window* window, const VkInstance instance, const VkAllocationCallbacks* allocator);
-//
-//	vk_surface(const vk_surface& other) = delete;
-//	vk_surface& operator=(const vk_surface& other) = delete;
-//
-//	vk_surface(vk_surface&& other) noexcept;
-//	vk_surface& operator=(vk_surface&& other) noexcept;
-//
-//	~vk_surface() noexcept;
-//
-//	VkSurfaceKHR surface;
-//
-//private:
-//	VkInstance instance;
-//};
-
-VkInstance VkInstance_Create(const char* const* extensions, const uint32_t extensions_count);
-void VkInstance_Destroy(VkInstance instance);
-
 struct PhysicalDeviceData
 {
 	VkPhysicalDevice PhysicalDevice = VK_NULL_HANDLE;
@@ -51,56 +11,141 @@ struct PhysicalDeviceData
 	uint32_t TransferQueueFamilyIndex = 0;
 };
 
-PhysicalDeviceData VkInstance_GetPhysicalDeviceData(const VkInstance instance, const VkSurfaceKHR surface);
-
-struct SurfaceData
+class Instance
 {
-	VkSurfaceKHR Surface = VK_NULL_HANDLE;
-	VkPresentModeKHR PresentMode = VK_PRESENT_MODE_FIFO_KHR;
-	VkSurfaceFormatKHR SurfaceFormat = {};
-	VkSurfaceCapabilities2KHR SurfaceCapabilities = {};
+public:
+	Instance() = delete;
+	Instance(const char* const* extensions, const uint32_t extensions_count);
+
+	Instance(const Instance& other) = delete;
+	Instance& operator=(const Instance& other) = delete;
+
+	~Instance() noexcept;
+
+	VkInstance GetInstance() const;
+
+	PhysicalDeviceData GetPhysicalDeviceData(const VkSurfaceKHR& surface) const;
+
+private:
+	VkInstance mInstance;
 };
 
-SurfaceData VkPhysicalDevice_GetSurfaceData(const VkPhysicalDevice physical_device, const VkSurfaceKHR surface);
-
-struct DeviceData
+class Surface
 {
-	VkDevice Device = VK_NULL_HANDLE;
-	VkQueue GraphicsQueue = VK_NULL_HANDLE;
-	VkQueue ComputeQueue = VK_NULL_HANDLE;
-	VkQueue TransferQueue = VK_NULL_HANDLE;
+public:
+	Surface() = delete;
+	Surface(SDL_Window* window, const VkInstance& instance);
+
+	Surface(const Surface& other) = delete;
+	Surface& operator=(const Surface& oher) = delete;
+
+	~Surface() noexcept;
+
+	VkSurfaceKHR GetSurface() const;
+	VkPresentModeKHR GetPresentMode() const;
+	VkSurfaceFormatKHR GetSurfaceFormat() const;
+	VkSurfaceCapabilities2KHR GetSurfaceCapabilities() const;
+
+	void PopulateSurfaceData(const VkPhysicalDevice& physical_device);
+
+private:
+	VkSurfaceKHR mSurface = VK_NULL_HANDLE;
+	VkPresentModeKHR mPresentMode = VK_PRESENT_MODE_FIFO_KHR;
+	VkSurfaceFormatKHR mSurfaceFormat = {};
+	VkSurfaceCapabilities2KHR mSurfaceCapabilities = { .sType = VK_STRUCTURE_TYPE_SURFACE_CAPABILITIES_2_KHR };
+
+	VkInstance mInstance = VK_NULL_HANDLE;
 };
 
-DeviceData DeviceData_Create(const PhysicalDeviceData& physical_device_data);
-void DeviceData_Destroy(DeviceData device_data);
-
-VmaAllocator Allocator_Create(const VkInstance instance, const VkPhysicalDevice physical_device, const VkDevice device);
-void Allocator_Destroy(VmaAllocator allocator);
-
-struct SwapchainData
+class Device
 {
-	VkSwapchainKHR Swapchain = VK_NULL_HANDLE;
-	std::vector<VkImage> Images;
-	std::vector<VkImageView> ImageViews;
-	uint32_t ImagesCount = 0;
+public:
+	Device() = delete;
+	Device(const PhysicalDeviceData* physical_device_data);
 
-	VkDevice Device = VK_NULL_HANDLE;
+	Device(const Device& other) = delete;
+	Device& operator=(const Device& other) = delete;
+
+	~Device() noexcept;
+
+	VkDevice GetDevice() const;
+	VkQueue GetGraphicsQueue() const;
+	VkQueue GetComputeQueue() const;
+	VkQueue GetTransferQueue() const;
+
+private:
+	VkDevice mDevice = VK_NULL_HANDLE;
+	VkQueue mGraphicsQueue = VK_NULL_HANDLE;
+	VkQueue mComputeQueue = VK_NULL_HANDLE;
+	VkQueue mTransferQueue = VK_NULL_HANDLE;
 };
 
-SwapchainData SwapchainData_Create(const VkDevice device, const SurfaceData& surface_data, const uint32_t graphics_queue_family_index, const std::string& name);
-void SwapchainData_Destroy(SwapchainData swapchain_data);
-
-struct TransferObjects
+class Allocator
 {
-	VkCommandPool CommandPool = VK_NULL_HANDLE;
-	VkQueue Queue = VK_NULL_HANDLE;
-	VkCommandBuffer CommandBuffer = VK_NULL_HANDLE;
-	uint32_t QueueFamilyIndex = 0;
+public:
+	Allocator() = delete;
+	Allocator(const VkInstance& instance, const VkPhysicalDevice& physical_device, const VkDevice& device);
 
-	VkDevice Device = VK_NULL_HANDLE;
+	Allocator(const Allocator& other) = delete;
+	Allocator& operator= (const Allocator& other) = delete;
+
+	~Allocator() noexcept;
+
+	VmaAllocator GetAllocator() const;
+
+private:
+	VmaAllocator mAllocator;
 };
 
-TransferObjects TransferObjects_Create(const VkDevice device, const VkQueue transfer_queue, const uint32_t transfer_queue_family_index);
-void TransferObjects_Destroy(TransferObjects to);
+class Swapchain
+{
+public:
+	Swapchain() = delete;
+	Swapchain(const VkDevice device, const Surface* surface, const uint32_t graphics_queue_family_index, const std::string& name);
 
-void TransferObjects_PrepareImage(TransferObjects to, const VkImage image);
+	Swapchain(const Swapchain& other) = delete;
+	Swapchain& operator= (const Swapchain& other) = delete;
+
+	~Swapchain() noexcept;
+
+	VkSwapchainKHR GetSwapchain() const;
+	std::vector<VkImage> GetImages() const;
+	std::vector<VkImageView> GetImageViews() const;
+	uint32_t GetImagesCount() const;
+
+private:
+	VkSwapchainKHR mSwapchain = VK_NULL_HANDLE;
+	std::vector<VkImage> mImages;
+	std::vector<VkImageView> mImageViews;
+	uint32_t mImagesCount = 0;
+
+	VkDevice mDevice = VK_NULL_HANDLE;
+};
+
+class TransferObjects
+{
+public:
+	TransferObjects() = delete;
+	TransferObjects(const VkDevice& device, const VkQueue& transfer_queue, const uint32_t transfer_queue_family_index);
+
+	TransferObjects(const TransferObjects& other) = delete;
+	TransferObjects& operator=(const TransferObjects& other) = delete;
+
+	~TransferObjects() noexcept;
+	void PrepareImage(const VkImage& image);
+
+	VkCommandPool GetCommandPool() const;
+	VkCommandBuffer GetCommandBuffer() const;
+	VkQueue GetQueue() const;
+	uint32_t GetQueueFamilyIndex() const;
+
+private:
+	VkCommandPool mCommandPool = VK_NULL_HANDLE;
+	VkCommandBuffer mCommandBuffer = VK_NULL_HANDLE;
+	VkQueue mQueue = VK_NULL_HANDLE;
+	uint32_t mQueueFamilyIndex = 0;
+
+	VkDevice mDevice = VK_NULL_HANDLE;
+};
+
+

@@ -2,32 +2,68 @@
 
 #include <vma/vk_mem_alloc.h>
 
-struct ImageResource
+class ImageResource
 {
-	VkImage Image = VK_NULL_HANDLE;
-	VkDescriptorImageInfo DescriptorInfo = {};
-	VkExtent3D Extent = {};
+public:
+	ImageResource() = delete;
+	ImageResource(const VkDevice device, const VkExtent3D& extent, const VkFormat format, const VkImageUsageFlags usage, const VmaAllocator allocator, const VmaAllocationCreateFlags vma_alloc_create_flags, const VmaMemoryUsage vma_mem_usage, const std::vector<uint32_t>& queue_family_indices, const std::string& name);
 
-	VmaAllocation Allocation = nullptr;
-	VmaAllocationInfo2 AllocationInfo = {};
+	ImageResource(const ImageResource& other) = delete;
+	ImageResource& operator=(const ImageResource& other) = delete;
 
-	VmaAllocator Allocator = nullptr;
-	VkDevice Device = VK_NULL_HANDLE;
+	~ImageResource() noexcept;
+
+	void ChangeImageLayout(const VkCommandBuffer cmd_buff,
+		const VkPipelineStageFlags2 src_stage_mask, const VkAccessFlags2 src_access_mask,
+		const VkPipelineStageFlags2 dst_stage_mask, const VkAccessFlags2 dst_access_mask,
+		const VkImageLayout old_layout, const VkImageLayout new_layout,
+		const uint32_t src_q_fly_idx, const uint32_t dst_q_fly_idx);
+
+	VkImage GetImage() const;
+	VkDescriptorImageInfo GetDescriptorInfo() const;
+
+	VkExtent3D GetExtent() const;
+
+	VmaAllocation GetAllocation() const;
+	VmaAllocationInfo2 GetAllocationInfo2() const;
+
+private:
+	VkImage mImage = VK_NULL_HANDLE;
+	VkDescriptorImageInfo mDescriptorInfo = {};
+	VkExtent3D mExtent = {};
+
+	VmaAllocation mAllocation = nullptr;
+	VmaAllocationInfo2 mAllocationInfo = {};
+
+	VmaAllocator mAllocator = nullptr;
+	VkDevice mDevice = VK_NULL_HANDLE;
 };
 
-ImageResource ImageResource_Create(const VkDevice device, const VkExtent3D& extent, const VkFormat& format, const VkImageUsageFlags usage, const VmaAllocator allocator, const VmaAllocationCreateFlags vma_alloc_create_flags, const VmaMemoryUsage vma_mem_usage, const std::vector<uint32_t> queue_family_indices, const std::string& name);
-void ImageResource_Destroy(ImageResource image_resource);
-
-struct BufferResource
+class BufferResource
 {
-	VkDescriptorBufferInfo DescriptorInfo = {};
+public:
+	BufferResource() = delete;
+	BufferResource(const VkDevice device, const VmaAllocator allocator, const VkDeviceSize size, const VkBufferUsageFlags usage, const VmaAllocationCreateFlags vma_alloc_create_flags, const VmaMemoryUsage vma_mem_usage, const std::string& name);
 
-	VmaAllocation Allocation = nullptr;
-	VmaAllocationInfo2 AllocationInfo = {};
+	BufferResource(const BufferResource& other) = delete;
+	BufferResource& operator=(const BufferResource& other) = delete;
 
-	VmaAllocator Allocator = nullptr;
-	VkDevice Device = VK_NULL_HANDLE;
+	~BufferResource() noexcept;
+
+	void CopyToBuffer(const VkCommandBuffer cmd_buff, const VkQueue queue, const VkBuffer dst_buffer, const VkDeviceSize size);
+
+	VkDescriptorBufferInfo GetDescriptorInfo() const;
+
+	VmaAllocation GetAllocation() const;
+	VmaAllocationInfo2 GetAllocationInfo2() const;
+
+private:
+	VkDescriptorBufferInfo mDescriptorInfo = {};
+
+	VmaAllocation mAllocation = nullptr;
+	VmaAllocationInfo2 mAllocationInfo = {};
+
+	VmaAllocator mAllocator = nullptr;
+	VkDevice mDevice = VK_NULL_HANDLE;
 };
 
-BufferResource BufferResource_Create(const VkDevice device, const VmaAllocator allocator, const VkDeviceSize size, const VkBufferUsageFlags usage, const VmaAllocationCreateFlags vma_alloc_create_flags, const VmaMemoryUsage vma_mem_usage, const std::string& name);
-void BufferResource_Destroy(BufferResource buffer_resource);

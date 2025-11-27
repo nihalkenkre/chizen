@@ -1,4 +1,3 @@
-//#include "vk_objects.hpp"
 #include "app.hpp"
 #include "utils.hpp"
 
@@ -64,8 +63,7 @@ SDL_AppResult SDL_AppInit(void** appstate, int argc, char** argv)
 		return SDL_APP_FAILURE;
 	}
 
-	//static App app(window);
-	static App app = App_Create(window, std::filesystem::path(std::string(argv[0])).parent_path().string());
+	static App app(window, std::filesystem::path(std::string(argv[0])).parent_path().string());
 	*appstate = &app;
 
 	SDL_CHECK(ImGui_ImplSDL3_InitForVulkan(window));
@@ -80,7 +78,7 @@ SDL_AppResult SDL_AppEvent(void* appstate, SDL_Event* event)
 	ImGui_ImplSDL3_ProcessEvent(event);
 	ImGuiIO& io = ImGui::GetIO();
 
-	if (SDL_GetWindowFlags(app->Window) & SDL_WINDOW_MINIMIZED)
+	if (SDL_GetWindowFlags(app->GetWindow()) & SDL_WINDOW_MINIMIZED)
 	{
 		return SDL_APP_CONTINUE;
 	}
@@ -93,23 +91,23 @@ SDL_AppResult SDL_AppEvent(void* appstate, SDL_Event* event)
 	{
 		if (!io.WantCaptureMouse)
 		{
-			app->IsTrackingMouse = true;
+			app->IsTrackingMouse() = true;
 
-			app->LastMousePosition[0] = event->motion.x;
-			app->LastMousePosition[1] = event->motion.y;
+			app->GetLastMousePosition()[0] = event->motion.x;
+			app->GetLastMousePosition()[1] = event->motion.y;
 		}
 	}
 	else if (event->type == SDL_EVENT_MOUSE_MOTION)
 	{
 		if (!io.WantCaptureMouse)
 		{
-			if (app->IsTrackingMouse)
+			if (app->IsTrackingMouse())
 			{
-				app->DeltaMousePosition[0] += ((app->LastMousePosition[0] - event->motion.x) / static_cast<float>(app->VulkanInterface.SurfaceData.SurfaceCapabilities.surfaceCapabilities.currentExtent.width)) * 2;
-				app->DeltaMousePosition[1] += ((app->LastMousePosition[1] - event->motion.y) / static_cast<float>(app->VulkanInterface.SurfaceData.SurfaceCapabilities.surfaceCapabilities.currentExtent.height)) * 2;
+				app->GetDeltaMousePosition()[0] += ((app->GetLastMousePosition()[0] - event->motion.x) / static_cast<float>(app->GetVulkanInterface()->GetSurface()->GetSurfaceCapabilities().surfaceCapabilities.currentExtent.width)) * 2;
+				app->GetDeltaMousePosition()[1] += ((app->GetLastMousePosition()[1] - event->motion.y) / static_cast<float>(app->GetVulkanInterface()->GetSurface()->GetSurfaceCapabilities().surfaceCapabilities.currentExtent.height)) * 2;
 
-				app->LastMousePosition[0] = event->motion.x;
-				app->LastMousePosition[1] = event->motion.y;
+				app->GetLastMousePosition()[0] = event->motion.x;
+				app->GetLastMousePosition()[1] = event->motion.y;
 			}
 		}
 	}
@@ -117,15 +115,15 @@ SDL_AppResult SDL_AppEvent(void* appstate, SDL_Event* event)
 	{
 		if (!io.WantCaptureMouse)
 		{
-			app->LastMousePosition[0] = 0;
-			app->LastMousePosition[1] = 0;
+			app->GetLastMousePosition()[0] = 0;
+			app->GetLastMousePosition()[1] = 0;
 
-			app->IsTrackingMouse = false;
+			app->IsTrackingMouse() = false;
 		}
 	}
 	else if (event->type == SDL_EVENT_MOUSE_WHEEL)
 	{
-		app->ZoomLevel = std::max(0.01f, app->ZoomLevel + event->wheel.y / 20.f);
+		app->GetZoomLevel() = std::max(0.01f, app->GetZoomLevel() + event->wheel.y / 20.f);
 	}
 
 	return SDL_APP_CONTINUE;
@@ -135,41 +133,42 @@ SDL_AppResult SDL_AppIterate(void* appstate)
 {
 	App* app = reinterpret_cast<App*>(appstate);
 
-	if (SDL_GetWindowFlags(app->Window) & SDL_WINDOW_MINIMIZED)
+	if (SDL_GetWindowFlags(app->GetWindow()) & SDL_WINDOW_MINIMIZED)
 	{
 		return SDL_APP_CONTINUE;
 	}
 
-	if (app->ImGUIState.StartRaytracing)
+	if (app->GetImGUIState().StartRaytracing)
 	{
-		if (app->IsRaytracing) App_StopRaytracing(app);
+		if (app->GetIsRaytracing()) app->StopRaytracing();
 
-		if (app->RenderTargetExtent.width != app->ImGUIState.TempRenderTargetExtent[0] ||
-			app->RenderTargetExtent.height != app->ImGUIState.TempRenderTargetExtent[1])
+		VkExtent2D& render_target_extent = app->GetRenderTargetExtent();
+		ImGUIState& imgui_state = app->GetImGUIState();
+
+		if (render_target_extent.width != imgui_state.TempRenderTargetExtent[0] ||
+			render_target_extent.height != imgui_state.TempRenderTargetExtent[1])
 		{
-			app->RenderTargetExtent.width = app->ImGUIState.TempRenderTargetExtent[0];
-			app->RenderTargetExtent.height = app->ImGUIState.TempRenderTargetExtent[1];
-			App_RecreateRenderTarget(app);
+			render_target_extent.width = imgui_state.TempRenderTargetExtent[0];
+			render_target_extent.height = imgui_state.TempRenderTargetExtent[1];
+			app->RecreateRenderTarget();
 		}
 		
-		if (app->MaxSamples != app->ImGUIState.TempMaxSamples)
+		uint32_t& max_samples = app->GetMaxSamples();
+		if (max_samples != imgui_state.TempMaxSamples)
 		{
-			app->MaxSamples = app->ImGUIState.TempMaxSamples;
+			max_samples = imgui_state.TempMaxSamples;
 		}
 
-		App_Raytrace(app);
+		app->RunRaytrace();
 	}
 
-	App_Display(app);
+	app->RunDisplay();
 
 	return SDL_APP_CONTINUE;
 }
 
 void SDL_AppQuit(void* appstate, SDL_AppResult result)
 {
-	App* app = reinterpret_cast<App*>(appstate);
-
-	App_Destroy(app);
 }
 
 /*

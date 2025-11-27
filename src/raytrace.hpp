@@ -2,12 +2,49 @@
 
 #include "vulkan_interface.hpp"
 
-typedef struct Raytrace Raytrace;
+class FrameObjects;
+class RaytracePipelineData;
 
-Raytrace* Raytrace_Create(const VulkanInterface* const vulkan_interface, const VkExtent2D& extent, const std::string& current_path);
-void Raytrace_Destroy(Raytrace* r);
+class Raytrace
+{
+public:
+	Raytrace() = delete;
+	Raytrace(const VulkanInterface* const vulkan_interface, const VkExtent3D& extent, const std::string& current_path);
 
-void Raytrace_RecreateRenderResources(Raytrace* r, const VkExtent2D& extent);
-void Raytrace_Render(Raytrace* r, bool* is_rendering, const uint32_t max_samples);
-void Raytrace_UpdateFinalRenderTarget(Raytrace* r, const ImageResource FinalRenderTarget);
-void Raytrace_StopRendering(Raytrace* r);
+	Raytrace(const Raytrace& other) = delete;
+	Raytrace& operator=(const Raytrace& other) = delete;
+
+	~Raytrace() noexcept;
+
+	void RecreateRenderResources(const VkExtent2D& extent);
+	void Render(bool * is_raytracing, const uint32_t max_samples);
+	void UpdateFinalRenderTarget( ImageResource* FinalRenderTarget);
+	void StopRendering();
+
+private:
+	void InitializeResources();
+
+	ImageResource* mFinalRenderTarget = {};
+	std::unique_ptr<ImageResource> mAccumRenderTarget = nullptr;
+	std::unique_ptr<BufferResource> mRandomStates = nullptr;
+	std::unique_ptr<BufferResource> mRaygenSBT = nullptr;
+
+	std::unique_ptr<FrameObjects> mFrameObjects = nullptr;
+	std::vector<VkDescriptorSet> mDescriptorSets;
+	VkDescriptorPool mDescriptorPool = VK_NULL_HANDLE;
+	VkPhysicalDeviceRayTracingPipelinePropertiesKHR mRayTracingProperties = {};
+
+	std::unique_ptr<RaytracePipelineData> mPipelineData = {};
+
+	VkExtent3D mExtent = {};
+	VkQueue mComputeQueue = VK_NULL_HANDLE;
+	VkQueue mTransferQueue = VK_NULL_HANDLE;
+	VkCommandBuffer mTransferCommandBuffer = VK_NULL_HANDLE;
+	std::vector<uint32_t> mQueueFamilyIndices;
+	VmaAllocator mAllocator = nullptr;
+	VkDevice mDevice = VK_NULL_HANDLE;
+
+	uint8_t mMaxFramesInFlight = 0;
+	uint8_t mFrameInFlight = 0;
+	bool mStopRendering = false;
+};

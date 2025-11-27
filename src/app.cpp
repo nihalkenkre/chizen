@@ -1,19 +1,13 @@
 #include "app.hpp"
 #include "utils.hpp"
 
-//App::App(SDL_Window* window)
-//{
-//	vulkan_interface = VulkanInterface(window);
-//}
-
-App App_Create(SDL_Window* window, const std::string& current_path)
+App::App(SDL_Window* window, const std::string& current_path)
 {
-	App app = {
-		.VulkanInterface = VulkanInterface_Create(window),
-		.Display = Display_Create(app.VulkanInterface, current_path),
-		.Window = window,
-	};
-	app.Raytrace = Raytrace_Create(&app.VulkanInterface, app.RenderTargetExtent, current_path);
+	mVulkanInterface = std::make_unique<VulkanInterface>(window);
+	mDisplay = std::make_unique<Display>(mVulkanInterface.get(), current_path);
+	mWindow = window;
+	VkExtent3D extent = VkExtent3D{ mRenderTargetExtent.width, mRenderTargetExtent.height, 1 };
+	mRaytrace = std::make_unique<Raytrace>(mVulkanInterface.get(), extent, current_path);
 
 	const VkDescriptorPoolSize pool_sizes[] =
 	{
@@ -38,80 +32,125 @@ App App_Create(SDL_Window* window, const std::string& current_path)
 		.pPoolSizes = pool_sizes,
 	};
 
-	VK_CHECK("create imgui desc pool", vkCreateDescriptorPool(app.VulkanInterface.DeviceData.Device, &pool_info, nullptr, &app.ImGUIPool));
+	VK_CHECK("create imgui desc pool", vkCreateDescriptorPool(mVulkanInterface->GetDevice()->GetDevice(), &pool_info, nullptr, &mImGUIPool));
 
 	ImGui::CreateContext();
 	ImGui::GetIO().ConfigFlags |= ImGuiConfigFlags_DockingEnable;
 
+	VkFormat color_attachment_format = mVulkanInterface->GetSurface()->GetSurfaceFormat().format;
 	ImGui_ImplVulkan_InitInfo imgui_init_info = {
-		.Instance = app.VulkanInterface.Instance,
-		.PhysicalDevice = app.VulkanInterface.PhysicalDeviceData.PhysicalDevice,
-		.Device = app.VulkanInterface.DeviceData.Device,
-		.Queue = app.VulkanInterface.DeviceData.GraphicsQueue,
-		.DescriptorPool = app.ImGUIPool,
-		.MinImageCount = app.VulkanInterface.SwapchainData.ImagesCount,
-		.ImageCount = app.VulkanInterface.SwapchainData.ImagesCount,
+		.Instance = mVulkanInterface->GetInstance()->GetInstance(),
+		.PhysicalDevice = mVulkanInterface->GetPhysicalDeviceData()->PhysicalDevice,
+		.Device = mVulkanInterface->GetDevice()->GetDevice(),
+		.Queue = mVulkanInterface->GetDevice()->GetGraphicsQueue(),
+		.DescriptorPool = mImGUIPool,
+		.MinImageCount = mVulkanInterface->GetSwapchain()->GetImagesCount(),
+		.ImageCount = mVulkanInterface->GetSwapchain()->GetImagesCount(),
 		.PipelineInfoMain = {
 			.PipelineRenderingCreateInfo = {
 				.sType = VK_STRUCTURE_TYPE_PIPELINE_RENDERING_CREATE_INFO,
 				.colorAttachmentCount = 1,
-				.pColorAttachmentFormats = &app.VulkanInterface.SurfaceData.SurfaceFormat.format,
+				.pColorAttachmentFormats = &color_attachment_format,
 			},
 		},
 		.UseDynamicRendering = true,
 	};
 
 	SDL_CHECK(ImGui_ImplVulkan_Init(&imgui_init_info));
-
-	return app;
 }
 
-void App_Display(App* app)
+void App::RunDisplay()
 {
-	Display_Render(app->Display, app->DeltaMousePosition, app->ZoomLevel, &app->ImGUIState);
+	mDisplay->Render(mDeltaMousePosition, mZoomLevel, &mImGUIState);
 }
 
-void App_Raytrace(App* app)
+void App::RunRaytrace()
 {
-	if (!app->IsRaytracing)
+	if (!mIsRaytracing)
 	{
-		app->RaytraceThread = std::thread(Raytrace_Render, app->Raytrace, &app->IsRaytracing, app->MaxSamples);
-		app->RaytraceThread.detach();
-		app->IsRaytracing = true;
-		app->ImGUIState.StartRaytracing = false;
+		mRaytraceThread = std::thread(&Raytrace::Render, mRaytrace.get(), &mIsRaytracing, mMaxSamples);
+		mRaytraceThread.detach();
+		mIsRaytracing = true;
+		mImGUIState.StartRaytracing = false;
 	}
 }
 
-void App_RecreateRenderTarget(App* app)
+void App::RecreateRenderTarget()
 {
-	VK_CHECK("device wait idle", vkDeviceWaitIdle(app->VulkanInterface.DeviceData.Device));
-	VulkanInterface_RecreateFinalRenderTarget(&app->VulkanInterface, app->RenderTargetExtent);
-	Display_UpdateFinalRenderTarget(app->Display, app->VulkanInterface.FinalRenderTarget);
-	Raytrace_RecreateRenderResources(app->Raytrace, app->RenderTargetExtent);
-	Raytrace_UpdateFinalRenderTarget(app->Raytrace, app->VulkanInterface.FinalRenderTarget);
+	VK_CHECK("device wait idle", vkDeviceWaitIdle(mVulkanInterface->GetDevice()->GetDevice()));
+	mVulkanInterface->RecreateFinalRenderTarget({ mRenderTargetExtent.width, mRenderTargetExtent.height, 1 });
+	mDisplay->UpdateFinalRenderTarget(mVulkanInterface->GetFinalRenderTarget());
+	mRaytrace->RecreateRenderResources(mRenderTargetExtent);
+	mRaytrace->UpdateFinalRenderTarget(mVulkanInterface->GetFinalRenderTarget());
 }
 
-void App_StopRaytracing(App* app)
+void App::StopRaytracing()
 {
-	Raytrace_StopRendering(app->Raytrace);
-	while (app->IsRaytracing) {}
+	mRaytrace->StopRendering();
+	while (mIsRaytracing) {}
 }
 
-void App_Destroy(App* app)
+VulkanInterface* App::GetVulkanInterface() const
 {
-	Raytrace_StopRendering(app->Raytrace);
+	return mVulkanInterface.get();
+}
 
-	while (app->IsRaytracing) {}
+SDL_Window* App::GetWindow() const
+{
+	return mWindow;
+}
 
-	VK_CHECK("device wait idle", vkDeviceWaitIdle(app->VulkanInterface.DeviceData.Device));
+bool& App::IsTrackingMouse()
+{
+	return mIsTrackingMouse;
+}
+
+float* App::GetDeltaMousePosition()
+{
+	return mDeltaMousePosition;
+}
+
+float* App::GetLastMousePosition()
+{
+	return mLastMousePosition;
+}
+
+float& App::GetZoomLevel()
+{
+	return mZoomLevel;
+}
+
+uint32_t& App::GetMaxSamples()
+{
+	return mMaxSamples;
+}
+
+ImGUIState& App::GetImGUIState()
+{
+	return mImGUIState;
+}
+
+bool& App::GetIsRaytracing()
+{
+	return mIsRaytracing;
+}
+
+VkExtent2D& App::GetRenderTargetExtent()
+{
+	return mRenderTargetExtent;
+}
+
+App::~App() noexcept
+{
+	mRaytrace->StopRendering();
+
+	while (mIsRaytracing) {}
+
+	VK_CHECK("device wait idle", vkDeviceWaitIdle(mVulkanInterface->GetDevice()->GetDevice()));
 
 	ImGui_ImplSDL3_Shutdown();
 	ImGui_ImplVulkan_Shutdown();
 	ImGui::DestroyContext();
 
-	vkDestroyDescriptorPool(app->VulkanInterface.DeviceData.Device, app->ImGUIPool, nullptr);
-	
-	Raytrace_Destroy(app->Raytrace);
-	Display_Destroy(app->Display);
-	VulkanInterface_Destroy(&app->VulkanInterface);
+	vkDestroyDescriptorPool(mVulkanInterface->GetDevice()->GetDevice(), mImGUIPool, nullptr);
 }

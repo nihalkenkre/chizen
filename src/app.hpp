@@ -5,36 +5,50 @@
 #include "raytrace.hpp"
 #include "utils.hpp"
 
-//class App
-//{
-//public:
-//   App(SDL_Window* window);
-//
-//   VulkanInterface vulkan_interface;
-//};
-
-struct App
+class App
 {
-	VulkanInterface VulkanInterface = {};
-	Display* Display = nullptr;
-	Raytrace* Raytrace = nullptr;
-	SDL_Window* Window = nullptr;
-	VkExtent2D RenderTargetExtent = { 1280, 720 };
-	VkDescriptorPool ImGUIPool = VK_NULL_HANDLE;
-	std::thread RaytraceThread = {};
-	ImGUIState ImGUIState = {};
-	float DeltaMousePosition[2];
-	float LastMousePosition[2];
-	float ZoomLevel = 1.f;
-	uint32_t MaxSamples = 1024;
-	bool IsTrackingMouse = false;
-	bool IsRaytracing = false;
+public:
+	App() = delete;
+	App(SDL_Window* window, const std::string& current_path);
+
+	App(const App& other) = delete;
+	App& operator=(const App& other) = delete;
+
+	~App() noexcept;
+
+	void RunDisplay();
+	void RunRaytrace();
+	void RecreateRenderTarget();
+	void StopRaytracing();
+
+	VulkanInterface* GetVulkanInterface() const;
+
+	SDL_Window* GetWindow() const;
+	bool& IsTrackingMouse();
+	float* GetDeltaMousePosition();
+	float* GetLastMousePosition();
+	float& GetZoomLevel();
+
+	uint32_t& GetMaxSamples();
+
+	ImGUIState& GetImGUIState();
+	bool& GetIsRaytracing();
+
+	VkExtent2D& GetRenderTargetExtent();
+
+private:
+	float mDeltaMousePosition[2] = {};
+	float mLastMousePosition[2] = {};
+	float mZoomLevel = 1.f;
+	uint32_t mMaxSamples = 1024;
+	std::unique_ptr<VulkanInterface> mVulkanInterface = nullptr;
+	std::unique_ptr<Display> mDisplay = nullptr;
+	std::unique_ptr<Raytrace> mRaytrace = nullptr;
+	SDL_Window* mWindow = nullptr;
+	VkExtent2D mRenderTargetExtent = { 1280, 720 };
+	VkDescriptorPool mImGUIPool = VK_NULL_HANDLE;
+	std::thread mRaytraceThread = {};
+	ImGUIState mImGUIState = {};
+	bool mIsTrackingMouse = false;
+	bool mIsRaytracing = false;
 };
-
-App App_Create(SDL_Window* window, const std::string& current_path);
-void App_Destroy(App* app);
-
-void App_Display(App* app);
-void App_Raytrace(App* app);
-void App_RecreateRenderTarget(App* app);
-void App_StopRaytracing(App* app);

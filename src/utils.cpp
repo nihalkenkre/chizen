@@ -1,50 +1,5 @@
 #include "utils.hpp"
 
-void Utils_CopyBufferToBuffer(const VkCommandBuffer cmd_buff, const VkQueue queue, const VkBuffer src_buffer, const VkBuffer dst_buffer, const VkDeviceSize size)
-{
-	const VkCommandBufferBeginInfo begin_info = {
-		.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO,
-		.flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT,
-	};
-	VK_CHECK("begin xfer cmd buff", vkBeginCommandBuffer(cmd_buff, &begin_info));
-
-	const VkBufferCopy2 regions[] = {
-		{
-			.sType = VK_STRUCTURE_TYPE_BUFFER_COPY_2,
-			.size = size,
-		},
-	};
-
-	const VkCopyBufferInfo2 copy_buff_info = {
-		.sType = VK_STRUCTURE_TYPE_COPY_BUFFER_INFO_2,
-		.srcBuffer = src_buffer,
-		.dstBuffer = dst_buffer,
-		.regionCount = std::size(regions),
-		.pRegions = regions,
-	};
-
-	vkCmdCopyBuffer2(cmd_buff, &copy_buff_info);
-	VK_CHECK("end xfer cmd buff", vkEndCommandBuffer(cmd_buff));
-
-	const VkCommandBufferSubmitInfo cmd_buff_infos[] = {
-		{
-			.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_SUBMIT_INFO,
-			.commandBuffer = cmd_buff,
-		},
-	};
-
-	const VkSubmitInfo2 submit_infos[] = {
-		{
-			.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO_2,
-			.commandBufferInfoCount = std::size(cmd_buff_infos),
-			.pCommandBufferInfos = cmd_buff_infos,
-		},
-	};
-
-	VK_CHECK("submit geom buffer xfer cmd", vkQueueSubmit2(queue, std::size(submit_infos), submit_infos, VK_NULL_HANDLE));
-	VK_CHECK("wait xfer cmd buff", vkQueueWaitIdle(queue));
-}
-
 void Utils_ChangeImageLayout(
 	const VkCommandBuffer cmd_buff,
 	const VkPipelineStageFlags2 src_stage_mask, const VkAccessFlags2 src_access_mask,

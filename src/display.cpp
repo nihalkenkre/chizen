@@ -2,28 +2,41 @@
 #include "utils.hpp"
 #include "frame_objects.hpp"
 
-struct DisplayPipelineData
+class DisplayPipelineData
 {
+public:
+	DisplayPipelineData() = delete;
+	DisplayPipelineData(const VulkanInterface* vulkan_interface, const std::string& current_path);
+
+	DisplayPipelineData(const DisplayPipelineData& other) = delete;
+	DisplayPipelineData& operator=(const DisplayPipelineData& other) = delete;
+
+	~DisplayPipelineData() noexcept;
+
 	struct PushConstants
 	{
 		float PositionOffset[2];
 		float ZoomLevel;
 	};
 
-	VkPipeline Pipeline = VK_NULL_HANDLE;
-	VkPipelineLayout PipelineLayout = VK_NULL_HANDLE;
-	std::vector<VkDescriptorSetLayout> DescriptorSetLayouts;
+	VkPipeline GetPipeline() const;
+	VkPipelineLayout GetPipelineLayout() const;
+	std::vector<VkDescriptorSetLayout> GetDescriptorSetLayouts() const;
 
-	VkDevice Device = VK_NULL_HANDLE;
+private:
+
+	VkPipeline mPipeline = VK_NULL_HANDLE;
+	VkPipelineLayout mPipelineLayout = VK_NULL_HANDLE;
+	std::vector<VkDescriptorSetLayout> mDescriptorSetLayouts;
+
+	VkDevice mDevice = VK_NULL_HANDLE;
 };
 
-DisplayPipelineData DisplayPipelineData_Create(const VulkanInterface& vulkan_interface, const std::string& current_path)
+DisplayPipelineData::DisplayPipelineData(const VulkanInterface* vulkan_interface, const std::string& current_path)
 {
-	DisplayPipelineData dpd = {
-		.Device = vulkan_interface.DeviceData.Device,
-	};
+	mDevice = vulkan_interface->GetDevice()->GetDevice();
 
-	dpd.DescriptorSetLayouts.resize(1);
+	mDescriptorSetLayouts.resize(1);
 
 	Slang::ComPtr<slang::IGlobalSession> slang_global_session;
 	SLANG_CHECK("create global session", slang::createGlobalSession(slang_global_session.writeRef()));
@@ -92,7 +105,7 @@ DisplayPipelineData DisplayPipelineData_Create(const VulkanInterface& vulkan_int
 	};
 
 	VkShaderModule vert_mod = VK_NULL_HANDLE;
-	VK_CHECK("create vert shader module", vkCreateShaderModule(vulkan_interface.DeviceData.Device, &vert_mod_ci, nullptr, &vert_mod));
+	VK_CHECK("create vert shader module", vkCreateShaderModule(vulkan_interface->GetDevice()->GetDevice(), &vert_mod_ci, nullptr, &vert_mod));
 
 	Slang::ComPtr<slang::IEntryPoint> frag_entry_point;
 	slang_module->findEntryPointByName("fragment_main", frag_entry_point.writeRef());
@@ -117,7 +130,7 @@ DisplayPipelineData DisplayPipelineData_Create(const VulkanInterface& vulkan_int
 	};
 
 	VkShaderModule frag_mod = VK_NULL_HANDLE;
-	VK_CHECK("create frag shader module", vkCreateShaderModule(vulkan_interface.DeviceData.Device, &frag_mod_ci, nullptr, &frag_mod));
+	VK_CHECK("create frag shader module", vkCreateShaderModule(vulkan_interface->GetDevice()->GetDevice(), &frag_mod_ci, nullptr, &frag_mod));
 
 	const VkPipelineShaderStageCreateInfo stages[] = {
 		{
@@ -242,7 +255,7 @@ DisplayPipelineData DisplayPipelineData_Create(const VulkanInterface& vulkan_int
 		.pBindings = dsl_binds,
 	};
 
-	VK_CHECK("create dsl", vkCreateDescriptorSetLayout(vulkan_interface.DeviceData.Device, &dsl_ci, nullptr, &dpd.DescriptorSetLayouts[0]));
+	VK_CHECK("create dsl", vkCreateDescriptorSetLayout(vulkan_interface->GetDevice()->GetDevice(), &dsl_ci, nullptr, &mDescriptorSetLayouts[0]));
 
 	const VkPushConstantRange pc_rngs[] = {
 		{
@@ -254,12 +267,12 @@ DisplayPipelineData DisplayPipelineData_Create(const VulkanInterface& vulkan_int
 	const VkPipelineLayoutCreateInfo lyt_ci = {
 		.sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO,
 		.setLayoutCount = 1,
-		.pSetLayouts = &dpd.DescriptorSetLayouts[0],
+		.pSetLayouts = &mDescriptorSetLayouts[0],
 		.pushConstantRangeCount = std::size(pc_rngs),
 		.pPushConstantRanges = pc_rngs,
 	};
 
-	VK_CHECK("create graphics pipeline layout", vkCreatePipelineLayout(vulkan_interface.DeviceData.Device, &lyt_ci, nullptr, &dpd.PipelineLayout));
+	VK_CHECK("create graphics pipeline layout", vkCreatePipelineLayout(vulkan_interface->GetDevice()->GetDevice(), &lyt_ci, nullptr, &mPipelineLayout));
 
 	const VkFormat col_attach_forms[] = {
 		VK_FORMAT_R8G8B8A8_UNORM,
@@ -284,68 +297,57 @@ DisplayPipelineData DisplayPipelineData_Create(const VulkanInterface& vulkan_int
 			.pMultisampleState = &ms_ci,
 			.pColorBlendState = &cbs_ci,
 			.pDynamicState = &ds_ci,
-			.layout = dpd.PipelineLayout
+			.layout = mPipelineLayout
 		},
 	};
 
-	VK_CHECK("create graphics pipeline", vkCreateGraphicsPipelines(vulkan_interface.DeviceData.Device, VK_NULL_HANDLE, std::size(cis), cis, nullptr, &dpd.Pipeline));
+	VK_CHECK("create graphics pipeline", vkCreateGraphicsPipelines(vulkan_interface->GetDevice()->GetDevice(), VK_NULL_HANDLE, std::size(cis), cis, nullptr, &mPipeline));
 
-	vkDestroyShaderModule(vulkan_interface.DeviceData.Device, vert_mod, nullptr);
-	vkDestroyShaderModule(vulkan_interface.DeviceData.Device, frag_mod, nullptr);
-
-	return dpd;
+	vkDestroyShaderModule(vulkan_interface->GetDevice()->GetDevice(), vert_mod, nullptr);
+	vkDestroyShaderModule(vulkan_interface->GetDevice()->GetDevice(), frag_mod, nullptr);
 }
 
-void DisplayPipelineData_Destroy(DisplayPipelineData dpd)
+DisplayPipelineData::~DisplayPipelineData() noexcept
 {
-	if (dpd.Device != VK_NULL_HANDLE)
+	if (mDevice != VK_NULL_HANDLE)
 	{
+		for (auto& desc_set_layout : mDescriptorSetLayouts)
+			vkDestroyDescriptorSetLayout(mDevice, desc_set_layout, nullptr);
 
-		for (auto& desc_set_layout : dpd.DescriptorSetLayouts)
-			vkDestroyDescriptorSetLayout(dpd.Device, desc_set_layout, nullptr);
-
-		vkDestroyPipeline(dpd.Device, dpd.Pipeline, nullptr);
-		vkDestroyPipelineLayout(dpd.Device, dpd.PipelineLayout, nullptr);
+		vkDestroyPipeline(mDevice, mPipeline, nullptr);
+		vkDestroyPipelineLayout(mDevice, mPipelineLayout, nullptr);
 	}
 }
 
-struct Display
+VkPipeline DisplayPipelineData::GetPipeline() const
 {
-	ImageResource FinalRenderTarget = {};
+	return mPipeline;
+}
 
-	FrameObjects* FrameObjects = nullptr;
-	std::vector<VkSemaphore> PresentWaitSemaphores;
-	std::vector<VkSemaphore> AcquireSignalSemaphores;
-	std::vector<VkDescriptorSet> DescriptorSets;
-	VkDescriptorPool DescriptorPool = VK_NULL_HANDLE;
-
-	DisplayPipelineData PipelineData = {};
-	BufferResource GeometryBuffer = {};
-
-	SwapchainData SwapchainData = {};
-	VkExtent2D Extent = {};
-	VkQueue Queue = VK_NULL_HANDLE;
-	VkDevice Device = VK_NULL_HANDLE;
-
-	uint8_t MaxFramesInFlight = 0;
-	uint8_t FrameInFlight = 0;
-};
-
-Display* Display_Create(const VulkanInterface& vulkan_interface, const std::string& current_path)
+VkPipelineLayout DisplayPipelineData::GetPipelineLayout() const
 {
-	Display* d = reinterpret_cast<Display*>(std::calloc(1, sizeof(Display)));
+	return mPipelineLayout;
+}
 
-	d->FinalRenderTarget = vulkan_interface.FinalRenderTarget;
-	d->MaxFramesInFlight = static_cast<uint8_t>(vulkan_interface.SwapchainData.ImagesCount);
-	d->Extent = vulkan_interface.SurfaceData.SurfaceCapabilities.surfaceCapabilities.currentExtent;
-	d->SwapchainData = vulkan_interface.SwapchainData;
-	d->Queue = vulkan_interface.DeviceData.GraphicsQueue;
-	d->Device = vulkan_interface.DeviceData.Device;
-	d->FrameObjects = FrameObjects_Create(d->Device, vulkan_interface.PhysicalDeviceData.GraphicsQueueFamilyIndex, d->MaxFramesInFlight);
+std::vector<VkDescriptorSetLayout> DisplayPipelineData::GetDescriptorSetLayouts() const
+{
+	return mDescriptorSetLayouts;
+}
 
-	d->AcquireSignalSemaphores.resize(d->MaxFramesInFlight);
-	d->PresentWaitSemaphores.resize(d->MaxFramesInFlight);
-	d->DescriptorSets.resize(d->MaxFramesInFlight);
+Display::Display(const VulkanInterface* vulkan_interface, const std::string& current_path)
+{
+	mFinalRenderTarget = vulkan_interface->GetFinalRenderTarget();
+	mMaxFramesInFlight = static_cast<uint8_t>(vulkan_interface->GetSwapchain()->GetImagesCount());
+	mExtent = vulkan_interface->GetSurface()->GetSurfaceCapabilities().surfaceCapabilities.currentExtent;
+	mSwapchain = vulkan_interface->GetSwapchain();
+	mQueue = vulkan_interface->GetDevice()->GetGraphicsQueue();
+	mDevice = vulkan_interface->GetDevice()->GetDevice();
+	mFrameObjects = std::make_unique<FrameObjects>(mDevice, vulkan_interface->GetPhysicalDeviceData()->GraphicsQueueFamilyIndex, mMaxFramesInFlight);
+	mPipelineData = std::make_unique<DisplayPipelineData>(vulkan_interface, current_path);
+
+	mAcquireSignalSemaphores.resize(mMaxFramesInFlight);
+	mPresentWaitSemaphores.resize(mMaxFramesInFlight);
+	mDescriptorSets.resize(mMaxFramesInFlight);
 
 	const VkSemaphoreTypeCreateInfo sem_type_ci = {
 		.sType = VK_STRUCTURE_TYPE_SEMAPHORE_TYPE_CREATE_INFO,
@@ -367,7 +369,7 @@ Display* Display_Create(const VulkanInterface& vulkan_interface, const std::stri
 		.value = 1,
 	};
 
-	d->PipelineData = DisplayPipelineData_Create(vulkan_interface, current_path);
+	mPipelineData = std::make_unique<DisplayPipelineData>(vulkan_interface, current_path);
 
 	const VkDescriptorPoolSize pool_sizes[] = {
 		{
@@ -378,25 +380,27 @@ Display* Display_Create(const VulkanInterface& vulkan_interface, const std::stri
 
 	const VkDescriptorPoolCreateInfo dp_ci = {
 		.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO,
-		.maxSets = d->MaxFramesInFlight,
+		.maxSets = mMaxFramesInFlight,
 		.poolSizeCount = std::size(pool_sizes),
 		.pPoolSizes = pool_sizes,
 	};
 
-	VK_CHECK("create dsp", vkCreateDescriptorPool(vulkan_interface.DeviceData.Device, &dp_ci, nullptr, &d->DescriptorPool));
+	VK_CHECK("create dsp", vkCreateDescriptorPool(vulkan_interface->GetDevice()->GetDevice(), &dp_ci, nullptr, &mDescriptorPool));
+
+	auto dsls = mPipelineData->GetDescriptorSetLayouts();
 
 	const VkDescriptorSetAllocateInfo ds_ai = {
 		.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO,
-		.descriptorPool = d->DescriptorPool,
+		.descriptorPool = mDescriptorPool,
 		.descriptorSetCount = 1,
-		.pSetLayouts = d->PipelineData.DescriptorSetLayouts.data(),
+		.pSetLayouts = dsls.data(),
 	};
 
-	for (uint8_t fr = 0; fr < d->MaxFramesInFlight; ++fr)
+	for (uint8_t fr = 0; fr < mMaxFramesInFlight; ++fr)
 	{
-		VK_CHECK("create acq sig semaphore", vkCreateSemaphore(d->Device, &bin_sem_ci, nullptr, d->AcquireSignalSemaphores.data() + fr));
-		VK_CHECK("create present wait semaphore", vkCreateSemaphore(d->Device, &bin_sem_ci, nullptr, d->PresentWaitSemaphores.data() + fr));
-		VK_CHECK("allocate display desc sets", vkAllocateDescriptorSets(d->Device, &ds_ai, d->DescriptorSets.data() + fr));
+		VK_CHECK("create acq sig semaphore", vkCreateSemaphore(mDevice, &bin_sem_ci, nullptr, mAcquireSignalSemaphores.data() + fr));
+		VK_CHECK("create present wait semaphore", vkCreateSemaphore(mDevice, &bin_sem_ci, nullptr, mPresentWaitSemaphores.data() + fr));
+		VK_CHECK("allocate display desc sets", vkAllocateDescriptorSets(mDevice, &ds_ai, mDescriptorSets.data() + fr));
 	}
 
 	float verts[] = {
@@ -412,49 +416,45 @@ Display* Display_Create(const VulkanInterface& vulkan_interface, const std::stri
 
 	size_t verts_size = std::size(verts) * sizeof(float);
 
-	d->GeometryBuffer = BufferResource_Create(vulkan_interface.DeviceData.Device, vulkan_interface.Allocator, verts_size,
+	mGeometryBuffer = std::make_unique<BufferResource>(vulkan_interface->GetDevice()->GetDevice(), vulkan_interface->GetAllocator()->GetAllocator(), verts_size,
 		VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_VERTEX_BUFFER_BIT, 0,
 		VMA_MEMORY_USAGE_AUTO_PREFER_DEVICE, "geometry buffer");
 
-	BufferResource staging_buffer = BufferResource_Create(vulkan_interface.DeviceData.Device, vulkan_interface.Allocator, verts_size,
+	std::unique_ptr<BufferResource> staging_buffer = std::make_unique<BufferResource>(vulkan_interface->GetDevice()->GetDevice(), vulkan_interface->GetAllocator()->GetAllocator(), verts_size,
 		VK_BUFFER_USAGE_TRANSFER_SRC_BIT, VMA_ALLOCATION_CREATE_HOST_ACCESS_SEQUENTIAL_WRITE_BIT | VMA_ALLOCATION_CREATE_MAPPED_BIT,
 		VMA_MEMORY_USAGE_AUTO_PREFER_HOST, "staging geometry buffer");
 
-	std::memcpy(staging_buffer.AllocationInfo.allocationInfo.pMappedData, verts, verts_size);
+	std::memcpy(staging_buffer->GetAllocationInfo2().allocationInfo.pMappedData, verts, verts_size);
 
-	Utils_CopyBufferToBuffer(vulkan_interface.TransferObjects.CommandBuffer, vulkan_interface.TransferObjects.Queue, staging_buffer.DescriptorInfo.buffer, d->GeometryBuffer.DescriptorInfo.buffer, verts_size);
-
-	BufferResource_Destroy(staging_buffer);
-
-	return d;
+	staging_buffer->CopyToBuffer(
+		vulkan_interface->GetTransferObjects()->GetCommandBuffer(), 
+		vulkan_interface->GetTransferObjects()->GetQueue(), 
+		mGeometryBuffer->GetDescriptorInfo().buffer, 
+		verts_size);
 }
 
-void Display_Destroy(Display* d)
+Display::~Display() noexcept
 {
-	if (d->Device != VK_NULL_HANDLE)
+	if (mDevice != VK_NULL_HANDLE)
 	{
-		for (uint8_t fr = 0; fr < d->MaxFramesInFlight; ++fr)
+		for (uint8_t fr = 0; fr < mMaxFramesInFlight; ++fr)
 		{
-			vkDestroySemaphore(d->Device, d->AcquireSignalSemaphores[fr], nullptr);
-			vkDestroySemaphore(d->Device, d->PresentWaitSemaphores[fr], nullptr);
+			vkDestroySemaphore(mDevice, mAcquireSignalSemaphores[fr], nullptr);
+			vkDestroySemaphore(mDevice, mPresentWaitSemaphores[fr], nullptr);
 		}
 	}
 
-	vkDestroyDescriptorPool(d->Device, d->DescriptorPool, nullptr);
-	FrameObjects_Destroy(d->FrameObjects);
-	DisplayPipelineData_Destroy(d->PipelineData);
-	BufferResource_Destroy(d->GeometryBuffer);
-
-	free(d);
+	vkDestroyDescriptorPool(mDevice, mDescriptorPool, nullptr);
+	mPipelineData.reset();
 }
 
-void Display_Render(Display* display, const float position_offset[], const float zoom_level, ImGUIState* imgui_state)
+void Display::Render(const float position_offset[], const float zoom_level, ImGUIState* imgui_state)
 {
-	VkDevice device = display->Device;
-	VkCommandBuffer cmd_buff = FrameObjects_GetCommandBuffer(display->FrameObjects);
-	VkSemaphore frame_sem = FrameObjects_GetSemaphore(display->FrameObjects);
-	uint64_t& frame_sem_value = FrameObjects_GetFrameSemValue(display->FrameObjects);
-	uint8_t frame_in_flight = FrameObjects_GetFrameInFlight(display->FrameObjects);
+	VkDevice device = mDevice;
+	VkCommandBuffer cmd_buff = mFrameObjects->GetCommandBuffer();
+	VkSemaphore frame_sem = mFrameObjects->GetSemaphore();
+	uint64_t& frame_sem_value =mFrameObjects->GetFrameSemValue();
+	uint8_t frame_in_flight = mFrameObjects->GetFrameInFlight();
 
 	const VkSemaphoreWaitInfo wait_info = {
 		.sType = VK_STRUCTURE_TYPE_SEMAPHORE_WAIT_INFO,
@@ -467,9 +467,9 @@ void Display_Render(Display* display, const float position_offset[], const float
 
 	const VkAcquireNextImageInfoKHR acq_info = {
 		.sType = VK_STRUCTURE_TYPE_ACQUIRE_NEXT_IMAGE_INFO_KHR,
-		.swapchain = display->SwapchainData.Swapchain,
+		.swapchain = mSwapchain->GetSwapchain(),
 		.timeout = UINT64_MAX,
-		.semaphore = display->AcquireSignalSemaphores[frame_in_flight],
+		.semaphore = mAcquireSignalSemaphores[frame_in_flight],
 		.deviceMask = 0x1,
 	};
 
@@ -488,12 +488,12 @@ void Display_Render(Display* display, const float position_offset[], const float
 		VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT, VK_ACCESS_2_COLOR_ATTACHMENT_WRITE_BIT,
 		VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
 		VK_QUEUE_FAMILY_IGNORED, VK_QUEUE_FAMILY_IGNORED,
-		display->SwapchainData.Images[img_idx]);
+		mSwapchain->GetImages()[img_idx]);
 
 	VkRenderingAttachmentInfo col_attachs[] = {
 		{
 			.sType = VK_STRUCTURE_TYPE_RENDERING_ATTACHMENT_INFO,
-			.imageView = display->SwapchainData.ImageViews[img_idx],
+			.imageView = mSwapchain->GetImageViews()[img_idx],
 			.imageLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
 			.loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR,
 			.storeOp = VK_ATTACHMENT_STORE_OP_STORE,
@@ -513,7 +513,7 @@ void Display_Render(Display* display, const float position_offset[], const float
 	const VkRenderingInfo rendering_info = {
 		.sType = VK_STRUCTURE_TYPE_RENDERING_INFO,
 		.renderArea = {
-			.extent = display->Extent,
+			.extent = mExtent,
 		},
 		.layerCount = 1,
 		.colorAttachmentCount = std::size(col_attachs),
@@ -522,15 +522,16 @@ void Display_Render(Display* display, const float position_offset[], const float
 
 	vkCmdBeginRendering(cmd_buff, &rendering_info);
 
-	vkCmdBindPipeline(cmd_buff, VK_PIPELINE_BIND_POINT_GRAPHICS, display->PipelineData.Pipeline);
+	vkCmdBindPipeline(cmd_buff, VK_PIPELINE_BIND_POINT_GRAPHICS, mPipelineData->GetPipeline());
 
+	VkDescriptorImageInfo descriptor_info = mFinalRenderTarget->GetDescriptorInfo();
 	const VkWriteDescriptorSet desc_writes[] = {
 		{
 			.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
-			.dstSet = display->DescriptorSets[frame_in_flight],
+			.dstSet = mDescriptorSets[frame_in_flight],
 			.descriptorCount = 1,
 			.descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
-			.pImageInfo = &display->FinalRenderTarget.DescriptorInfo,
+			.pImageInfo = &descriptor_info,
 		},
 	};
 
@@ -539,24 +540,24 @@ void Display_Render(Display* display, const float position_offset[], const float
 	const VkBindDescriptorSetsInfo bind_desc_sets_info = {
 		.sType = VK_STRUCTURE_TYPE_BIND_DESCRIPTOR_SETS_INFO,
 		.stageFlags = VK_SHADER_STAGE_VERTEX_BIT,
-		.layout = display->PipelineData.PipelineLayout,
+		.layout = mPipelineData->GetPipelineLayout(),
 		.descriptorSetCount = 1,
-		.pDescriptorSets = &display->DescriptorSets[frame_in_flight],
+		.pDescriptorSets = &mDescriptorSets[frame_in_flight],
 	};
 
 	vkCmdBindDescriptorSets2(cmd_buff, &bind_desc_sets_info);
 
 	const VkViewport viewports[] = {
 		{
-			.width = static_cast<float>(display->Extent.width),
-			.height = static_cast<float>(display->Extent.height),
+			.width = static_cast<float>(mExtent.width),
+			.height = static_cast<float>(mExtent.height),
 			.maxDepth = 1.f,
 		},
 	};
 
 	const VkRect2D scissors[] = {
 		{
-			.extent = display->Extent,
+			.extent = mExtent,
 		},
 	};
 
@@ -564,7 +565,7 @@ void Display_Render(Display* display, const float position_offset[], const float
 	vkCmdSetViewport(cmd_buff, 0, std::size(viewports), viewports);
 
 	const VkBuffer vtx_buffs[] = {
-		display->GeometryBuffer.DescriptorInfo.buffer,
+		mGeometryBuffer->GetDescriptorInfo().buffer,
 	};
 
 	const VkDeviceSize vtx_buff_offs[] = {
@@ -583,7 +584,7 @@ void Display_Render(Display* display, const float position_offset[], const float
 
 	const VkPushConstantsInfo gfx_pc_info = {
 		.sType = VK_STRUCTURE_TYPE_PUSH_CONSTANTS_INFO,
-		.layout = display->PipelineData.PipelineLayout,
+		.layout = mPipelineData->GetPipelineLayout(),
 		.stageFlags = VK_SHADER_STAGE_VERTEX_BIT,
 		.size = sizeof(DisplayPipelineData::PushConstants),
 		.pValues = &gfx_pc,
@@ -636,14 +637,14 @@ void Display_Render(Display* display, const float position_offset[], const float
 		VK_PIPELINE_STAGE_2_BOTTOM_OF_PIPE_BIT, 0,
 		VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL, VK_IMAGE_LAYOUT_PRESENT_SRC_KHR,
 		VK_QUEUE_FAMILY_IGNORED, VK_QUEUE_FAMILY_IGNORED,
-		display->SwapchainData.Images[img_idx]);
+		mSwapchain->GetImages()[img_idx]);
 
 	VK_CHECK("end display cmd buff", vkEndCommandBuffer(cmd_buff));
 
 	const VkSemaphoreSubmitInfo wait_sem_infos[] = {
 		{
 			.sType = VK_STRUCTURE_TYPE_SEMAPHORE_SUBMIT_INFO,
-			.semaphore = display->AcquireSignalSemaphores[frame_in_flight],
+			.semaphore = mAcquireSignalSemaphores[frame_in_flight],
 			.stageMask = VK_PIPELINE_STAGE_2_TOP_OF_PIPE_BIT,
 		},
 	};
@@ -658,7 +659,7 @@ void Display_Render(Display* display, const float position_offset[], const float
 	const VkSemaphoreSubmitInfo sig_sem_infos[] = {
 		{
 			.sType = VK_STRUCTURE_TYPE_SEMAPHORE_SUBMIT_INFO,
-			.semaphore = display->PresentWaitSemaphores[frame_in_flight],
+			.semaphore = mPresentWaitSemaphores[frame_in_flight],
 			.stageMask = VK_PIPELINE_STAGE_2_BOTTOM_OF_PIPE_BIT,
 		},
 		{
@@ -681,24 +682,25 @@ void Display_Render(Display* display, const float position_offset[], const float
 		},
 	};
 
-	VK_CHECK("submit display render commands", vkQueueSubmit2(display->Queue, std::size(submit_infos), submit_infos, VK_NULL_HANDLE));
+	VK_CHECK("submit display render commands", vkQueueSubmit2(mQueue, std::size(submit_infos), submit_infos, VK_NULL_HANDLE));
 
+	VkSwapchainKHR swapchain = mSwapchain->GetSwapchain();
 	const VkPresentInfoKHR present_info = {
 		.sType = VK_STRUCTURE_TYPE_PRESENT_INFO_KHR,
 		.waitSemaphoreCount = 1,
-		.pWaitSemaphores = display->PresentWaitSemaphores.data() + frame_in_flight,
+		.pWaitSemaphores = mPresentWaitSemaphores.data() + frame_in_flight,
 		.swapchainCount = 1,
-		.pSwapchains = &display->SwapchainData.Swapchain,
+		.pSwapchains = &swapchain,
 		.pImageIndices = &img_idx,
 	};
 
-	VK_CHECK("q present", vkQueuePresentKHR(display->Queue, &present_info));
-	//VK_CHECK("gfx q wait idle", vkQueueWaitIdle(display->Queue));
+	VK_CHECK("q present", vkQueuePresentKHR(mQueue, &present_info));
+	VK_CHECK("gfx q wait idle", vkQueueWaitIdle(mQueue));
 
-	FrameObjects_NextFrame(display->FrameObjects);
+	mFrameObjects->NextFrame();
 }
 
-void Display_UpdateFinalRenderTarget(Display* display, const ImageResource FinalRenderTarget)
+void Display::UpdateFinalRenderTarget(ImageResource* FinalRenderTarget)
 {
-	display->FinalRenderTarget = FinalRenderTarget;
+	mFinalRenderTarget = FinalRenderTarget;
 }

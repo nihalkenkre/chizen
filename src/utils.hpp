@@ -29,8 +29,6 @@ inline static VkDeviceSize ALIGNED_SIZE(VkDeviceSize size, VkDeviceSize alignmen
 	return (size + alignment - 1) & ~(alignment - 1);
 }
 
-void Utils_CopyBufferToBuffer(const VkCommandBuffer xfer_cmd_buff, const VkQueue xfer_q, const VkBuffer src_buffer, const VkBuffer dst_buffer, const VkDeviceSize size);
-
 void Utils_ChangeImageLayout(
 	const VkCommandBuffer cmd_buff,
 	const VkPipelineStageFlags2 src_stage_mask, const VkAccessFlags2 src_access_mask,

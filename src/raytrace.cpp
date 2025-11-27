@@ -2,28 +2,41 @@
 #include "frame_objects.hpp"
 #include "utils.hpp"
 
-struct RaytracePipelineData
+class RaytracePipelineData
 {
+public:
+	RaytracePipelineData() = delete;
+	RaytracePipelineData(const VulkanInterface* const vulkan_interface, const std::string& current_path);
+
+	RaytracePipelineData(const RaytracePipelineData& other) = delete;
+	RaytracePipelineData& operator=(const RaytracePipelineData& other) = delete;
+
+	~RaytracePipelineData() noexcept;
+
 	struct PushConstants
 	{
 		uint32_t CurrentSample = 1;
 	};
 
-	VkPipeline Pipeline = VK_NULL_HANDLE;
-	VkPipelineLayout PipelineLayout = VK_NULL_HANDLE;
-	std::vector<VkDescriptorSetLayout> DescriptorSetLayouts;
-	std::vector<VkRayTracingShaderGroupCreateInfoKHR> ShaderGroups;
+	VkPipeline GetPipeline() const;
+	VkPipelineLayout GetPipelineLayout() const;
+	std::vector<VkDescriptorSetLayout> GetDescriptorSetLayouts() const;
+	std::vector<VkRayTracingShaderGroupCreateInfoKHR> GetShaderGroups() const;
 
-	VkDevice Device = VK_NULL_HANDLE;
+private:
+	VkPipeline mPipeline = VK_NULL_HANDLE;
+	VkPipelineLayout mPipelineLayout = VK_NULL_HANDLE;
+	std::vector<VkDescriptorSetLayout> mDescriptorSetLayouts;
+	std::vector<VkRayTracingShaderGroupCreateInfoKHR> mShaderGroups;
+
+	VkDevice mDevice = VK_NULL_HANDLE;
 };
 
-RaytracePipelineData RaytracePipelineData_Create(const VulkanInterface* const vulkan_interface, const std::string& current_path)
+RaytracePipelineData::RaytracePipelineData(const VulkanInterface* const vulkan_interface, const std::string& current_path)
 {
-	RaytracePipelineData rpd = {
-		.Device = vulkan_interface->DeviceData.Device,
-	};
+	mDevice = vulkan_interface->GetDevice()->GetDevice();
 
-	rpd.DescriptorSetLayouts.resize(1);
+	mDescriptorSetLayouts.resize(1);
 
 	Slang::ComPtr<slang::IGlobalSession> slang_global_session;
 	SLANG_CHECK("create global session", slang::createGlobalSession(slang_global_session.writeRef()));
@@ -95,7 +108,7 @@ RaytracePipelineData RaytracePipelineData_Create(const VulkanInterface* const vu
 	};
 
 	VkShaderModule rg_mod = VK_NULL_HANDLE;
-	VK_CHECK("create shader module", vkCreateShaderModule(vulkan_interface->DeviceData.Device, &rg_mod_ci, nullptr, &rg_mod));
+	VK_CHECK("create shader module", vkCreateShaderModule(vulkan_interface->GetDevice()->GetDevice(), &rg_mod_ci, nullptr, &rg_mod));
 
 	Slang::ComPtr<slang::IEntryPoint> ms_entry_point;
 	slang_module->findEntryPointByName("miss", ms_entry_point.writeRef());
@@ -123,7 +136,7 @@ RaytracePipelineData RaytracePipelineData_Create(const VulkanInterface* const vu
 	};
 
 	VkShaderModule ms_mod = VK_NULL_HANDLE;
-	VK_CHECK("create shader module", vkCreateShaderModule(vulkan_interface->DeviceData.Device, &ms_mod_ci, nullptr, &ms_mod));
+	VK_CHECK("create shader module", vkCreateShaderModule(vulkan_interface->GetDevice()->GetDevice(), &ms_mod_ci, nullptr, &ms_mod));
 
 	Slang::ComPtr<slang::IEntryPoint> ch_entry_point;
 	slang_module->findEntryPointByName("closesthit", ch_entry_point.writeRef());
@@ -151,7 +164,7 @@ RaytracePipelineData RaytracePipelineData_Create(const VulkanInterface* const vu
 	};
 
 	VkShaderModule ch_mod = VK_NULL_HANDLE;
-	VK_CHECK("create shader module", vkCreateShaderModule(vulkan_interface->DeviceData.Device, &ch_mod_ci, nullptr, &ch_mod));
+	VK_CHECK("create shader module", vkCreateShaderModule(vulkan_interface->GetDevice()->GetDevice(), &ch_mod_ci, nullptr, &ch_mod));
 
 	const VkDescriptorSetLayoutBinding bindings[] = {
 		{
@@ -180,7 +193,7 @@ RaytracePipelineData RaytracePipelineData_Create(const VulkanInterface* const vu
 		.pBindings = bindings,
 	};
 
-	VK_CHECK("create desc set layout", vkCreateDescriptorSetLayout(vulkan_interface->DeviceData.Device, &dsl_ci, nullptr, &rpd.DescriptorSetLayouts[0]));
+	VK_CHECK("create desc set layout", vkCreateDescriptorSetLayout(vulkan_interface->GetDevice()->GetDevice(), &dsl_ci, nullptr, &mDescriptorSetLayouts[0]));
 
 	const VkPushConstantRange pc_ranges[] = {
 		{
@@ -191,13 +204,13 @@ RaytracePipelineData RaytracePipelineData_Create(const VulkanInterface* const vu
 
 	const VkPipelineLayoutCreateInfo pl_ci = {
 		.sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO,
-		.setLayoutCount = static_cast<uint32_t>(rpd.DescriptorSetLayouts.size()),
-		.pSetLayouts = rpd.DescriptorSetLayouts.data(),
+		.setLayoutCount = static_cast<uint32_t>(mDescriptorSetLayouts.size()),
+		.pSetLayouts = mDescriptorSetLayouts.data(),
 		.pushConstantRangeCount = std::size(pc_ranges),
 		.pPushConstantRanges = pc_ranges,
 	};
 
-	VK_CHECK("create pipeline layout", vkCreatePipelineLayout(vulkan_interface->DeviceData.Device, &pl_ci, nullptr, &rpd.PipelineLayout));
+	VK_CHECK("create pipeline layout", vkCreatePipelineLayout(vulkan_interface->GetDevice()->GetDevice(), &pl_ci, nullptr, &mPipelineLayout));
 
 	const VkPipelineShaderStageCreateInfo stage_cis[] = {
 		{
@@ -220,7 +233,7 @@ RaytracePipelineData RaytracePipelineData_Create(const VulkanInterface* const vu
 		},
 	};
 
-	rpd.ShaderGroups = {
+	mShaderGroups = {
 		{
 			.sType = VK_STRUCTURE_TYPE_RAY_TRACING_SHADER_GROUP_CREATE_INFO_KHR,
 			.type = VK_RAY_TRACING_SHADER_GROUP_TYPE_GENERAL_KHR,
@@ -252,122 +265,106 @@ RaytracePipelineData RaytracePipelineData_Create(const VulkanInterface* const vu
 			.sType = VK_STRUCTURE_TYPE_RAY_TRACING_PIPELINE_CREATE_INFO_KHR,
 			.stageCount = std::size(stage_cis),
 			.pStages = stage_cis,
-			.groupCount = static_cast<uint32_t>(std::size(rpd.ShaderGroups)),
-			.pGroups = rpd.ShaderGroups.data(),
+			.groupCount = static_cast<uint32_t>(std::size(mShaderGroups)),
+			.pGroups = mShaderGroups.data(),
 			.maxPipelineRayRecursionDepth = 1,
-			.layout = rpd.PipelineLayout,
+			.layout = mPipelineLayout,
 		},
 	};
 
-	VK_CHECK("create rt pipeline", vkCreateRayTracingPipelinesKHR(vulkan_interface->DeviceData.Device, VK_NULL_HANDLE, VK_NULL_HANDLE, std::size(create_infos), create_infos, nullptr, &rpd.Pipeline));
+	VK_CHECK("create rt pipeline", vkCreateRayTracingPipelinesKHR(vulkan_interface->GetDevice()->GetDevice(), VK_NULL_HANDLE, VK_NULL_HANDLE, std::size(create_infos), create_infos, nullptr, &mPipeline));
 
-	//rt_pipeline.rg_sbt = vk_buffer::create(
-	//	device, allocator, aligned_handle_size,
-	//	VK_BUFFER_USAGE_SHADER_BINDING_TABLE_BIT_KHR | VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT,
-	//	VMA_ALLOCATION_CREATE_HOST_ACCESS_SEQUENTIAL_WRITE_BIT | VMA_ALLOCATION_CREATE_MAPPED_BIT,
-	//	VMA_MEMORY_USAGE_AUTO_PREFER_HOST, "rb sbt");
-
-	vkDestroyShaderModule(vulkan_interface->DeviceData.Device, rg_mod, nullptr);
-	vkDestroyShaderModule(vulkan_interface->DeviceData.Device, ch_mod, nullptr);
-	vkDestroyShaderModule(vulkan_interface->DeviceData.Device, ms_mod, nullptr);
-
-	return rpd;
+	vkDestroyShaderModule(vulkan_interface->GetDevice()->GetDevice(), rg_mod, nullptr);
+	vkDestroyShaderModule(vulkan_interface->GetDevice()->GetDevice(), ch_mod, nullptr);
+	vkDestroyShaderModule(vulkan_interface->GetDevice()->GetDevice(), ms_mod, nullptr);
 }
 
-void RaytracePipelineData_Destroy(RaytracePipelineData* rpd)
+RaytracePipelineData::~RaytracePipelineData() noexcept
 {
-	if (rpd->Device != VK_NULL_HANDLE)
+	if (mDevice != VK_NULL_HANDLE)
 	{
-		for (auto& desc_set_layout : rpd->DescriptorSetLayouts)
-			vkDestroyDescriptorSetLayout(rpd->Device, desc_set_layout, nullptr);
+		for (auto& desc_set_layout : mDescriptorSetLayouts)
+			vkDestroyDescriptorSetLayout(mDevice, desc_set_layout, nullptr);
 
-		vkDestroyPipelineLayout(rpd->Device, rpd->PipelineLayout, nullptr);
-		vkDestroyPipeline(rpd->Device, rpd->Pipeline, nullptr);
+		vkDestroyPipelineLayout(mDevice, mPipelineLayout, nullptr);
+		vkDestroyPipeline(mDevice, mPipeline, nullptr);
 	}
 }
-
-struct Raytrace
+VkPipeline RaytracePipelineData::GetPipeline() const
 {
-	ImageResource FinalRenderTarget = {};
-	ImageResource AccumRenderTarget = {};
-	BufferResource RandomStates = {};
-	BufferResource RaygenSBT = {};
+	return mPipeline;
+}
 
-	FrameObjects* FrameObjects = nullptr;
-	std::vector<VkDescriptorSet> DescriptorSets;
-	VkDescriptorPool DescriptorPool = VK_NULL_HANDLE;
-	VkPhysicalDeviceRayTracingPipelinePropertiesKHR RayTracingProperties = {};
+VkPipelineLayout RaytracePipelineData::GetPipelineLayout() const
+{
+	return mPipelineLayout;
+}
 
-	RaytracePipelineData PipelineData = {};
+std::vector<VkDescriptorSetLayout> RaytracePipelineData::GetDescriptorSetLayouts() const
+{
+	return mDescriptorSetLayouts;
+}
 
-	VkExtent2D Extent = {};
-	VkQueue ComputeQueue = VK_NULL_HANDLE;
-	VkQueue TransferQueue = VK_NULL_HANDLE;
-	VkCommandBuffer TransferCommandBuffer = VK_NULL_HANDLE;
-	std::vector<uint32_t> QueueFamilyIndices;
-	VmaAllocator Allocator = nullptr;
-	VkDevice Device = VK_NULL_HANDLE;
+std::vector<VkRayTracingShaderGroupCreateInfoKHR> RaytracePipelineData::GetShaderGroups() const
+{
+	return mShaderGroups;
+}
 
-	uint8_t MaxFramesInFlight = 0;
-	uint8_t FrameInFlight = 0;
-	bool StopRendering = false;
-};
-
-void Raytrace_InitializeResources(Raytrace* r)
+void Raytrace::InitializeResources()
 {
 	const VkCommandBufferBeginInfo cmd_buff_bi = {
 		.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO,
 	};
 
-	VK_CHECK("begin xfer cmd buff", vkBeginCommandBuffer(r->TransferCommandBuffer, &cmd_buff_bi));
+	VK_CHECK("begin xfer cmd buff", vkBeginCommandBuffer(mTransferCommandBuffer, &cmd_buff_bi));
 
-	Utils_ChangeImageLayout(r->TransferCommandBuffer,
+	mAccumRenderTarget->ChangeImageLayout(
+		mTransferCommandBuffer,
 		VK_PIPELINE_STAGE_2_TOP_OF_PIPE_BIT, 0,
 		VK_PIPELINE_STAGE_2_BOTTOM_OF_PIPE_BIT, 0,
 		VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_GENERAL,
-		VK_QUEUE_FAMILY_IGNORED, VK_QUEUE_FAMILY_IGNORED,
-		r->AccumRenderTarget.Image
+		VK_QUEUE_FAMILY_IGNORED, VK_QUEUE_FAMILY_IGNORED
 	);
 
-	BufferResource staging_buffer = BufferResource_Create(
-		r->Device, r->Allocator,
-		r->RandomStates.AllocationInfo.allocationInfo.size,
+	std::unique_ptr<BufferResource> staging_buffer = std::make_unique<BufferResource>(
+		mDevice, mAllocator,
+		mRandomStates->GetAllocationInfo2().allocationInfo.size,
 		VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
 		VMA_ALLOCATION_CREATE_HOST_ACCESS_SEQUENTIAL_WRITE_BIT | VMA_ALLOCATION_CREATE_MAPPED_BIT,
 		VMA_MEMORY_USAGE_AUTO_PREFER_HOST, "staging rand states buffer");
 
-	for (uint32_t st = 0; st < 4 * r->Extent.width * r->Extent.height;)
+	for (uint32_t st = 0; st < 4 * mExtent.width * mExtent.height;)
 	{
 		uint32_t rand_val = rand();
 		while (rand_val < 128)
 			rand_val = rand();
 
-		(reinterpret_cast<uint32_t*>(staging_buffer.AllocationInfo.allocationInfo.pMappedData))[st++] = rand_val;
+		(reinterpret_cast<uint32_t*>(staging_buffer->GetAllocationInfo2().allocationInfo.pMappedData))[st++] = rand_val;
 	}
 
 	const VkBufferCopy2 regions[] = {
 		{
 			.sType = VK_STRUCTURE_TYPE_BUFFER_COPY_2,
-			.size = r->RandomStates.AllocationInfo.allocationInfo.size,
+			.size = mRandomStates->GetAllocationInfo2().allocationInfo.size,
 		},
 	};
 
 	const VkCopyBufferInfo2 copy_buff_info = {
 		.sType = VK_STRUCTURE_TYPE_COPY_BUFFER_INFO_2,
-		.srcBuffer = staging_buffer.DescriptorInfo.buffer,
-		.dstBuffer = r->RandomStates.DescriptorInfo.buffer,
+		.srcBuffer = staging_buffer->GetDescriptorInfo().buffer,
+		.dstBuffer = mRandomStates->GetDescriptorInfo().buffer,
 		.regionCount = std::size(regions),
 		.pRegions = regions,
 	};
 
-	vkCmdCopyBuffer2(r->TransferCommandBuffer, &copy_buff_info);
+	vkCmdCopyBuffer2(mTransferCommandBuffer, &copy_buff_info);
 
-	VK_CHECK("end xfer cmd buff", vkEndCommandBuffer(r->TransferCommandBuffer));
+	VK_CHECK("end xfer cmd buff", vkEndCommandBuffer(mTransferCommandBuffer));
 
 	const VkCommandBufferSubmitInfo cmd_buff_infos[] = {
 		{
 			.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_SUBMIT_INFO,
-			.commandBuffer = r->TransferCommandBuffer,
+			.commandBuffer = mTransferCommandBuffer,
 		}
 	};
 
@@ -379,56 +376,51 @@ void Raytrace_InitializeResources(Raytrace* r)
 		},
 	};
 
-	VK_CHECK("submit xfer cmd buff", vkQueueSubmit2(r->TransferQueue, std::size(submit_infos), submit_infos, VK_NULL_HANDLE));
-	VK_CHECK("wait for device", vkDeviceWaitIdle(r->Device));
+	VK_CHECK("submit xfer cmd buff", vkQueueSubmit2(mTransferQueue, std::size(submit_infos), submit_infos, VK_NULL_HANDLE));
+	VK_CHECK("wait for device", vkDeviceWaitIdle(mDevice));
 
-	BufferResource_Destroy(staging_buffer);
-
-	const uint32_t aligned_handle_size = static_cast<uint32_t>(ALIGNED_SIZE(r->RayTracingProperties.shaderGroupHandleSize, r->RayTracingProperties.shaderGroupHandleAlignment));
-	const uint32_t sbt_size = aligned_handle_size * static_cast<uint32_t>(std::size(r->PipelineData.ShaderGroups));
+	const uint32_t aligned_handle_size = static_cast<uint32_t>(ALIGNED_SIZE(mRayTracingProperties.shaderGroupHandleSize, mRayTracingProperties.shaderGroupHandleAlignment));
+	const uint32_t sbt_size = aligned_handle_size * static_cast<uint32_t>(std::size(mPipelineData->GetShaderGroups()));
 
 	std::vector<uint8_t> shader_handle_storage(sbt_size);
-	VK_CHECK("get rt shader handles", vkGetRayTracingShaderGroupHandlesKHR(r->Device, r->PipelineData.Pipeline, 0, static_cast<uint32_t>(std::size(r->PipelineData.ShaderGroups)), sbt_size, shader_handle_storage.data()));
+	VK_CHECK("get rt shader handles", vkGetRayTracingShaderGroupHandlesKHR(mDevice, mPipelineData->GetPipeline(), 0, static_cast<uint32_t>(std::size(mPipelineData->GetShaderGroups())), sbt_size, shader_handle_storage.data()));
 
-	memcpy(r->RaygenSBT.AllocationInfo.allocationInfo.pMappedData, shader_handle_storage.data(), sbt_size);
+	memcpy(mRaygenSBT->GetAllocationInfo2().allocationInfo.pMappedData, shader_handle_storage.data(), sbt_size);
 }
 
-Raytrace* Raytrace_Create(const VulkanInterface* const vulkan_interface, const VkExtent2D& extent, const std::string& current_path)
+Raytrace::Raytrace(const VulkanInterface* const vulkan_interface, const VkExtent3D& extent, const std::string& current_path)
 {
-	Raytrace* r = reinterpret_cast<Raytrace*>(std::calloc(1, sizeof(Raytrace)));
-
-	r->Device = vulkan_interface->DeviceData.Device;
-	r->Allocator = vulkan_interface->Allocator;
-	r->RayTracingProperties = vulkan_interface->PhysicalDeviceData.RayTracingProperties;
-	r->FinalRenderTarget = vulkan_interface->FinalRenderTarget;
-	r->AccumRenderTarget = ImageResource_Create(
-		r->Device, { extent.width, extent.height, 1 }, VK_FORMAT_R32G32B32A32_SFLOAT,
-		VK_IMAGE_USAGE_STORAGE_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT, vulkan_interface->Allocator, 0,
+	mDevice = vulkan_interface->GetDevice()->GetDevice();
+	mAllocator = vulkan_interface->GetAllocator()->GetAllocator();
+	mRayTracingProperties = vulkan_interface->GetPhysicalDeviceData()->RayTracingProperties;
+	mFinalRenderTarget = vulkan_interface->GetFinalRenderTarget();
+	mQueueFamilyIndices = {
+		vulkan_interface->GetPhysicalDeviceData()->GraphicsQueueFamilyIndex, vulkan_interface->GetPhysicalDeviceData()->ComputeQueueFamilyIndex,
+		vulkan_interface->GetPhysicalDeviceData()->TransferQueueFamilyIndex
+	};
+	mAccumRenderTarget = std::make_unique<ImageResource>(
+		mDevice, extent, VK_FORMAT_R32G32B32A32_SFLOAT,
+		VK_IMAGE_USAGE_STORAGE_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT, vulkan_interface->GetAllocator()->GetAllocator(), 0,
 		VMA_MEMORY_USAGE_AUTO_PREFER_DEVICE,
-		{ vulkan_interface->PhysicalDeviceData.GraphicsQueueFamilyIndex, vulkan_interface->PhysicalDeviceData.ComputeQueueFamilyIndex, vulkan_interface->PhysicalDeviceData.TransferQueueFamilyIndex },
-		"accum render target");
-	r->RandomStates = BufferResource_Create(
-		r->Device, vulkan_interface->Allocator, extent.width * extent.height * 4 * sizeof(uint32_t),
+		mQueueFamilyIndices, "accum render target");
+	mRandomStates = std::make_unique<BufferResource>(
+		mDevice, vulkan_interface->GetAllocator()->GetAllocator(), extent.width * extent.height * 4 * sizeof(uint32_t),
 		VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_STORAGE_BUFFER_BIT,
 		0, VMA_MEMORY_USAGE_AUTO_PREFER_DEVICE, "rand states");
-	r->MaxFramesInFlight = static_cast<uint8_t>(vulkan_interface->SwapchainData.ImagesCount);
-	r->Extent = extent,
-	r->ComputeQueue = vulkan_interface->DeviceData.ComputeQueue;
-	r->TransferQueue = vulkan_interface->TransferObjects.Queue;
-	r->TransferCommandBuffer = vulkan_interface->TransferObjects.CommandBuffer;
-	r->FrameObjects = FrameObjects_Create(r->Device, vulkan_interface->PhysicalDeviceData.ComputeQueueFamilyIndex, r->MaxFramesInFlight);
-	r->QueueFamilyIndices = {
-		vulkan_interface->PhysicalDeviceData.GraphicsQueueFamilyIndex, vulkan_interface->PhysicalDeviceData.ComputeQueueFamilyIndex,
-		vulkan_interface->PhysicalDeviceData.TransferQueueFamilyIndex
-	};
+	mMaxFramesInFlight = static_cast<uint8_t>(vulkan_interface->GetSwapchain()->GetImagesCount());
+	mExtent = extent;
+	mComputeQueue = vulkan_interface->GetDevice()->GetComputeQueue();
+	mTransferQueue = vulkan_interface->GetTransferObjects()->GetQueue();
+	mTransferCommandBuffer = vulkan_interface->GetTransferObjects()->GetCommandBuffer();
+	mFrameObjects = std::make_unique<FrameObjects>(mDevice, vulkan_interface->GetPhysicalDeviceData()->ComputeQueueFamilyIndex, mMaxFramesInFlight);
 
-	r->PipelineData = RaytracePipelineData_Create(vulkan_interface, current_path);
+	mPipelineData = std::make_unique<RaytracePipelineData>(vulkan_interface, current_path);
 
-	r->DescriptorSets.resize(r->MaxFramesInFlight);
+	mDescriptorSets.resize(mMaxFramesInFlight);
 
-	const uint32_t aligned_handle_size = static_cast<uint32_t>(ALIGNED_SIZE(r->RayTracingProperties.shaderGroupHandleSize, r->RayTracingProperties.shaderGroupHandleAlignment));
-	r->RaygenSBT = BufferResource_Create(
-		r->Device, r->Allocator, aligned_handle_size,
+	const uint32_t aligned_handle_size = static_cast<uint32_t>(ALIGNED_SIZE(mRayTracingProperties.shaderGroupHandleSize, mRayTracingProperties.shaderGroupHandleAlignment));
+	mRaygenSBT = std::make_unique<BufferResource>(
+		mDevice, mAllocator, aligned_handle_size,
 		VK_BUFFER_USAGE_SHADER_BINDING_TABLE_BIT_KHR | VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT,
 		VMA_ALLOCATION_CREATE_HOST_ACCESS_SEQUENTIAL_WRITE_BIT | VMA_ALLOCATION_CREATE_MAPPED_BIT,
 		VMA_MEMORY_USAGE_AUTO_PREFER_HOST, "rb sbt");
@@ -442,67 +434,55 @@ Raytrace* Raytrace_Create(const VulkanInterface* const vulkan_interface, const V
 
 	const VkDescriptorPoolCreateInfo dp_ci = {
 		.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO,
-		.maxSets = r->MaxFramesInFlight,
+		.maxSets = mMaxFramesInFlight,
 		.poolSizeCount = std::size(pool_sizes),
 		.pPoolSizes = pool_sizes,
 	};
 
-	VK_CHECK("create dsp", vkCreateDescriptorPool(r->Device, &dp_ci, nullptr, &r->DescriptorPool));
+	VK_CHECK("create dsp", vkCreateDescriptorPool(mDevice, &dp_ci, nullptr, &mDescriptorPool));
 
+	auto dsls = mPipelineData->GetDescriptorSetLayouts();
 	const VkDescriptorSetAllocateInfo ds_ai = {
 		.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO,
-		.descriptorPool = r->DescriptorPool,
+		.descriptorPool = mDescriptorPool,
 		.descriptorSetCount = 1,
-		.pSetLayouts = r->PipelineData.DescriptorSetLayouts.data(),
+		.pSetLayouts = dsls.data(),
 	};
 
-	for (uint8_t fr = 0; fr < r->MaxFramesInFlight; ++fr)
+	for (uint8_t fr = 0; fr < mMaxFramesInFlight; ++fr)
 	{
-		VK_CHECK("allocate raytrace desc sets", vkAllocateDescriptorSets(r->Device, &ds_ai, r->DescriptorSets.data() + fr));
+		VK_CHECK("allocate raytrace desc sets", vkAllocateDescriptorSets(mDevice, &ds_ai, mDescriptorSets.data() + fr));
 	}
 
-	Raytrace_InitializeResources(r);
-
-	return r;
+	InitializeResources();
 }
 
-void Raytrace_Destroy(Raytrace* r)
+Raytrace::~Raytrace()
 {
-	if (r->Device != VK_NULL_HANDLE)
-		vkDestroyDescriptorPool(r->Device, r->DescriptorPool, nullptr);
-
-	BufferResource_Destroy(r->RaygenSBT);
-	BufferResource_Destroy(r->RandomStates);
-	ImageResource_Destroy(r->AccumRenderTarget);
-	FrameObjects_Destroy(r->FrameObjects);
-	RaytracePipelineData_Destroy(&r->PipelineData);
-
-	free(r);
+	if (mDevice != VK_NULL_HANDLE)
+		vkDestroyDescriptorPool(mDevice, mDescriptorPool, nullptr);
 }
 
-void Raytrace_RecreateRenderResources(Raytrace* r, const VkExtent2D& extent)
+void Raytrace::RecreateRenderResources(const VkExtent2D& extent)
 {
-	ImageResource_Destroy(r->AccumRenderTarget);
-	BufferResource_Destroy(r->RandomStates);
-
-	r->Extent = extent;
-	r->AccumRenderTarget = ImageResource_Create(r->Device, { r->Extent.width, r->Extent.height, 1 }, VK_FORMAT_R32G32B32A32_SFLOAT,
-		VK_IMAGE_USAGE_STORAGE_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT, r->Allocator,
-		0, VMA_MEMORY_USAGE_AUTO_PREFER_DEVICE, r->QueueFamilyIndices, "accum render target");
-	r->RandomStates = BufferResource_Create(r->Device, r->Allocator, r->Extent.width * r->Extent.height * 4 * sizeof(uint32_t),
+	mExtent = { extent.width , extent.height, 1 };
+	mAccumRenderTarget = std::make_unique<ImageResource>(mDevice, mExtent, VK_FORMAT_R32G32B32A32_SFLOAT,
+		VK_IMAGE_USAGE_STORAGE_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT, mAllocator,
+		0, VMA_MEMORY_USAGE_AUTO_PREFER_DEVICE, mQueueFamilyIndices, "accum render target");
+	mRandomStates = std::make_unique<BufferResource>(mDevice, mAllocator, mExtent.width * mExtent.height * 4 * sizeof(uint32_t),
 		VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT,
 		0, VMA_MEMORY_USAGE_AUTO_PREFER_DEVICE, "random states");
 
-	Raytrace_InitializeResources(r);
+	InitializeResources();
 }
 
-void Raytrace_Render(Raytrace* r, bool* is_rendering, const uint32_t max_samples)
+void Raytrace::Render(bool* is_raytracing, const uint32_t max_samples)
 {
-	VkDevice device = r->Device;
-	VkCommandBuffer cmd_buff = FrameObjects_GetCommandBuffer(r->FrameObjects);
-	VkSemaphore frame_sem = FrameObjects_GetSemaphore(r->FrameObjects);
-	uint64_t& frame_sem_value = FrameObjects_GetFrameSemValue(r->FrameObjects);
-	uint8_t frame_in_flight = FrameObjects_GetFrameInFlight(r->FrameObjects);
+	VkDevice device = mDevice;
+	VkCommandBuffer cmd_buff = mFrameObjects->GetCommandBuffer();
+	VkSemaphore frame_sem = mFrameObjects->GetSemaphore();
+	uint64_t& frame_sem_value = mFrameObjects->GetFrameSemValue();
+	uint8_t frame_in_flight = mFrameObjects->GetFrameInFlight();
 
 	uint32_t s = 1;
 
@@ -517,7 +497,8 @@ void Raytrace_Render(Raytrace* r, bool* is_rendering, const uint32_t max_samples
 
 		VK_CHECK("wait acq img", vkWaitSemaphores(device, &wait_info, UINT64_MAX));
 
-		if (r->StopRendering) break;
+		// waiting for last submitted buffer to complete before exiting. resources in use.
+		if (mStopRendering) break;
 
 		const VkCommandBufferBeginInfo rt_begin_info = {
 			.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO,
@@ -546,34 +527,38 @@ void Raytrace_Render(Raytrace* r, bool* is_rendering, const uint32_t max_samples
 				},
 			};
 
-			vkCmdClearColorImage(cmd_buff, r->AccumRenderTarget.Image, VK_IMAGE_LAYOUT_GENERAL, &clear_color, std::size(ranges), ranges);
+			vkCmdClearColorImage(cmd_buff, mAccumRenderTarget->GetImage(), VK_IMAGE_LAYOUT_GENERAL, &clear_color, std::size(ranges), ranges);
 		}
 
-		vkCmdBindPipeline(cmd_buff, VK_PIPELINE_BIND_POINT_RAY_TRACING_KHR, r->PipelineData.Pipeline);
+		vkCmdBindPipeline(cmd_buff, VK_PIPELINE_BIND_POINT_RAY_TRACING_KHR, mPipelineData->GetPipeline());
+
+		VkDescriptorImageInfo accum_target_desc_info = mAccumRenderTarget->GetDescriptorInfo();
+		VkDescriptorImageInfo final_render_desc_info = mFinalRenderTarget->GetDescriptorInfo();
+		VkDescriptorBufferInfo rand_states_desc_info = mRandomStates->GetDescriptorInfo();
 
 		const VkWriteDescriptorSet rt_desc_writes[] = {
 			{
 				.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
-				.dstSet = r->DescriptorSets[frame_in_flight],
+				.dstSet = mDescriptorSets[frame_in_flight],
 				.descriptorCount = 1,
 				.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_IMAGE,
-				.pImageInfo = &r->AccumRenderTarget.DescriptorInfo,
+				.pImageInfo = &accum_target_desc_info,
 			},
 			{
 				.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
-				.dstSet = r->DescriptorSets[frame_in_flight],
+				.dstSet = mDescriptorSets[frame_in_flight],
 				.dstBinding = 1,
 				.descriptorCount = 1,
 				.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_IMAGE,
-				.pImageInfo = &r->FinalRenderTarget.DescriptorInfo,
+				.pImageInfo = &final_render_desc_info,
 			},
 			{
 				.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
-				.dstSet = r->DescriptorSets[frame_in_flight],
+				.dstSet = mDescriptorSets[frame_in_flight],
 				.dstBinding = 2,
 				.descriptorCount = 1,
 				.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,
-				.pBufferInfo = &r->RandomStates.DescriptorInfo,
+				.pBufferInfo = &rand_states_desc_info,
 			},
 		};
 
@@ -582,9 +567,9 @@ void Raytrace_Render(Raytrace* r, bool* is_rendering, const uint32_t max_samples
 		const VkBindDescriptorSetsInfo rt_ds_bi = {
 			.sType = VK_STRUCTURE_TYPE_BIND_DESCRIPTOR_SETS_INFO,
 			.stageFlags = VK_SHADER_STAGE_RAYGEN_BIT_KHR,
-			.layout = r->PipelineData.PipelineLayout,
+			.layout = mPipelineData->GetPipelineLayout(),
 			.descriptorSetCount = 1,
-			.pDescriptorSets = r->DescriptorSets.data() + frame_in_flight,
+			.pDescriptorSets = mDescriptorSets.data() + frame_in_flight,
 		};
 
 		vkCmdBindDescriptorSets2(cmd_buff, &rt_ds_bi);
@@ -595,7 +580,7 @@ void Raytrace_Render(Raytrace* r, bool* is_rendering, const uint32_t max_samples
 
 		const VkPushConstantsInfo rt_pc_info = {
 			.sType = VK_STRUCTURE_TYPE_PUSH_CONSTANTS_INFO,
-			.layout = r->PipelineData.PipelineLayout,
+			.layout = mPipelineData->GetPipelineLayout(),
 			.stageFlags = VK_SHADER_STAGE_RAYGEN_BIT_KHR,
 			.size = sizeof(RaytracePipelineData::PushConstants),
 			.pValues = &rt_pc,
@@ -605,20 +590,20 @@ void Raytrace_Render(Raytrace* r, bool* is_rendering, const uint32_t max_samples
 
 		const VkBufferDeviceAddressInfo rg_info = {
 			.sType = VK_STRUCTURE_TYPE_BUFFER_DEVICE_ADDRESS_INFO,
-			.buffer = r->RaygenSBT.DescriptorInfo.buffer,
+			.buffer = mRaygenSBT->GetDescriptorInfo().buffer,
 		};
 
 		const VkStridedDeviceAddressRegionKHR rg_sbt = {
 			.deviceAddress = vkGetBufferDeviceAddress(device, &rg_info),
-			.stride = r->RayTracingProperties.shaderGroupHandleSize,
-			.size = r->RayTracingProperties.shaderGroupHandleSize,
+			.stride = mRayTracingProperties.shaderGroupHandleSize,
+			.size = mRayTracingProperties.shaderGroupHandleSize,
 		};
 
 		const VkStridedDeviceAddressRegionKHR ms_sbt = {};
 		const VkStridedDeviceAddressRegionKHR ch_sbt = {};
 		const VkStridedDeviceAddressRegionKHR cl_sbt = {};
 
-		vkCmdTraceRaysKHR(cmd_buff, &rg_sbt, &ms_sbt, &ch_sbt, &cl_sbt, r->Extent.width, r->Extent.height, 1);
+		vkCmdTraceRaysKHR(cmd_buff, &rg_sbt, &ms_sbt, &ch_sbt, &cl_sbt, mExtent.width, mExtent.height, 1);
 
 		VK_CHECK("end rt cmd buffer", vkEndCommandBuffer(cmd_buff));
 
@@ -648,23 +633,24 @@ void Raytrace_Render(Raytrace* r, bool* is_rendering, const uint32_t max_samples
 			},
 		};
 
-		VK_CHECK("submit rt commamds", vkQueueSubmit2(r->ComputeQueue, std::size(rt_submit_infos), rt_submit_infos, VK_NULL_HANDLE));
+		VK_CHECK("submit rt commamds", vkQueueSubmit2(mComputeQueue, std::size(rt_submit_infos), rt_submit_infos, VK_NULL_HANDLE));
 
-		FrameObjects_NextFrame(r->FrameObjects);
+		mFrameObjects->NextFrame();
 	} while (++s <= max_samples);
 
-	VK_CHECK("raytrace queue wait idle", vkQueueWaitIdle(r->ComputeQueue));
+	// waiting for last submitted buffer to complete before exiting. resources in use.
+	VK_CHECK("raytrace queue wait idle", vkQueueWaitIdle(mComputeQueue));
 
-	*is_rendering = false;
-	r->StopRendering = false;
+	*is_raytracing = false;
+	mStopRendering = false;
 }
 
-void Raytrace_UpdateFinalRenderTarget(Raytrace* r, const ImageResource FinalRenderTarget)
+void Raytrace::UpdateFinalRenderTarget(ImageResource* FinalRenderTarget)
 {
-	r->FinalRenderTarget = FinalRenderTarget;
+	mFinalRenderTarget = FinalRenderTarget;
 }
 
-void Raytrace_StopRendering(Raytrace* r)
+void Raytrace::StopRendering()
 {
-	r->StopRendering = true;
+	mStopRendering = true;
 }
