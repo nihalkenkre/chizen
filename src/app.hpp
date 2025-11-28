@@ -1,9 +1,10 @@
 #pragma once
 
-#include "vulkan_interface.hpp"
-#include "display.hpp"
-#include "raytrace.hpp"
-#include "utils.hpp"
+class VulkanInterface;
+class Display;
+class Raytrace;
+class ImGUIState;
+class ImageResource;
 
 class App
 {
@@ -31,10 +32,11 @@ public:
 
 	uint32_t& GetMaxSamples();
 
-	ImGUIState& GetImGUIState();
-	bool& GetIsRaytracing();
+	ImGUIState* GetImGUIState();
+	bool& IsRaytracing();
 
 	VkExtent2D& GetRenderTargetExtent();
+	ImageResource* GetFinalRenderTarget() const;
 
 private:
 	float mDeltaMousePosition[2] = {};
@@ -44,11 +46,11 @@ private:
 	std::unique_ptr<VulkanInterface> mVulkanInterface = nullptr;
 	std::unique_ptr<Display> mDisplay = nullptr;
 	std::unique_ptr<Raytrace> mRaytrace = nullptr;
+	std::unique_ptr<ImageResource> mFinalRenderTarget = nullptr;
+	std::unique_ptr<ImGUIState> mImGUIState = nullptr;
 	SDL_Window* mWindow = nullptr;
 	VkExtent2D mRenderTargetExtent = { 1280, 720 };
-	VkDescriptorPool mImGUIPool = VK_NULL_HANDLE;
 	std::thread mRaytraceThread = {};
-	ImGUIState mImGUIState = {};
 	bool mIsTrackingMouse = false;
 	bool mIsRaytracing = false;
 };

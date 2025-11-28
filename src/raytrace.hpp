@@ -1,15 +1,16 @@
 #pragma once
 
-#include "vulkan_interface.hpp"
-
+class VulkanInterface;
 class FrameObjects;
 class RaytracePipelineData;
+class ImageResource;
+class BufferResource;
 
 class Raytrace
 {
 public:
 	Raytrace() = delete;
-	Raytrace(const VulkanInterface* const vulkan_interface, const VkExtent3D& extent, const std::string& current_path);
+	Raytrace(const VulkanInterface* const vulkan_interface, ImageResource* final_render_target, const VkExtent3D& extent, const std::string& current_path);
 
 	Raytrace(const Raytrace& other) = delete;
 	Raytrace& operator=(const Raytrace& other) = delete;

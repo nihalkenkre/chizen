@@ -1,16 +1,18 @@
 #pragma once
 
-#include "vulkan_interface.hpp"
-#include "utils.hpp"
-
+class VulkanInterface;
 class FrameObjects;
 class DisplayPipelineData;
+class ImGUIState;
+class BufferResource;
+class ImageResource;
+class Swapchain;
 
 class Display
 {
 public:
 	Display() = delete;
-	Display(const VulkanInterface* vulkan_interface, const std::string& current_path);
+	Display(const VulkanInterface* vulkan_interface, ImageResource* final_render_target, const std::string& current_path);
 
 	Display(const Display& other) = delete;
 	Display& operator=(const Display& other) = delete;

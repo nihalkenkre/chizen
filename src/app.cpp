@@ -1,67 +1,35 @@
 #include "app.hpp"
+#include "vulkan_interface.hpp"
+#include "display.hpp"
+#include "raytrace.hpp"
+#include "imgui_state.hpp"
 #include "utils.hpp"
+#include "vulkan_objects.hpp"
+#include "resources.hpp"
 
 App::App(SDL_Window* window, const std::string& current_path)
 {
 	mVulkanInterface = std::make_unique<VulkanInterface>(window);
-	mDisplay = std::make_unique<Display>(mVulkanInterface.get(), current_path);
-	mWindow = window;
+	mImGUIState = std::make_unique<ImGUIState>(mVulkanInterface.get());
+
 	VkExtent3D extent = VkExtent3D{ mRenderTargetExtent.width, mRenderTargetExtent.height, 1 };
-	mRaytrace = std::make_unique<Raytrace>(mVulkanInterface.get(), extent, current_path);
+	std::vector<uint32_t> queue_family_indices{ mVulkanInterface->GetPhysicalDeviceData()->GraphicsQueueFamilyIndex, mVulkanInterface->GetPhysicalDeviceData()->ComputeQueueFamilyIndex, mVulkanInterface->GetPhysicalDeviceData()->TransferQueueFamilyIndex};
+	mFinalRenderTarget = std::make_unique<ImageResource>(mVulkanInterface->GetDevice()->GetDevice(),
+		extent, VK_FORMAT_R32G32B32A32_SFLOAT, VK_IMAGE_USAGE_STORAGE_BIT | VK_IMAGE_USAGE_SAMPLED_BIT,
+		mVulkanInterface->GetAllocator()->GetAllocator(), 0, VMA_MEMORY_USAGE_AUTO_PREFER_DEVICE,
+		queue_family_indices,
+		"final render target");
 
-	const VkDescriptorPoolSize pool_sizes[] =
-	{
-		{ VK_DESCRIPTOR_TYPE_SAMPLER, 1000 },
-		{ VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, 1000 },
-		{ VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE, 1000 },
-		{ VK_DESCRIPTOR_TYPE_STORAGE_IMAGE, 1000 },
-		{ VK_DESCRIPTOR_TYPE_UNIFORM_TEXEL_BUFFER, 1000 },
-		{ VK_DESCRIPTOR_TYPE_STORAGE_TEXEL_BUFFER, 1000 },
-		{ VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, 1000 },
-		{ VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 1000 },
-		{ VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC, 1000 },
-		{ VK_DESCRIPTOR_TYPE_STORAGE_BUFFER_DYNAMIC, 1000 },
-		{ VK_DESCRIPTOR_TYPE_INPUT_ATTACHMENT, 1000 }
-	};
+	Utils_InitializeImages({ mFinalRenderTarget->GetImage() }, mVulkanInterface->GetTransferObjects()->GetCommandBuffer(), mVulkanInterface->GetTransferObjects()->GetQueue());
 
-	const	VkDescriptorPoolCreateInfo pool_info = {
-		.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO,
-		.flags = VK_DESCRIPTOR_POOL_CREATE_FREE_DESCRIPTOR_SET_BIT,
-		.maxSets = 1000,
-		.poolSizeCount = std::size(pool_sizes),
-		.pPoolSizes = pool_sizes,
-	};
-
-	VK_CHECK("create imgui desc pool", vkCreateDescriptorPool(mVulkanInterface->GetDevice()->GetDevice(), &pool_info, nullptr, &mImGUIPool));
-
-	ImGui::CreateContext();
-	ImGui::GetIO().ConfigFlags |= ImGuiConfigFlags_DockingEnable;
-
-	VkFormat color_attachment_format = mVulkanInterface->GetSurface()->GetSurfaceFormat().format;
-	ImGui_ImplVulkan_InitInfo imgui_init_info = {
-		.Instance = mVulkanInterface->GetInstance()->GetInstance(),
-		.PhysicalDevice = mVulkanInterface->GetPhysicalDeviceData()->PhysicalDevice,
-		.Device = mVulkanInterface->GetDevice()->GetDevice(),
-		.Queue = mVulkanInterface->GetDevice()->GetGraphicsQueue(),
-		.DescriptorPool = mImGUIPool,
-		.MinImageCount = mVulkanInterface->GetSwapchain()->GetImagesCount(),
-		.ImageCount = mVulkanInterface->GetSwapchain()->GetImagesCount(),
-		.PipelineInfoMain = {
-			.PipelineRenderingCreateInfo = {
-				.sType = VK_STRUCTURE_TYPE_PIPELINE_RENDERING_CREATE_INFO,
-				.colorAttachmentCount = 1,
-				.pColorAttachmentFormats = &color_attachment_format,
-			},
-		},
-		.UseDynamicRendering = true,
-	};
-
-	SDL_CHECK(ImGui_ImplVulkan_Init(&imgui_init_info));
+	mDisplay = std::make_unique<Display>(mVulkanInterface.get(), mFinalRenderTarget.get(), current_path);
+	mRaytrace = std::make_unique<Raytrace>(mVulkanInterface.get(), mFinalRenderTarget.get(), extent, current_path);
+	mWindow = window;
 }
 
 void App::RunDisplay()
 {
-	mDisplay->Render(mDeltaMousePosition, mZoomLevel, &mImGUIState);
+	mDisplay->Render(mDeltaMousePosition, mZoomLevel, mImGUIState.get());
 }
 
 void App::RunRaytrace()
@@ -71,17 +39,27 @@ void App::RunRaytrace()
 		mRaytraceThread = std::thread(&Raytrace::Render, mRaytrace.get(), &mIsRaytracing, mMaxSamples);
 		mRaytraceThread.detach();
 		mIsRaytracing = true;
-		mImGUIState.StartRaytracing = false;
+		mImGUIState->GetStartRaytracing() = false;
 	}
 }
 
 void App::RecreateRenderTarget()
 {
 	VK_CHECK("device wait idle", vkDeviceWaitIdle(mVulkanInterface->GetDevice()->GetDevice()));
-	mVulkanInterface->RecreateFinalRenderTarget({ mRenderTargetExtent.width, mRenderTargetExtent.height, 1 });
-	mDisplay->UpdateFinalRenderTarget(mVulkanInterface->GetFinalRenderTarget());
+
+	VkExtent3D extent = { mRenderTargetExtent.width, mRenderTargetExtent.height, 1 };
+	std::vector<uint32_t> queue_family_indices{ mVulkanInterface->GetPhysicalDeviceData()->GraphicsQueueFamilyIndex, mVulkanInterface->GetPhysicalDeviceData()->ComputeQueueFamilyIndex,  mVulkanInterface->GetPhysicalDeviceData()->TransferQueueFamilyIndex};
+	mFinalRenderTarget = std::make_unique<ImageResource>(mVulkanInterface->GetDevice()->GetDevice(),
+		extent, VK_FORMAT_R32G32B32A32_SFLOAT, VK_IMAGE_USAGE_STORAGE_BIT | VK_IMAGE_USAGE_SAMPLED_BIT,
+		mVulkanInterface->GetAllocator()->GetAllocator(), 0, VMA_MEMORY_USAGE_AUTO_PREFER_DEVICE,
+		queue_family_indices,
+		"final render target");
+
+	Utils_InitializeImages({ mFinalRenderTarget->GetImage() }, mVulkanInterface->GetTransferObjects()->GetCommandBuffer(), mVulkanInterface->GetTransferObjects()->GetQueue());
+
+	mDisplay->UpdateFinalRenderTarget(mFinalRenderTarget.get());
 	mRaytrace->RecreateRenderResources(mRenderTargetExtent);
-	mRaytrace->UpdateFinalRenderTarget(mVulkanInterface->GetFinalRenderTarget());
+	mRaytrace->UpdateFinalRenderTarget(mFinalRenderTarget.get());
 }
 
 void App::StopRaytracing()
@@ -120,17 +98,17 @@ float& App::GetZoomLevel()
 	return mZoomLevel;
 }
 
+ImGUIState* App::GetImGUIState()
+{
+	return mImGUIState.get();
+}
+
 uint32_t& App::GetMaxSamples()
 {
 	return mMaxSamples;
 }
 
-ImGUIState& App::GetImGUIState()
-{
-	return mImGUIState;
-}
-
-bool& App::GetIsRaytracing()
+bool& App::IsRaytracing()
 {
 	return mIsRaytracing;
 }
@@ -140,6 +118,11 @@ VkExtent2D& App::GetRenderTargetExtent()
 	return mRenderTargetExtent;
 }
 
+ImageResource* App::GetFinalRenderTarget() const
+{
+	return mFinalRenderTarget.get();
+}
+
 App::~App() noexcept
 {
 	mRaytrace->StopRendering();
@@ -147,10 +130,4 @@ App::~App() noexcept
 	while (mIsRaytracing) {}
 
 	VK_CHECK("device wait idle", vkDeviceWaitIdle(mVulkanInterface->GetDevice()->GetDevice()));
-
-	ImGui_ImplSDL3_Shutdown();
-	ImGui_ImplVulkan_Shutdown();
-	ImGui::DestroyContext();
-
-	vkDestroyDescriptorPool(mVulkanInterface->GetDevice()->GetDevice(), mImGUIPool, nullptr);
 }

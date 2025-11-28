@@ -1,6 +1,10 @@
 #include "display.hpp"
 #include "utils.hpp"
 #include "frame_objects.hpp"
+#include "vulkan_interface.hpp"
+#include "vulkan_objects.hpp"
+#include "imgui_state.hpp"
+#include "resources.hpp"
 
 class DisplayPipelineData
 {
@@ -334,9 +338,9 @@ std::vector<VkDescriptorSetLayout> DisplayPipelineData::GetDescriptorSetLayouts(
 	return mDescriptorSetLayouts;
 }
 
-Display::Display(const VulkanInterface* vulkan_interface, const std::string& current_path)
+Display::Display(const VulkanInterface* vulkan_interface, ImageResource* final_render_target, const std::string& current_path)
 {
-	mFinalRenderTarget = vulkan_interface->GetFinalRenderTarget();
+	mFinalRenderTarget = final_render_target;
 	mMaxFramesInFlight = static_cast<uint8_t>(vulkan_interface->GetSwapchain()->GetImagesCount());
 	mExtent = vulkan_interface->GetSurface()->GetSurfaceCapabilities().surfaceCapabilities.currentExtent;
 	mSwapchain = vulkan_interface->GetSwapchain();
@@ -427,8 +431,8 @@ Display::Display(const VulkanInterface* vulkan_interface, const std::string& cur
 	std::memcpy(staging_buffer->GetAllocationInfo2().allocationInfo.pMappedData, verts, verts_size);
 
 	staging_buffer->CopyToBuffer(
-		vulkan_interface->GetTransferObjects()->GetCommandBuffer(), 
-		vulkan_interface->GetTransferObjects()->GetQueue(), 
+		vulkan_interface->GetTransferObjects()->GetCommandBuffer(),
+		vulkan_interface->GetTransferObjects()->GetQueue(),
 		mGeometryBuffer->GetDescriptorInfo().buffer, 
 		verts_size);
 }
@@ -600,23 +604,26 @@ void Display::Render(const float position_offset[], const float zoom_level, ImGU
 
 	ImGui::Begin("Awesome Panel");
 
-	if (ImGui::InputInt2("Render Dims", imgui_state->TempRenderTargetExtent))
+	int* render_target_extent = imgui_state->GetRenderTargetExtent();
+
+	if (ImGui::InputInt2("Render Dims", render_target_extent))
 	{
-		imgui_state->TempRenderTargetExtent[0] = std::clamp(imgui_state->TempRenderTargetExtent[0], 1, 8192);
-		imgui_state->TempRenderTargetExtent[1] = std::clamp(imgui_state->TempRenderTargetExtent[1], 1, 8192);
+		render_target_extent[0] = std::clamp(render_target_extent[0], 1, 8192);
+		render_target_extent[1] = std::clamp(render_target_extent[1], 1, 8192);
 	}
 
-	if (ImGui::DragInt("Num Samples", &imgui_state->TempMaxSamples))
+	int& max_samples = imgui_state->GetMaxSamples();
+	if (ImGui::DragInt("Num Samples", &max_samples))
 	{
-		if (imgui_state->TempMaxSamples <= 0)
+		if (max_samples <= 0)
 		{
-			imgui_state->TempMaxSamples = 1;
+			max_samples = 1;
 		}
 	}
 
 	if (ImGui::Button("Render"))
 	{
-		imgui_state->StartRaytracing = true;
+		imgui_state->GetStartRaytracing() = true;
 	}
 
 	ImGui::End();

@@ -1,5 +1,8 @@
 #include "app.hpp"
 #include "utils.hpp"
+#include "vulkan_interface.hpp"
+#include "imgui_state.hpp"
+#include "vulkan_objects.hpp"
 
 #define VMA_IMPLEMENTATION
 #include <vma/vk_mem_alloc.h>
@@ -31,6 +34,11 @@ SDL_AppResult SDL_AppEvent(void* appstate, SDL_Event* event)
 	ImGui_ImplSDL3_ProcessEvent(event);
 	ImGuiIO& io = ImGui::GetIO();
 
+	float* delta_mouse_position = app->GetDeltaMousePosition();
+	float* last_mouse_position = app->GetLastMousePosition();
+	bool& is_tracking_mouse = app->IsTrackingMouse();
+	float& zoom_level = app->GetZoomLevel();
+
 	if (SDL_GetWindowFlags(app->GetWindow()) & SDL_WINDOW_MINIMIZED)
 	{
 		return SDL_APP_CONTINUE;
@@ -44,23 +52,23 @@ SDL_AppResult SDL_AppEvent(void* appstate, SDL_Event* event)
 	{
 		if (!io.WantCaptureMouse)
 		{
-			app->IsTrackingMouse() = true;
+			is_tracking_mouse = true;
 
-			app->GetLastMousePosition()[0] = event->motion.x;
-			app->GetLastMousePosition()[1] = event->motion.y;
+			last_mouse_position[0] = event->motion.x;
+			last_mouse_position[1] = event->motion.y;
 		}
 	}
 	else if (event->type == SDL_EVENT_MOUSE_MOTION)
 	{
 		if (!io.WantCaptureMouse)
 		{
-			if (app->IsTrackingMouse())
+			if (is_tracking_mouse)
 			{
-				app->GetDeltaMousePosition()[0] += ((app->GetLastMousePosition()[0] - event->motion.x) / static_cast<float>(app->GetVulkanInterface()->GetSurface()->GetSurfaceCapabilities().surfaceCapabilities.currentExtent.width)) * 2;
-				app->GetDeltaMousePosition()[1] += ((app->GetLastMousePosition()[1] - event->motion.y) / static_cast<float>(app->GetVulkanInterface()->GetSurface()->GetSurfaceCapabilities().surfaceCapabilities.currentExtent.height)) * 2;
+				delta_mouse_position[0] += ((last_mouse_position[0] - event->motion.x) / static_cast<float>(app->GetVulkanInterface()->GetSurface()->GetSurfaceCapabilities().surfaceCapabilities.currentExtent.width)) * 2;
+				delta_mouse_position[1] += ((last_mouse_position[1] - event->motion.y) / static_cast<float>(app->GetVulkanInterface()->GetSurface()->GetSurfaceCapabilities().surfaceCapabilities.currentExtent.height)) * 2;
 
-				app->GetLastMousePosition()[0] = event->motion.x;
-				app->GetLastMousePosition()[1] = event->motion.y;
+				last_mouse_position[0] = event->motion.x;
+				last_mouse_position[1] = event->motion.y;
 			}
 		}
 	}
@@ -68,15 +76,15 @@ SDL_AppResult SDL_AppEvent(void* appstate, SDL_Event* event)
 	{
 		if (!io.WantCaptureMouse)
 		{
-			app->GetLastMousePosition()[0] = 0;
-			app->GetLastMousePosition()[1] = 0;
+			last_mouse_position[0] = 0;
+			last_mouse_position[1] = 0;
 
-			app->IsTrackingMouse() = false;
+			is_tracking_mouse = false;
 		}
 	}
 	else if (event->type == SDL_EVENT_MOUSE_WHEEL)
 	{
-		app->GetZoomLevel() = std::max(0.01f, app->GetZoomLevel() + event->wheel.y / 20.f);
+		zoom_level = std::max(0.01f, zoom_level + event->wheel.y / 20.f);
 	}
 
 	return SDL_APP_CONTINUE;
@@ -91,25 +99,26 @@ SDL_AppResult SDL_AppIterate(void* appstate)
 		return SDL_APP_CONTINUE;
 	}
 
-	if (app->GetImGUIState().StartRaytracing)
+	if (app->GetImGUIState()->GetStartRaytracing())
 	{
-		if (app->GetIsRaytracing()) app->StopRaytracing();
+		if (app->IsRaytracing()) app->StopRaytracing();
 
 		VkExtent2D& render_target_extent = app->GetRenderTargetExtent();
-		ImGUIState& imgui_state = app->GetImGUIState();
+		int* tmp_render_target_extent = app->GetImGUIState()->GetRenderTargetExtent();
 
-		if (render_target_extent.width != imgui_state.TempRenderTargetExtent[0] ||
-			render_target_extent.height != imgui_state.TempRenderTargetExtent[1])
+		if (render_target_extent.width != tmp_render_target_extent[0] ||
+			render_target_extent.height != tmp_render_target_extent[1])
 		{
-			render_target_extent.width = imgui_state.TempRenderTargetExtent[0];
-			render_target_extent.height = imgui_state.TempRenderTargetExtent[1];
+			render_target_extent.width = tmp_render_target_extent[0];
+			render_target_extent.height = tmp_render_target_extent[1];
 			app->RecreateRenderTarget();
 		}
-		
+
+		int& tmp_max_samples = app->GetImGUIState()->GetMaxSamples();
 		uint32_t& max_samples = app->GetMaxSamples();
-		if (max_samples != imgui_state.TempMaxSamples)
+		if (max_samples != tmp_max_samples)
 		{
-			max_samples = imgui_state.TempMaxSamples;
+			max_samples = tmp_max_samples;
 		}
 
 		app->RunRaytrace();

@@ -1,6 +1,9 @@
 #include "raytrace.hpp"
 #include "frame_objects.hpp"
 #include "utils.hpp"
+#include "vulkan_interface.hpp"
+#include "resources.hpp"
+#include "vulkan_objects.hpp"
 
 class RaytracePipelineData
 {
@@ -388,12 +391,12 @@ void Raytrace::InitializeResources()
 	memcpy(mRaygenSBT->GetAllocationInfo2().allocationInfo.pMappedData, shader_handle_storage.data(), sbt_size);
 }
 
-Raytrace::Raytrace(const VulkanInterface* const vulkan_interface, const VkExtent3D& extent, const std::string& current_path)
+Raytrace::Raytrace(const VulkanInterface* const vulkan_interface, ImageResource* final_render_target, const VkExtent3D& extent, const std::string& current_path)
 {
 	mDevice = vulkan_interface->GetDevice()->GetDevice();
 	mAllocator = vulkan_interface->GetAllocator()->GetAllocator();
 	mRayTracingProperties = vulkan_interface->GetPhysicalDeviceData()->RayTracingProperties;
-	mFinalRenderTarget = vulkan_interface->GetFinalRenderTarget();
+	mFinalRenderTarget = final_render_target;
 	mQueueFamilyIndices = {
 		vulkan_interface->GetPhysicalDeviceData()->GraphicsQueueFamilyIndex, vulkan_interface->GetPhysicalDeviceData()->ComputeQueueFamilyIndex,
 		vulkan_interface->GetPhysicalDeviceData()->TransferQueueFamilyIndex

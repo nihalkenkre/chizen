@@ -17,13 +17,6 @@
 	std::printf("%s %d\n", action, result);		\
 }
 
-struct ImGUIState
-{
-	int TempRenderTargetExtent[2] = { 1280, 720 };
-	int TempMaxSamples = 1024;
-	bool StartRaytracing = false;
-};
-
 inline static VkDeviceSize ALIGNED_SIZE(VkDeviceSize size, VkDeviceSize alignment)
 {
 	return (size + alignment - 1) & ~(alignment - 1);
