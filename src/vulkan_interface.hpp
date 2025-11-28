@@ -25,6 +25,8 @@ public:
 	Allocator* GetAllocator() const;
 	TransferObjects* GetTransferObjects() const;
 
+	void RecreateSwapchain();
+
 private:
 	std::unique_ptr<Instance> mInstance;
 	std::unique_ptr<PhysicalDeviceData> mPhysicalDeviceData;

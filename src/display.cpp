@@ -707,7 +707,17 @@ void Display::Render(const float position_offset[], const float zoom_level, ImGU
 	mFrameObjects->NextFrame();
 }
 
-void Display::UpdateFinalRenderTarget(ImageResource* FinalRenderTarget)
+void Display::UpdateFinalRenderTarget(ImageResource* final_render_target)
 {
-	mFinalRenderTarget = FinalRenderTarget;
+	mFinalRenderTarget = final_render_target;
+}
+
+void Display::UpdateSwapchain(Swapchain* swapchain)
+{
+	mSwapchain = swapchain;
+}
+
+void Display::UpdateExtent(VkExtent2D extent)
+{
+	mExtent = extent;
 }

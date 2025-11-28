@@ -3,6 +3,7 @@
 #include "vulkan_interface.hpp"
 #include "imgui_state.hpp"
 #include "vulkan_objects.hpp"
+#include "display.hpp"
 
 #define VMA_IMPLEMENTATION
 #include <vma/vk_mem_alloc.h>
@@ -30,6 +31,10 @@ SDL_AppResult SDL_AppInit(void** appstate, int argc, char** argv)
 SDL_AppResult SDL_AppEvent(void* appstate, SDL_Event* event)
 {
 	App* app = reinterpret_cast<App*>(appstate);
+	if (SDL_GetWindowFlags(app->GetWindow()) & SDL_WINDOW_MINIMIZED)
+	{
+		return SDL_APP_CONTINUE;
+	}
 
 	ImGui_ImplSDL3_ProcessEvent(event);
 	ImGuiIO& io = ImGui::GetIO();
@@ -39,13 +44,9 @@ SDL_AppResult SDL_AppEvent(void* appstate, SDL_Event* event)
 	bool& is_tracking_mouse = app->IsTrackingMouse();
 	float& zoom_level = app->GetZoomLevel();
 
-	if (SDL_GetWindowFlags(app->GetWindow()) & SDL_WINDOW_MINIMIZED)
-	{
-		return SDL_APP_CONTINUE;
-	}
-
 	if (event->type == SDL_EVENT_QUIT)
 	{
+		app->StopRaytracing();
 		return SDL_APP_SUCCESS;
 	}
 	else if (event->type == SDL_EVENT_MOUSE_BUTTON_DOWN)
@@ -85,6 +86,10 @@ SDL_AppResult SDL_AppEvent(void* appstate, SDL_Event* event)
 	else if (event->type == SDL_EVENT_MOUSE_WHEEL)
 	{
 		zoom_level = std::max(0.01f, zoom_level + event->wheel.y / 20.f);
+	}
+	else if (event->type == SDL_EVENT_WINDOW_RESIZED)
+	{
+		app->RecreateSwapchain();
 	}
 
 	return SDL_APP_CONTINUE;

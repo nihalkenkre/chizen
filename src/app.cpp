@@ -68,9 +68,21 @@ void App::StopRaytracing()
 	while (mIsRaytracing) {}
 }
 
+void App::RecreateSwapchain()
+{
+	mVulkanInterface->RecreateSwapchain();
+	mDisplay->UpdateSwapchain(mVulkanInterface->GetSwapchain());
+	mDisplay->UpdateExtent(mVulkanInterface->GetSurface()->GetSurfaceCapabilities().surfaceCapabilities.currentExtent);
+}
+
 VulkanInterface* App::GetVulkanInterface() const
 {
 	return mVulkanInterface.get();
+}
+
+Display* App::GetDisplay() const
+{
+	return mDisplay.get();
 }
 
 SDL_Window* App::GetWindow() const

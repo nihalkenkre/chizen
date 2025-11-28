@@ -51,3 +51,12 @@ TransferObjects* VulkanInterface::GetTransferObjects() const
 {
 	return mTransferObjects.get();
 }
+
+void VulkanInterface::RecreateSwapchain()
+{
+	VK_CHECK("queue wait idle", vkQueueWaitIdle(mDevice->GetGraphicsQueue()));
+
+	mSwapchain.reset();
+	mSurface->PopulateSurfaceData(mPhysicalDeviceData->PhysicalDevice);
+	mSwapchain = std::make_unique<Swapchain>(mDevice->GetDevice(), mSurface.get(), mPhysicalDeviceData->GraphicsQueueFamilyIndex, "swapchain");
+}

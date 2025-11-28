@@ -3,7 +3,7 @@
 #include "utils.hpp"
 #include "vulkan_objects.hpp"
 
-ImGUIState::ImGUIState(const VulkanInterface* vulkan_interface)
+ImGUIState::ImGUIState(const VulkanInterface* vulkan_interface) : mDevice (vulkan_interface->GetDevice()->GetDevice())
 {
 	const VkDescriptorPoolSize pool_sizes[] =
 	{

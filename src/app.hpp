@@ -22,7 +22,10 @@ public:
 	void RecreateRenderTarget();
 	void StopRaytracing();
 
+	void RecreateSwapchain();
+
 	VulkanInterface* GetVulkanInterface() const;
+	Display* GetDisplay() const;
 
 	SDL_Window* GetWindow() const;
 	bool& IsTrackingMouse();
