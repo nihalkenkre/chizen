@@ -65,9 +65,9 @@ ImGUIState::~ImGUIState() noexcept
 		vkDestroyDescriptorPool(mDevice, mDescriptorPool, nullptr);
 }
 
-bool& ImGUIState::GetStartRaytracing()
+bool& ImGUIState::GetShouldStartRaytracing()
 {
-	return mStartRaytracing;
+	return mShouldStartRaytracing;
 }
 
 int& ImGUIState::GetMaxSamples()

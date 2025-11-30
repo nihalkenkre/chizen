@@ -39,7 +39,7 @@ void App::RunRaytrace()
 		mRaytraceThread = std::thread(&Raytrace::Render, mRaytrace.get(), &mIsRaytracing, mMaxSamples);
 		mRaytraceThread.detach();
 		mIsRaytracing = true;
-		mImGUIState->GetStartRaytracing() = false;
+		mImGUIState->GetShouldStartRaytracing() = false;
 	}
 }
 

@@ -1,5 +1,6 @@
 #include "frame_objects.hpp"
 #include "utils.hpp"
+#include "vulkan_functions.hpp"
 
 FrameObjects::FrameObjects(const VkDevice device, const uint32_t queue_family_index, const uint8_t& max_frames_in_flight)
 {
@@ -46,7 +47,7 @@ FrameObjects::FrameObjects(const VkDevice device, const uint32_t queue_family_in
 		VK_CHECK("create frame semaphore", vkCreateSemaphore(mDevice, &tl_sem_ci, nullptr, mFrameSemaphores.data() + fr));
 		sem_sig_info.semaphore = mFrameSemaphores[fr];
 
-		VK_CHECK("signal frame semaphore", vkSignalSemaphore(mDevice, &sem_sig_info));
+		VK_CHECK("signal frame semaphore", vkSignalSemaphoreKHR(mDevice, &sem_sig_info));
 	}
 }
 

@@ -47,7 +47,7 @@ RaytracePipelineData::RaytracePipelineData(const VulkanInterface* const vulkan_i
 	const slang::TargetDesc target_descs[] = {
 		{
 			.format = SLANG_SPIRV,
-			.profile = slang_global_session->findProfile("spirv_1_6"),
+			.profile = slang_global_session->findProfile("spirv_1_1"),
 		}
 	};
 
@@ -293,6 +293,7 @@ RaytracePipelineData::~RaytracePipelineData() noexcept
 		vkDestroyPipeline(mDevice, mPipeline, nullptr);
 	}
 }
+
 VkPipeline RaytracePipelineData::GetPipeline() const
 {
 	return mPipeline;
@@ -360,7 +361,7 @@ void Raytrace::InitializeResources()
 		.pRegions = regions,
 	};
 
-	vkCmdCopyBuffer2(mTransferCommandBuffer, &copy_buff_info);
+	vkCmdCopyBuffer2KHR(mTransferCommandBuffer, &copy_buff_info);
 
 	VK_CHECK("end xfer cmd buff", vkEndCommandBuffer(mTransferCommandBuffer));
 
@@ -379,7 +380,7 @@ void Raytrace::InitializeResources()
 		},
 	};
 
-	VK_CHECK("submit xfer cmd buff", vkQueueSubmit2(mTransferQueue, std::size(submit_infos), submit_infos, VK_NULL_HANDLE));
+	VK_CHECK("submit xfer cmd buff", vkQueueSubmit2KHR(mTransferQueue, std::size(submit_infos), submit_infos, VK_NULL_HANDLE));
 	VK_CHECK("wait for device", vkDeviceWaitIdle(mDevice));
 
 	const uint32_t aligned_handle_size = static_cast<uint32_t>(ALIGNED_SIZE(mRayTracingProperties.shaderGroupHandleSize, mRayTracingProperties.shaderGroupHandleAlignment));
@@ -398,7 +399,8 @@ Raytrace::Raytrace(const VulkanInterface* const vulkan_interface, ImageResource*
 	mRayTracingProperties = vulkan_interface->GetPhysicalDeviceData()->RayTracingProperties;
 	mFinalRenderTarget = final_render_target;
 	mQueueFamilyIndices = {
-		vulkan_interface->GetPhysicalDeviceData()->GraphicsQueueFamilyIndex, vulkan_interface->GetPhysicalDeviceData()->ComputeQueueFamilyIndex,
+		vulkan_interface->GetPhysicalDeviceData()->GraphicsQueueFamilyIndex,
+		vulkan_interface->GetPhysicalDeviceData()->ComputeQueueFamilyIndex,
 		vulkan_interface->GetPhysicalDeviceData()->TransferQueueFamilyIndex
 	};
 	mAccumRenderTarget = std::make_unique<ImageResource>(
@@ -498,7 +500,7 @@ void Raytrace::Render(bool* is_raytracing, const uint32_t max_samples)
 			.pValues = &frame_sem_value,
 		};
 
-		VK_CHECK("wait acq img", vkWaitSemaphores(device, &wait_info, UINT64_MAX));
+		VK_CHECK("wait acq img", vkWaitSemaphoresKHR(device, &wait_info, UINT64_MAX));
 
 		// waiting for last submitted buffer to complete before exiting. resources in use.
 		if (mStopRendering) break;
@@ -575,7 +577,7 @@ void Raytrace::Render(bool* is_raytracing, const uint32_t max_samples)
 			.pDescriptorSets = mDescriptorSets.data() + frame_in_flight,
 		};
 
-		vkCmdBindDescriptorSets2(cmd_buff, &rt_ds_bi);
+		vkCmdBindDescriptorSets2KHR(cmd_buff, &rt_ds_bi);
 
 		const RaytracePipelineData::PushConstants rt_pc = {
 			.CurrentSample = s,
@@ -589,7 +591,7 @@ void Raytrace::Render(bool* is_raytracing, const uint32_t max_samples)
 			.pValues = &rt_pc,
 		};
 
-		vkCmdPushConstants2(cmd_buff, &rt_pc_info);
+		vkCmdPushConstants2KHR(cmd_buff, &rt_pc_info);
 
 		const VkBufferDeviceAddressInfo rg_info = {
 			.sType = VK_STRUCTURE_TYPE_BUFFER_DEVICE_ADDRESS_INFO,
@@ -597,7 +599,7 @@ void Raytrace::Render(bool* is_raytracing, const uint32_t max_samples)
 		};
 
 		const VkStridedDeviceAddressRegionKHR rg_sbt = {
-			.deviceAddress = vkGetBufferDeviceAddress(device, &rg_info),
+			.deviceAddress = vkGetBufferDeviceAddressKHR(device, &rg_info),
 			.stride = mRayTracingProperties.shaderGroupHandleSize,
 			.size = mRayTracingProperties.shaderGroupHandleSize,
 		};
@@ -636,7 +638,7 @@ void Raytrace::Render(bool* is_raytracing, const uint32_t max_samples)
 			},
 		};
 
-		VK_CHECK("submit rt commamds", vkQueueSubmit2(mComputeQueue, std::size(rt_submit_infos), rt_submit_infos, VK_NULL_HANDLE));
+		VK_CHECK("submit rt commamds", vkQueueSubmit2KHR(mComputeQueue, std::size(rt_submit_infos), rt_submit_infos, VK_NULL_HANDLE));
 
 		mFrameObjects->NextFrame();
 	} while (++s <= max_samples);

@@ -89,7 +89,7 @@ void ImageResource::ChangeImageLayout(const VkCommandBuffer cmd_buff, const VkPi
 		.pImageMemoryBarriers = &img_mem_barr,
 	};
 
-	vkCmdPipelineBarrier2(cmd_buff, &dep_info);
+	vkCmdPipelineBarrier2KHR(cmd_buff, &dep_info);
 }
 
 VkImage ImageResource::GetImage() const
@@ -168,7 +168,7 @@ void BufferResource::CopyToBuffer(const VkCommandBuffer cmd_buff, const VkQueue 
 		.pRegions = regions,
 	};
 
-	vkCmdCopyBuffer2(cmd_buff, &copy_buff_info);
+	vkCmdCopyBuffer2KHR(cmd_buff, &copy_buff_info);
 	VK_CHECK("end xfer cmd buff", vkEndCommandBuffer(cmd_buff));
 
 	const VkCommandBufferSubmitInfo cmd_buff_infos[] = {
@@ -186,7 +186,7 @@ void BufferResource::CopyToBuffer(const VkCommandBuffer cmd_buff, const VkQueue 
 		},
 	};
 
-	VK_CHECK("submit geom buffer xfer cmd", vkQueueSubmit2(queue, std::size(submit_infos), submit_infos, VK_NULL_HANDLE));
+	VK_CHECK("submit geom buffer xfer cmd", vkQueueSubmit2KHR(queue, std::size(submit_infos), submit_infos, VK_NULL_HANDLE));
 	VK_CHECK("wait xfer cmd buff", vkQueueWaitIdle(queue));
 
 }

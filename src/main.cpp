@@ -104,7 +104,7 @@ SDL_AppResult SDL_AppIterate(void* appstate)
 		return SDL_APP_CONTINUE;
 	}
 
-	if (app->GetImGUIState()->GetStartRaytracing())
+	if (app->GetImGUIState()->GetShouldStartRaytracing())
 	{
 		if (app->IsRaytracing()) app->StopRaytracing();
 

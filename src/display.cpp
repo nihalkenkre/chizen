@@ -48,7 +48,7 @@ DisplayPipelineData::DisplayPipelineData(const VulkanInterface* vulkan_interface
 	const slang::TargetDesc target_descs[] = {
 		{
 			.format = SLANG_SPIRV,
-			.profile = slang_global_session->findProfile("spirv_1_6"),
+			.profile = slang_global_session->findProfile("spirv_1_1"),
 		}
 	};
 
@@ -233,15 +233,15 @@ DisplayPipelineData::DisplayPipelineData(const VulkanInterface* vulkan_interface
 		.pAttachments = cbas,
 	};
 
-	std::vector<VkDynamicState> ds = {
+	const VkDynamicState ds[] = {
 		VK_DYNAMIC_STATE_VIEWPORT,
 		VK_DYNAMIC_STATE_SCISSOR,
 	};
 
 	const VkPipelineDynamicStateCreateInfo ds_ci = {
 		.sType = VK_STRUCTURE_TYPE_PIPELINE_DYNAMIC_STATE_CREATE_INFO,
-		.dynamicStateCount = static_cast<uint32_t>(ds.size()),
-		.pDynamicStates = ds.data(),
+		.dynamicStateCount = _countof(ds),
+		.pDynamicStates = ds,
 	};
 
 	const VkDescriptorSetLayoutBinding dsl_binds[] = {
@@ -353,24 +353,8 @@ Display::Display(const VulkanInterface* vulkan_interface, ImageResource* final_r
 	mPresentWaitSemaphores.resize(mMaxFramesInFlight);
 	mDescriptorSets.resize(mMaxFramesInFlight);
 
-	const VkSemaphoreTypeCreateInfo sem_type_ci = {
-		.sType = VK_STRUCTURE_TYPE_SEMAPHORE_TYPE_CREATE_INFO,
-		.semaphoreType = VK_SEMAPHORE_TYPE_TIMELINE,
-		.initialValue = 0,
-	};
-
-	const VkSemaphoreCreateInfo tl_sem_ci = {
-		.sType = VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO,
-		.pNext = &sem_type_ci,
-	};
-
 	const VkSemaphoreCreateInfo bin_sem_ci = {
 		.sType = VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO,
-	};
-
-	VkSemaphoreSignalInfo sem_sig_info = {
-		.sType = VK_STRUCTURE_TYPE_SEMAPHORE_SIGNAL_INFO,
-		.value = 1,
 	};
 
 	mPipelineData = std::make_unique<DisplayPipelineData>(vulkan_interface, current_path);
@@ -449,7 +433,6 @@ Display::~Display() noexcept
 	}
 
 	vkDestroyDescriptorPool(mDevice, mDescriptorPool, nullptr);
-	mPipelineData.reset();
 }
 
 void Display::Render(const float position_offset[], const float zoom_level, ImGUIState* imgui_state)
@@ -467,7 +450,7 @@ void Display::Render(const float position_offset[], const float zoom_level, ImGU
 		.pValues = &frame_sem_value,
 	};
 
-	VK_CHECK("wait acq img", vkWaitSemaphores(device, &wait_info, UINT64_MAX));
+	VK_CHECK("wait acq img", vkWaitSemaphoresKHR(device, &wait_info, UINT64_MAX));
 
 	const VkAcquireNextImageInfoKHR acq_info = {
 		.sType = VK_STRUCTURE_TYPE_ACQUIRE_NEXT_IMAGE_INFO_KHR,
@@ -524,7 +507,7 @@ void Display::Render(const float position_offset[], const float zoom_level, ImGU
 		.pColorAttachments = col_attachs,
 	};
 
-	vkCmdBeginRendering(cmd_buff, &rendering_info);
+	vkCmdBeginRenderingKHR(cmd_buff, &rendering_info);
 
 	vkCmdBindPipeline(cmd_buff, VK_PIPELINE_BIND_POINT_GRAPHICS, mPipelineData->GetPipeline());
 
@@ -549,7 +532,7 @@ void Display::Render(const float position_offset[], const float zoom_level, ImGU
 		.pDescriptorSets = &mDescriptorSets[frame_in_flight],
 	};
 
-	vkCmdBindDescriptorSets2(cmd_buff, &bind_desc_sets_info);
+	vkCmdBindDescriptorSets2KHR(cmd_buff, &bind_desc_sets_info);
 
 	const VkViewport viewports[] = {
 		{
@@ -576,7 +559,7 @@ void Display::Render(const float position_offset[], const float zoom_level, ImGU
 		0,
 	};
 
-	vkCmdBindVertexBuffers2(cmd_buff, 0, std::size(vtx_buffs), vtx_buffs, vtx_buff_offs, nullptr, nullptr);
+	vkCmdBindVertexBuffers2EXT(cmd_buff, 0, std::size(vtx_buffs), vtx_buffs, vtx_buff_offs, nullptr, nullptr);
 
 	const DisplayPipelineData::PushConstants gfx_pc = {
 		.PositionOffset = {
@@ -594,7 +577,7 @@ void Display::Render(const float position_offset[], const float zoom_level, ImGU
 		.pValues = &gfx_pc,
 	};
 
-	vkCmdPushConstants2(cmd_buff, &gfx_pc_info);
+	vkCmdPushConstants2KHR(cmd_buff, &gfx_pc_info);
 
 	vkCmdDraw(cmd_buff, 6, 1, 0, 0);
 
@@ -623,7 +606,7 @@ void Display::Render(const float position_offset[], const float zoom_level, ImGU
 
 	if (ImGui::Button("Render"))
 	{
-		imgui_state->GetStartRaytracing() = true;
+		imgui_state->GetShouldStartRaytracing() = true;
 	}
 
 	ImGui::End();
@@ -637,7 +620,7 @@ void Display::Render(const float position_offset[], const float zoom_level, ImGU
 		ImGui::RenderPlatformWindowsDefault();
 	}
 
-	vkCmdEndRendering(cmd_buff);
+	vkCmdEndRenderingKHR(cmd_buff);
 
 	Utils_ChangeImageLayout(cmd_buff,
 		VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT, VK_ACCESS_2_COLOR_ATTACHMENT_WRITE_BIT,
@@ -689,7 +672,7 @@ void Display::Render(const float position_offset[], const float zoom_level, ImGU
 		},
 	};
 
-	VK_CHECK("submit display render commands", vkQueueSubmit2(mQueue, std::size(submit_infos), submit_infos, VK_NULL_HANDLE));
+	VK_CHECK("submit display render commands", vkQueueSubmit2KHR(mQueue, std::size(submit_infos), submit_infos, VK_NULL_HANDLE));
 
 	VkSwapchainKHR swapchain = mSwapchain->GetSwapchain();
 	const VkPresentInfoKHR present_info = {

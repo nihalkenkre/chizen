@@ -13,7 +13,7 @@ public:
 
 	~ImGUIState() noexcept;
 
-	bool& GetStartRaytracing();
+	bool& GetShouldStartRaytracing();
 	int& GetMaxSamples();
 	int* GetRenderTargetExtent();
 
@@ -21,7 +21,7 @@ private:
 	VkDescriptorPool mDescriptorPool = VK_NULL_HANDLE;
 	VkDevice mDevice = VK_NULL_HANDLE;
 
-	bool mStartRaytracing = false;
+	bool mShouldStartRaytracing = false;
 	int mMaxSamples = 1024;
 	int mRenderTargetExtent[2] = { 1280, 720 };
 };

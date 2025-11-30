@@ -32,7 +32,7 @@ void Utils_ChangeImageLayout(
 		.pImageMemoryBarriers = &img_mem_barr,
 	};
 
-	vkCmdPipelineBarrier2(cmd_buff, &dep_info);
+	vkCmdPipelineBarrier2KHR(cmd_buff, &dep_info);
 }
 
 void Utils_InitializeImages(const std::vector<VkImage> images, const VkCommandBuffer cmd_buff, const VkQueue queue)
@@ -71,7 +71,7 @@ void Utils_InitializeImages(const std::vector<VkImage> images, const VkCommandBu
 		},
 	};
 
-	VK_CHECK("submit tranfer commands", vkQueueSubmit2(queue, std::size(submit_infos), submit_infos, VK_NULL_HANDLE));
+	VK_CHECK("submit tranfer commands", vkQueueSubmit2KHR(queue, std::size(submit_infos), submit_infos, VK_NULL_HANDLE));
 	VK_CHECK("queue wait idle", vkQueueWaitIdle(queue));
 }
 
@@ -95,6 +95,6 @@ void Utils_InsertMemoryBarrier(
 		.pMemoryBarriers = &mem_bar,
 	};
 
-	vkCmdPipelineBarrier2(cmd_buff, &dep_info);
+	vkCmdPipelineBarrier2KHR(cmd_buff, &dep_info);
 }
 

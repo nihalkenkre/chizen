@@ -1,42 +1,8 @@
 #include "vulkan_objects.hpp"
 #include "utils.hpp"
+#include "vulkan_functions.hpp"
 #include "vulkan_interface.hpp"
 
-PFN_vkSetDebugUtilsObjectNameEXT vk_SetDebugUtilsObjectNameEXT = nullptr;
-PFN_vkGetRayTracingShaderGroupHandlesKHR vk_GetRayTracingShaderGroupHandlesKHR = nullptr;
-PFN_vkCreateRayTracingPipelinesKHR vk_CreateRayTracingPipelinesKHR = nullptr;
-PFN_vkCmdTraceRaysKHR vk_CmdTraceRaysKHR = nullptr;
-
-VKAPI_ATTR VkResult VKAPI_CALL vkSetDebugUtilsObjectNameEXT(
-	VkDevice                                    device,
-	const VkDebugUtilsObjectNameInfoEXT* pNameInfo)
-{
-	return vk_SetDebugUtilsObjectNameEXT(device, pNameInfo);
-}
-
-VKAPI_ATTR VkResult VKAPI_CALL vkGetRayTracingShaderGroupHandlesKHR(
-	VkDevice device, VkPipeline pipeline, uint32_t firstGroup, uint32_t groupCount,
-	size_t dataSize, void* pData)
-{
-	return vk_GetRayTracingShaderGroupHandlesKHR(device, pipeline, firstGroup, groupCount, dataSize, pData);
-}
-
-VKAPI_ATTR VkResult VKAPI_CALL vkCreateRayTracingPipelinesKHR(
-	VkDevice device, VkDeferredOperationKHR deferredOperation,
-	VkPipelineCache pipelineCache, uint32_t createInfoCount,
-	const VkRayTracingPipelineCreateInfoKHR* pCreateInfos,
-	const VkAllocationCallbacks* pAllocator, VkPipeline* pPipelines)
-{
-	return vk_CreateRayTracingPipelinesKHR(device, deferredOperation, pipelineCache, createInfoCount, pCreateInfos, pAllocator, pPipelines);
-}
-
-VKAPI_ATTR void VKAPI_CALL vkCmdTraceRaysKHR(
-	VkCommandBuffer commandBuffer, const VkStridedDeviceAddressRegionKHR* pRaygenShaderBindingTable,
-	const VkStridedDeviceAddressRegionKHR* pMissShaderBindingTable, const VkStridedDeviceAddressRegionKHR* pHitShaderBindingTable,
-	const VkStridedDeviceAddressRegionKHR* pCallableShaderBindingTable, uint32_t width, uint32_t height, uint32_t depth)
-{
-	return vk_CmdTraceRaysKHR(commandBuffer, pRaygenShaderBindingTable, pMissShaderBindingTable, pHitShaderBindingTable, pCallableShaderBindingTable, width, height, depth);
-}
 Instance::Instance(const char* const* extensions, const uint32_t extensions_count)
 {
 	std::vector<const char*> req_ext_names;
@@ -78,7 +44,7 @@ Instance::Instance(const char* const* extensions, const uint32_t extensions_coun
 		.applicationVersion = VK_MAKE_API_VERSION(0, 1, 0, 0),
 		.pEngineName = "Chizen",
 		.engineVersion = VK_MAKE_API_VERSION(0, 1, 0, 0),
-		.apiVersion = VK_MAKE_API_VERSION(0, 1, 4, 328),
+		.apiVersion = VK_MAKE_API_VERSION(0, 1, 1, 0),
 	};
 
 	const VkInstanceCreateInfo create_info = {
@@ -518,6 +484,18 @@ Device::Device(const PhysicalDeviceData* physical_device_data)
 		VK_KHR_ACCELERATION_STRUCTURE_EXTENSION_NAME,
 		VK_KHR_RAY_TRACING_PIPELINE_EXTENSION_NAME,
 		VK_KHR_DEFERRED_HOST_OPERATIONS_EXTENSION_NAME,
+		VK_KHR_BUFFER_DEVICE_ADDRESS_EXTENSION_NAME,
+		VK_KHR_SPIRV_1_4_EXTENSION_NAME,
+		VK_KHR_SHADER_FLOAT_CONTROLS_EXTENSION_NAME,
+		VK_KHR_DYNAMIC_RENDERING_EXTENSION_NAME,
+		VK_KHR_DEPTH_STENCIL_RESOLVE_EXTENSION_NAME,
+		VK_KHR_CREATE_RENDERPASS_2_EXTENSION_NAME,
+		VK_KHR_SYNCHRONIZATION_2_EXTENSION_NAME,
+		VK_KHR_TIMELINE_SEMAPHORE_EXTENSION_NAME,
+		VK_KHR_COPY_COMMANDS_2_EXTENSION_NAME,
+		"VK_KHR_maintenance6",
+		VK_EXT_DESCRIPTOR_INDEXING_EXTENSION_NAME,
+		VK_EXT_EXTENDED_DYNAMIC_STATE_EXTENSION_NAME,
 	};
 
 	uint32_t property_count = 0;
@@ -581,7 +559,7 @@ Device::Device(const PhysicalDeviceData* physical_device_data)
 			d_q_ci.pQueuePriorities = priorities[d_q_ci_idx].data();
 		}
 	}
-
+	
 	VkPhysicalDeviceRayTracingPipelineFeaturesKHR rt_pipe_feats = {
 		.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_RAY_TRACING_PIPELINE_FEATURES_KHR,
 	};
@@ -591,9 +569,14 @@ Device::Device(const PhysicalDeviceData* physical_device_data)
 		.pNext = &rt_pipe_feats,
 	};
 
+	VkPhysicalDeviceExtendedDynamicStateFeaturesEXT extended_dyn_feats = {
+		.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_EXTENDED_DYNAMIC_STATE_FEATURES_EXT,
+		.pNext = &accel_struct_feats,
+	};
+
 	VkPhysicalDeviceDynamicRenderingFeatures dyn_rend_feats = {
 		.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_DYNAMIC_RENDERING_FEATURES,
-		.pNext = &accel_struct_feats,
+		.pNext = &extended_dyn_feats,
 	};
 
 	VkPhysicalDeviceSynchronization2Features sync2_feats = {
@@ -624,9 +607,21 @@ Device::Device(const PhysicalDeviceData* physical_device_data)
 
 	VK_CHECK("create device", vkCreateDevice(physical_device_data->PhysicalDevice, &create_info, nullptr, &mDevice));
 
+	vk_CmdPipelineBarrier2KHR = reinterpret_cast<PFN_vkCmdPipelineBarrier2KHR>(vkGetDeviceProcAddr(mDevice, "vkCmdPipelineBarrier2KHR"));
+	vk_QueueSubmit2KHR = reinterpret_cast<PFN_vkQueueSubmit2KHR>(vkGetDeviceProcAddr(mDevice, "vkQueueSubmit2KHR"));
+	vk_SignalSemaphoreKHR = reinterpret_cast<PFN_vkSignalSemaphoreKHR>(vkGetDeviceProcAddr(mDevice, "vkSignalSemaphoreKHR"));
+	vk_CmdPipelineBarrier2KHR = reinterpret_cast<PFN_vkCmdPipelineBarrier2KHR>(vkGetDeviceProcAddr(mDevice, "vkCmdPipelineBarrier2KHR"));
+	vk_CmdCopyBuffer2KHR = reinterpret_cast<PFN_vkCmdCopyBuffer2KHR>(vkGetDeviceProcAddr(mDevice, "vkCmdCopyBuffer2KHR"));
+	vk_WaitSemaphoresKHR = reinterpret_cast<PFN_vkWaitSemaphoresKHR>(vkGetDeviceProcAddr(mDevice, "vkWaitSemaphoresKHR"));
+	vk_CmdBeginRenderingKHR = reinterpret_cast<PFN_vkCmdBeginRenderingKHR>(vkGetDeviceProcAddr(mDevice, "vkCmdBeginRenderingKHR"));
+	vk_CmdBindDescriptorSets2KHR = reinterpret_cast<PFN_vkCmdBindDescriptorSets2KHR>(vkGetDeviceProcAddr(mDevice, "vkCmdBindDescriptorSets2KHR"));
+	vk_CmdBindVertexBuffers2EXT = reinterpret_cast<PFN_vkCmdBindVertexBuffers2EXT>(vkGetDeviceProcAddr(mDevice, "vkCmdBindVertexBuffers2EXT"));
+	vk_CmdPushConstants2KHR = reinterpret_cast<PFN_vkCmdPushConstants2KHR>(vkGetDeviceProcAddr(mDevice, "vkCmdPushConstants2KHR"));
+	vk_CmdEndRenderingKHR = reinterpret_cast<PFN_vkCmdEndRenderingKHR>(vkGetDeviceProcAddr(mDevice, "vkCmdEndRenderingKHR"));
 	vk_GetRayTracingShaderGroupHandlesKHR = reinterpret_cast<PFN_vkGetRayTracingShaderGroupHandlesKHR>(vkGetDeviceProcAddr(mDevice, "vkGetRayTracingShaderGroupHandlesKHR"));
 	vk_CreateRayTracingPipelinesKHR = reinterpret_cast<PFN_vkCreateRayTracingPipelinesKHR>(vkGetDeviceProcAddr(mDevice, "vkCreateRayTracingPipelinesKHR"));
 	vk_CmdTraceRaysKHR = reinterpret_cast<PFN_vkCmdTraceRaysKHR>(vkGetDeviceProcAddr(mDevice, "vkCmdTraceRaysKHR"));
+	vk_GetBufferDeviceAddressKHR = reinterpret_cast<PFN_vkGetBufferDeviceAddressKHR>(vkGetDeviceProcAddr(mDevice, "vkGetBufferDeviceAddressKHR"));
 
 	VkDeviceQueueInfo2 queue_info = {
 		.sType = VK_STRUCTURE_TYPE_DEVICE_QUEUE_INFO_2,
