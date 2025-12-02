@@ -9,7 +9,7 @@ class RaytracePipelineData
 {
 public:
 	RaytracePipelineData() = delete;
-	RaytracePipelineData(const VulkanInterface* const vulkan_interface, const std::string& current_path);
+	RaytracePipelineData(const VulkanInterface* const vulkan_interface, const std::string& current_path, const std::string& name);
 
 	RaytracePipelineData(const RaytracePipelineData& other) = delete;
 	RaytracePipelineData& operator=(const RaytracePipelineData& other) = delete;
@@ -35,7 +35,7 @@ private:
 	VkDevice mDevice = VK_NULL_HANDLE;
 };
 
-RaytracePipelineData::RaytracePipelineData(const VulkanInterface* const vulkan_interface, const std::string& current_path)
+RaytracePipelineData::RaytracePipelineData(const VulkanInterface* const vulkan_interface, const std::string& current_path, const std::string& name)
 {
 	mDevice = vulkan_interface->GetDevice()->GetDevice();
 
@@ -280,6 +280,17 @@ RaytracePipelineData::RaytracePipelineData(const VulkanInterface* const vulkan_i
 	vkDestroyShaderModule(vulkan_interface->GetDevice()->GetDevice(), rg_mod, nullptr);
 	vkDestroyShaderModule(vulkan_interface->GetDevice()->GetDevice(), ch_mod, nullptr);
 	vkDestroyShaderModule(vulkan_interface->GetDevice()->GetDevice(), ms_mod, nullptr);
+
+#ifdef _DEBUG
+	Utils_SetObjectName(mDevice, VK_OBJECT_TYPE_PIPELINE, reinterpret_cast<uint64_t>(mPipeline), std::string(name).append(" pipeline").c_str());
+	Utils_SetObjectName(mDevice, VK_OBJECT_TYPE_PIPELINE_LAYOUT, reinterpret_cast<uint64_t>(mPipelineLayout), std::string(name).append(" pipeline layout").c_str());
+
+	for (size_t dsl = 0; dsl < mDescriptorSetLayouts.size(); ++dsl)
+	{
+		Utils_SetObjectName(mDevice, VK_OBJECT_TYPE_DESCRIPTOR_SET_LAYOUT, reinterpret_cast<uint64_t>(mDescriptorSetLayouts[dsl]), std::string(name).append(" descriptor set layout ").append(std::to_string(dsl)).c_str());
+	}
+
+#endif	// _DEBUG
 }
 
 RaytracePipelineData::~RaytracePipelineData() noexcept
@@ -392,7 +403,7 @@ void Raytrace::InitializeResources()
 	memcpy(mRaygenSBT->GetAllocationInfo2().allocationInfo.pMappedData, shader_handle_storage.data(), sbt_size);
 }
 
-Raytrace::Raytrace(const VulkanInterface* const vulkan_interface, ImageResource* final_render_target, const VkExtent3D& extent, const std::string& current_path)
+Raytrace::Raytrace(const VulkanInterface* const vulkan_interface, ImageResource* final_render_target, const VkExtent3D& extent, const std::string& current_path, const std::string& name)
 {
 	mDevice = vulkan_interface->GetDevice()->GetDevice();
 	mAllocator = vulkan_interface->GetAllocator()->GetAllocator();
@@ -417,9 +428,9 @@ Raytrace::Raytrace(const VulkanInterface* const vulkan_interface, ImageResource*
 	mComputeQueue = vulkan_interface->GetDevice()->GetComputeQueue();
 	mTransferQueue = vulkan_interface->GetTransferObjects()->GetQueue();
 	mTransferCommandBuffer = vulkan_interface->GetTransferObjects()->GetCommandBuffer();
-	mFrameObjects = std::make_unique<FrameObjects>(mDevice, vulkan_interface->GetPhysicalDeviceData()->ComputeQueueFamilyIndex, mMaxFramesInFlight);
+	mFrameObjects = std::make_unique<FrameObjects>(mDevice, vulkan_interface->GetPhysicalDeviceData()->ComputeQueueFamilyIndex, mMaxFramesInFlight, "raytrace frame objects");
 
-	mPipelineData = std::make_unique<RaytracePipelineData>(vulkan_interface, current_path);
+	mPipelineData = std::make_unique<RaytracePipelineData>(vulkan_interface, current_path, "reytrace pipeline data");
 
 	mDescriptorSets.resize(mMaxFramesInFlight);
 
@@ -446,6 +457,10 @@ Raytrace::Raytrace(const VulkanInterface* const vulkan_interface, ImageResource*
 
 	VK_CHECK("create dsp", vkCreateDescriptorPool(mDevice, &dp_ci, nullptr, &mDescriptorPool));
 
+#ifdef _DEBUG
+	Utils_SetObjectName(mDevice, VK_OBJECT_TYPE_DESCRIPTOR_POOL, reinterpret_cast<uint64_t>(mDescriptorPool), std::string(name).append(" descriptor pool").c_str());
+#endif
+
 	auto dsls = mPipelineData->GetDescriptorSetLayouts();
 	const VkDescriptorSetAllocateInfo ds_ai = {
 		.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO,
@@ -457,6 +472,9 @@ Raytrace::Raytrace(const VulkanInterface* const vulkan_interface, ImageResource*
 	for (uint8_t fr = 0; fr < mMaxFramesInFlight; ++fr)
 	{
 		VK_CHECK("allocate raytrace desc sets", vkAllocateDescriptorSets(mDevice, &ds_ai, mDescriptorSets.data() + fr));
+#ifdef _DEBUG
+		Utils_SetObjectName(mDevice, VK_OBJECT_TYPE_DESCRIPTOR_SET, reinterpret_cast<uint64_t>(mDescriptorSets[fr]), std::string(name).append(" descriptor set ").append(std::to_string(fr).c_str()));
+#endif	// _DBEUG
 	}
 
 	InitializeResources();
@@ -492,7 +510,6 @@ void Raytrace::Render(bool* is_raytracing, const uint32_t max_samples)
 	uint32_t s = 1;
 
 	do {
-
 		const VkSemaphoreWaitInfo wait_info = {
 			.sType = VK_STRUCTURE_TYPE_SEMAPHORE_WAIT_INFO,
 			.semaphoreCount = 1,
@@ -511,9 +528,11 @@ void Raytrace::Render(bool* is_raytracing, const uint32_t max_samples)
 		};
 		VK_CHECK("begin rt cmd_buff", vkBeginCommandBuffer(cmd_buff, &rt_begin_info));
 
-		Utils_InsertMemoryBarrier(cmd_buff,
+		Utils_InsertMemoryBarrier(
+			cmd_buff,
 			VK_PIPELINE_STAGE_2_CLEAR_BIT, VK_ACCESS_2_TRANSFER_WRITE_BIT,
-			VK_PIPELINE_STAGE_2_RAY_TRACING_SHADER_BIT_KHR | VK_PIPELINE_STAGE_2_CLEAR_BIT, VK_ACCESS_2_SHADER_STORAGE_WRITE_BIT | VK_ACCESS_2_TRANSFER_WRITE_BIT
+			VK_PIPELINE_STAGE_2_RAY_TRACING_SHADER_BIT_KHR | VK_PIPELINE_STAGE_2_CLEAR_BIT,
+			VK_ACCESS_2_SHADER_STORAGE_WRITE_BIT | VK_ACCESS_2_TRANSFER_WRITE_BIT
 		);
 
 		if (s == 1)

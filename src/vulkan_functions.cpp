@@ -15,17 +15,18 @@ PFN_vkGetRayTracingShaderGroupHandlesKHR vk_GetRayTracingShaderGroupHandlesKHR =
 PFN_vkCreateRayTracingPipelinesKHR vk_CreateRayTracingPipelinesKHR = nullptr;
 PFN_vkCmdTraceRaysKHR vk_CmdTraceRaysKHR = nullptr;
 PFN_vkGetBufferDeviceAddressKHR vk_GetBufferDeviceAddressKHR = nullptr;
+PFN_vkCreateAccelerationStructureKHR vk_CreateAccelerationStructureKHR = nullptr;
+PFN_vkDestroyAccelerationStructureKHR vk_DestroyAccelerationStructureKHR = nullptr;
+PFN_vkCmdBuildAccelerationStructuresKHR vk_CmdBuildAccelerationStructuresKHR = nullptr;
+PFN_vkGetAccelerationStructureBuildSizesKHR vk_GetAccelerationStructureBuildSizesKHR = nullptr;
+PFN_vkGetAccelerationStructureDeviceAddressKHR vk_GetAccelerationStructureDeviceAddressKHR = nullptr;
 
-VKAPI_ATTR VkResult VKAPI_CALL vkSetDebugUtilsObjectNameEXT(
-	VkDevice                                    device,
-	const VkDebugUtilsObjectNameInfoEXT* pNameInfo)
+VKAPI_ATTR VkResult VKAPI_CALL vkSetDebugUtilsObjectNameEXT(VkDevice device, const VkDebugUtilsObjectNameInfoEXT* pNameInfo)
 {
 	return vk_SetDebugUtilsObjectNameEXT(device, pNameInfo);
 }
 
-VKAPI_ATTR void VKAPI_CALL vkCmdPipelineBarrier2KHR(
-	VkCommandBuffer commandBuffer,
-	const VkDependencyInfo* pDependencyInfo)
+VKAPI_ATTR void VKAPI_CALL vkCmdPipelineBarrier2KHR(VkCommandBuffer commandBuffer, const VkDependencyInfo* pDependencyInfo)
 {
 	return vk_CmdPipelineBarrier2KHR(commandBuffer, pDependencyInfo);
 }
@@ -102,4 +103,29 @@ VKAPI_ATTR void VKAPI_CALL vkCmdTraceRaysKHR(
 VKAPI_ATTR VkDeviceAddress VKAPI_CALL vkGetBufferDeviceAddressKHR(VkDevice device, const VkBufferDeviceAddressInfo* pInfo)
 {
 	return vk_GetBufferDeviceAddressKHR(device, pInfo);
+}
+
+VKAPI_ATTR VkResult VKAPI_CALL vkCreateAccelerationStructureKHR(VkDevice device, const VkAccelerationStructureCreateInfoKHR* pCreateInfo, const VkAllocationCallbacks* pAllocator, VkAccelerationStructureKHR* pAccelerationStructure)
+{
+	return vk_CreateAccelerationStructureKHR(device, pCreateInfo, pAllocator, pAccelerationStructure);
+}
+
+VKAPI_ATTR void VKAPI_CALL vkDestroyAccelerationStructureKHR(VkDevice device, VkAccelerationStructureKHR accelerationStructure, const VkAllocationCallbacks* pAllocator)
+{
+	return vk_DestroyAccelerationStructureKHR(device, accelerationStructure, pAllocator);
+}
+
+VKAPI_ATTR void VKAPI_CALL vkCmdBuildAccelerationStructuresKHR(VkCommandBuffer commandBuffer, uint32_t infoCount, const VkAccelerationStructureBuildGeometryInfoKHR* pInfos, const VkAccelerationStructureBuildRangeInfoKHR* const* ppBuildRangeInfos)
+{
+	return vk_CmdBuildAccelerationStructuresKHR(commandBuffer, infoCount, pInfos, ppBuildRangeInfos);
+}
+
+VKAPI_ATTR void VKAPI_CALL vkGetAccelerationStructureBuildSizesKHR(VkDevice device, VkAccelerationStructureBuildTypeKHR buildType, const VkAccelerationStructureBuildGeometryInfoKHR* pBuildInfo, const uint32_t* pMaxPrimitiveCounts, VkAccelerationStructureBuildSizesInfoKHR* pSizeInfo)
+{
+	return vk_GetAccelerationStructureBuildSizesKHR(device, buildType, pBuildInfo, pMaxPrimitiveCounts, pSizeInfo);
+}
+
+VKAPI_ATTR VkDeviceAddress VKAPI_CALL vkGetAccelerationStructureDeviceAddressKHR(VkDevice device, const VkAccelerationStructureDeviceAddressInfoKHR* pInfo)
+{
+	return vk_GetAccelerationStructureDeviceAddressKHR(device, pInfo);
 }

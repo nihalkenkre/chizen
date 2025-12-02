@@ -51,6 +51,30 @@ ImageResource::ImageResource(const VkDevice device, const VkExtent3D& extent, co
 	};
 
 	VK_CHECK("create sampler", vkCreateSampler(device, &s_ci, nullptr, &mDescriptorInfo.sampler));
+
+#ifdef _DEBUG
+	std::string n(name);
+	VkDebugUtilsObjectNameInfoEXT name_info = {
+		.sType = VK_STRUCTURE_TYPE_DEBUG_UTILS_OBJECT_NAME_INFO_EXT,
+		.objectType = VK_OBJECT_TYPE_IMAGE,
+		.objectHandle = reinterpret_cast<uint64_t>(mImage),
+		.pObjectName = n.append(" image").c_str(),
+	};
+	VK_CHECK("setting image name", vkSetDebugUtilsObjectNameEXT(device, &name_info));
+
+	n = name;
+	name_info.objectType = VK_OBJECT_TYPE_IMAGE_VIEW;
+	name_info.objectHandle = reinterpret_cast<uint64_t>(mDescriptorInfo.imageView);
+	name_info.pObjectName = n.append(" image view").c_str();
+	VK_CHECK("setting image view name", vkSetDebugUtilsObjectNameEXT(device, &name_info));
+
+	n = name;
+	name_info.objectType = VK_OBJECT_TYPE_SAMPLER;
+	name_info.objectHandle = reinterpret_cast<uint64_t>(mDescriptorInfo.sampler);
+	name_info.pObjectName = n.append(" sampler").c_str();
+	VK_CHECK("setting sampler name", vkSetDebugUtilsObjectNameEXT(device, &name_info));
+
+#endif	// _DEBUG
 }
 
 ImageResource::~ImageResource() noexcept
@@ -137,6 +161,18 @@ BufferResource::BufferResource(const VkDevice device, const VmaAllocator allocat
 	};
 
 	VK_CHECK("create buffer", vmaCreateBuffer(allocator, &create_info, &alloc_ci, &mDescriptorInfo.buffer, &mAllocation, &mAllocationInfo.allocationInfo));
+
+#ifdef _DEBUG
+	std::string n(name);
+	VkDebugUtilsObjectNameInfoEXT name_info = {
+		.sType = VK_STRUCTURE_TYPE_DEBUG_UTILS_OBJECT_NAME_INFO_EXT,
+		.objectType = VK_OBJECT_TYPE_BUFFER,
+		.objectHandle = reinterpret_cast<uint64_t>(mDescriptorInfo.buffer),
+		.pObjectName = n.append(" buffer").c_str(),
+	};
+	VK_CHECK("setting buffer name", vkSetDebugUtilsObjectNameEXT(device, &name_info));
+
+#endif // _DEBUG
 }
 
 BufferResource::~BufferResource() noexcept
@@ -188,7 +224,6 @@ void BufferResource::CopyToBuffer(const VkCommandBuffer cmd_buff, const VkQueue 
 
 	VK_CHECK("submit geom buffer xfer cmd", vkQueueSubmit2KHR(queue, std::size(submit_infos), submit_infos, VK_NULL_HANDLE));
 	VK_CHECK("wait xfer cmd buff", vkQueueWaitIdle(queue));
-
 }
 
 VkDescriptorBufferInfo BufferResource::GetDescriptorInfo() const

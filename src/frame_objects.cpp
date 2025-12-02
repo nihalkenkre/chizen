@@ -2,12 +2,12 @@
 #include "utils.hpp"
 #include "vulkan_functions.hpp"
 
-FrameObjects::FrameObjects(const VkDevice device, const uint32_t queue_family_index, const uint8_t& max_frames_in_flight)
+FrameObjects::FrameObjects(const VkDevice device, const uint32_t queue_family_index, const uint8_t& max_frames_in_flight, const std::string& name)
 {
 	mMaxFramesInFlight = max_frames_in_flight;
 	mCommandBuffers.resize(max_frames_in_flight, VK_NULL_HANDLE);
-	mFrameSemaphores.resize(max_frames_in_flight, VK_NULL_HANDLE);
-	mFrameSemaphoreValues.resize(max_frames_in_flight, 1);
+	mSemaphores.resize(max_frames_in_flight, VK_NULL_HANDLE);
+	mSemaphoreValues.resize(max_frames_in_flight, 1);
 	mDevice = device;
 
 	const VkSemaphoreTypeCreateInfo sem_type_ci = {
@@ -34,6 +34,10 @@ FrameObjects::FrameObjects(const VkDevice device, const uint32_t queue_family_in
 
 	VK_CHECK("create command pool", vkCreateCommandPool(mDevice, &cmd_pool_ci, nullptr, &mCommandPool));
 
+#ifdef _DEBUG
+	Utils_SetObjectName(mDevice, VK_OBJECT_TYPE_COMMAND_POOL, reinterpret_cast<uint64_t>(mCommandPool), std::string(name).append(" command pool").c_str());
+#endif // _DEBUG
+
 	const VkCommandBufferAllocateInfo cmd_buff_ai = {
 		.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO,
 		.commandPool = mCommandPool,
@@ -42,10 +46,20 @@ FrameObjects::FrameObjects(const VkDevice device, const uint32_t queue_family_in
 
 	VK_CHECK("allocator cmd buffs", vkAllocateCommandBuffers(mDevice, &cmd_buff_ai, mCommandBuffers.data()));
 
+#ifdef _DEBUG
+	for (size_t cb = 0; cb < mCommandBuffers.size(); ++cb)
+	{
+		Utils_SetObjectName(mDevice, VK_OBJECT_TYPE_COMMAND_BUFFER, reinterpret_cast<uint64_t>(mCommandBuffers[cb]), std::string(name).append(" command buffer ").append(std::to_string(cb)));
+	}
+#endif // _DEBUG
+
 	for (uint8_t fr = 0; fr < mMaxFramesInFlight; ++fr)
 	{
-		VK_CHECK("create frame semaphore", vkCreateSemaphore(mDevice, &tl_sem_ci, nullptr, mFrameSemaphores.data() + fr));
-		sem_sig_info.semaphore = mFrameSemaphores[fr];
+		VK_CHECK("create frame semaphore", vkCreateSemaphore(mDevice, &tl_sem_ci, nullptr, mSemaphores.data() + fr));
+#ifdef _DEBUG
+		Utils_SetObjectName(mDevice, VK_OBJECT_TYPE_SEMAPHORE, reinterpret_cast<uint64_t>(mSemaphores[fr]), std::string(name).append(" semaphore ").append(std::to_string(fr)));
+#endif // _DEBUG
+		sem_sig_info.semaphore = mSemaphores[fr];
 
 		VK_CHECK("signal frame semaphore", vkSignalSemaphoreKHR(mDevice, &sem_sig_info));
 	}
@@ -63,12 +77,12 @@ VkCommandBuffer FrameObjects::GetCommandBuffer() const
 
 VkSemaphore FrameObjects::GetSemaphore() const
 {
-	return mFrameSemaphores[mFrameInFlight];
+	return mSemaphores[mFrameInFlight];
 }
 
 uint64_t& FrameObjects::GetFrameSemValue()
 {
-	return mFrameSemaphoreValues[mFrameInFlight];
+	return mSemaphoreValues[mFrameInFlight];
 }
 
 void FrameObjects::NextFrame()
@@ -82,7 +96,7 @@ FrameObjects::~FrameObjects() noexcept
 	{
 		for (uint8_t fr = 0; fr < mMaxFramesInFlight; ++fr)
 		{
-			vkDestroySemaphore(mDevice, mFrameSemaphores[fr], nullptr);
+			vkDestroySemaphore(mDevice, mSemaphores[fr], nullptr);
 		}
 		vkDestroyCommandPool(mDevice, mCommandPool, nullptr);
 	}

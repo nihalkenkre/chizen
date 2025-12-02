@@ -10,7 +10,7 @@ class DisplayPipelineData
 {
 public:
 	DisplayPipelineData() = delete;
-	DisplayPipelineData(const VulkanInterface* vulkan_interface, const std::string& current_path);
+	DisplayPipelineData(const VulkanInterface* vulkan_interface, const std::string& current_path, const std::string& name);
 
 	DisplayPipelineData(const DisplayPipelineData& other) = delete;
 	DisplayPipelineData& operator=(const DisplayPipelineData& other) = delete;
@@ -36,7 +36,7 @@ private:
 	VkDevice mDevice = VK_NULL_HANDLE;
 };
 
-DisplayPipelineData::DisplayPipelineData(const VulkanInterface* vulkan_interface, const std::string& current_path)
+DisplayPipelineData::DisplayPipelineData(const VulkanInterface* vulkan_interface, const std::string& current_path, const std::string& name)
 {
 	mDevice = vulkan_interface->GetDevice()->GetDevice();
 
@@ -309,6 +309,17 @@ DisplayPipelineData::DisplayPipelineData(const VulkanInterface* vulkan_interface
 
 	vkDestroyShaderModule(vulkan_interface->GetDevice()->GetDevice(), vert_mod, nullptr);
 	vkDestroyShaderModule(vulkan_interface->GetDevice()->GetDevice(), frag_mod, nullptr);
+
+#ifdef _DEBUG
+	Utils_SetObjectName(mDevice, VK_OBJECT_TYPE_PIPELINE, reinterpret_cast<uint64_t>(mPipeline), std::string(name).append(" pipeline").c_str());
+	Utils_SetObjectName(mDevice, VK_OBJECT_TYPE_PIPELINE_LAYOUT, reinterpret_cast<uint64_t>(mPipelineLayout), std::string(name).append(" pipeline layout").c_str());
+
+	for (size_t dsl = 0; dsl < mDescriptorSetLayouts.size(); ++dsl)
+	{
+		Utils_SetObjectName(mDevice, VK_OBJECT_TYPE_DESCRIPTOR_SET_LAYOUT, reinterpret_cast<uint64_t>(mDescriptorSetLayouts[dsl]), std::string(name).append(" descriptor set layout ").append(std::to_string(dsl)));
+	}
+
+#endif // _DEBUG
 }
 
 DisplayPipelineData::~DisplayPipelineData() noexcept
@@ -346,18 +357,16 @@ Display::Display(const VulkanInterface* vulkan_interface, ImageResource* final_r
 	mSwapchain = vulkan_interface->GetSwapchain();
 	mQueue = vulkan_interface->GetDevice()->GetGraphicsQueue();
 	mDevice = vulkan_interface->GetDevice()->GetDevice();
-	mFrameObjects = std::make_unique<FrameObjects>(mDevice, vulkan_interface->GetPhysicalDeviceData()->GraphicsQueueFamilyIndex, mMaxFramesInFlight);
-	mPipelineData = std::make_unique<DisplayPipelineData>(vulkan_interface, current_path);
+	mFrameObjects = std::make_unique<FrameObjects>(mDevice, vulkan_interface->GetPhysicalDeviceData()->GraphicsQueueFamilyIndex, mMaxFramesInFlight, "display frame objects");
+	mPipelineData = std::make_unique<DisplayPipelineData>(vulkan_interface, current_path, "display pipeline");
 
-	mAcquireSignalSemaphores.resize(mMaxFramesInFlight);
-	mPresentWaitSemaphores.resize(mMaxFramesInFlight);
-	mDescriptorSets.resize(mMaxFramesInFlight);
+	mAcquireSignalSemaphores.resize(mMaxFramesInFlight, VK_NULL_HANDLE);
+	mPresentWaitSemaphores.resize(mMaxFramesInFlight, VK_NULL_HANDLE);
+	mDescriptorSets.resize(mMaxFramesInFlight, VK_NULL_HANDLE);
 
 	const VkSemaphoreCreateInfo bin_sem_ci = {
 		.sType = VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO,
 	};
-
-	mPipelineData = std::make_unique<DisplayPipelineData>(vulkan_interface, current_path);
 
 	const VkDescriptorPoolSize pool_sizes[] = {
 		{

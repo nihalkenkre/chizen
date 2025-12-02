@@ -10,7 +10,7 @@ class Raytrace
 {
 public:
 	Raytrace() = delete;
-	Raytrace(const VulkanInterface* const vulkan_interface, ImageResource* final_render_target, const VkExtent3D& extent, const std::string& current_path);
+	Raytrace(const VulkanInterface* const vulkan_interface, ImageResource* final_render_target, const VkExtent3D& extent, const std::string& current_path, const std::string& name);
 
 	Raytrace(const Raytrace& other) = delete;
 	Raytrace& operator=(const Raytrace& other) = delete;
@@ -35,7 +35,7 @@ private:
 	VkDescriptorPool mDescriptorPool = VK_NULL_HANDLE;
 	VkPhysicalDeviceRayTracingPipelinePropertiesKHR mRayTracingProperties = {};
 
-	std::unique_ptr<RaytracePipelineData> mPipelineData = {};
+	std::unique_ptr<RaytracePipelineData> mPipelineData = nullptr;
 
 	VkExtent3D mExtent = {};
 	VkQueue mComputeQueue = VK_NULL_HANDLE;

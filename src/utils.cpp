@@ -98,3 +98,15 @@ void Utils_InsertMemoryBarrier(
 	vkCmdPipelineBarrier2KHR(cmd_buff, &dep_info);
 }
 
+void Utils_SetObjectName(const VkDevice device, const VkObjectType type, const uint64_t handle, const std::string& name)
+{
+	const VkDebugUtilsObjectNameInfoEXT name_info = {
+		.sType = VK_STRUCTURE_TYPE_DEBUG_UTILS_OBJECT_NAME_INFO_EXT,
+		.objectType = type,
+		.objectHandle = handle,
+		.pObjectName = name.c_str(),
+	};
+
+	VK_CHECK("setting name", vkSetDebugUtilsObjectNameEXT(device, &name_info));
+}
+

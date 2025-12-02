@@ -42,3 +42,4 @@ void Utils_InsertMemoryBarrier(
 	const VkPipelineStageFlags2 dst_stage_mask, const VkAccessFlags2 dst_access_mask
 );
 
+void Utils_SetObjectName(const VkDevice device, const VkObjectType type, const uint64_t handle, const std::string& name);

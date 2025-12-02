@@ -15,3 +15,8 @@ extern "C" PFN_vkGetRayTracingShaderGroupHandlesKHR vk_GetRayTracingShaderGroupH
 extern "C" PFN_vkCreateRayTracingPipelinesKHR vk_CreateRayTracingPipelinesKHR;
 extern "C" PFN_vkCmdTraceRaysKHR vk_CmdTraceRaysKHR;
 extern "C" PFN_vkGetBufferDeviceAddressKHR vk_GetBufferDeviceAddressKHR;
+extern "C" PFN_vkCreateAccelerationStructureKHR vk_CreateAccelerationStructureKHR;
+extern "C" PFN_vkDestroyAccelerationStructureKHR vk_DestroyAccelerationStructureKHR;
+extern "C" PFN_vkCmdBuildAccelerationStructuresKHR vk_CmdBuildAccelerationStructuresKHR;
+extern "C" PFN_vkGetAccelerationStructureBuildSizesKHR vk_GetAccelerationStructureBuildSizesKHR;
+extern "C" PFN_vkGetAccelerationStructureDeviceAddressKHR vk_GetAccelerationStructureDeviceAddressKHR;

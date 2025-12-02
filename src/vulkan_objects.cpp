@@ -176,7 +176,6 @@ Surface::Surface(SDL_Window* window, const VkInstance& instance)
 
 Surface::~Surface() noexcept
 {
-	//SDL_Vulkan_DestroySurface(mInstance, mSurface, nullptr);
 	if (mInstance != VK_NULL_HANDLE)
 		vkDestroySurfaceKHR(mInstance, mSurface, nullptr);
 }
@@ -310,31 +309,13 @@ Swapchain::Swapchain(const VkDevice device, const Surface* surface_data, const u
 	}
 
 #ifdef _DEBUG
-	VkDebugUtilsObjectNameInfoEXT name_info = {
-		.sType = VK_STRUCTURE_TYPE_DEBUG_UTILS_OBJECT_NAME_INFO_EXT,
-		.objectType = VK_OBJECT_TYPE_SWAPCHAIN_KHR,
-		.objectHandle = reinterpret_cast<uint64_t>(mSwapchain),
-		.pObjectName = name.c_str(),
-	};
+	Utils_SetObjectName(mDevice, VK_OBJECT_TYPE_SWAPCHAIN_KHR, reinterpret_cast<uint64_t>(mSwapchain), "swapchain");
 
-	VK_CHECK("set swapchain name", vkSetDebugUtilsObjectNameEXT(device, &name_info));
-
-	std::string n;
 	for (uint32_t i = 0; i < mImagesCount; ++i)
 	{
-		n = name;
-		name_info.objectType = VK_OBJECT_TYPE_IMAGE;
-		name_info.objectHandle = reinterpret_cast<uint64_t>(mImages[i]);
-		name_info.pObjectName = n.append(" image ").append(std::to_string(i)).c_str();
-		VK_CHECK("setting swapchain image name", vkSetDebugUtilsObjectNameEXT(device, &name_info));
-
-		n = name;
-		name_info.objectType = VK_OBJECT_TYPE_IMAGE_VIEW;
-		name_info.objectHandle = reinterpret_cast<uint64_t>(mImageViews[i]);
-		name_info.pObjectName = n.append(" image view ").append(std::to_string(i)).c_str();
-		VK_CHECK("setting swapcahin image view name", vkSetDebugUtilsObjectNameEXT(device, &name_info))
+		Utils_SetObjectName(mDevice, VK_OBJECT_TYPE_IMAGE, reinterpret_cast<uint64_t>(mImages[i]), std::string("swapchain image ").append(std::to_string(i)).c_str());
+		Utils_SetObjectName(mDevice, VK_OBJECT_TYPE_IMAGE_VIEW, reinterpret_cast<uint64_t>(mImageViews[i]), std::string("swapchain image view ").append(std::to_string(i)).c_str());
 	}
-
 #endif
 }
 
@@ -371,7 +352,7 @@ uint32_t Swapchain::GetImagesCount() const
 	return mImagesCount;
 }
 
-TransferObjects::TransferObjects(const VkDevice& device, const VkQueue& transfer_queue, const uint32_t transfer_queue_family_index)
+TransferObjects::TransferObjects(const VkDevice& device, const VkQueue& transfer_queue, const uint32_t transfer_queue_family_index, const std::string& name)
 {
 	mQueue = transfer_queue;
 	mQueueFamilyIndex = transfer_queue_family_index;
@@ -393,6 +374,10 @@ TransferObjects::TransferObjects(const VkDevice& device, const VkQueue& transfer
 
 	VK_CHECK("allocate transfer cmd buff", vkAllocateCommandBuffers(device, &cmd_buff_ai, &mCommandBuffer));
 
+#ifdef _DEBUG
+	Utils_SetObjectName(mDevice, VK_OBJECT_TYPE_COMMAND_POOL, reinterpret_cast<uint64_t>(mCommandPool), "tranfer objects command pool");
+	Utils_SetObjectName(mDevice, VK_OBJECT_TYPE_COMMAND_BUFFER, reinterpret_cast<uint64_t>(mCommandBuffer), "tranfer objects command buffer");
+#endif
 }
 
 TransferObjects::~TransferObjects() noexcept
@@ -559,7 +544,7 @@ Device::Device(const PhysicalDeviceData* physical_device_data)
 			d_q_ci.pQueuePriorities = priorities[d_q_ci_idx].data();
 		}
 	}
-	
+
 	VkPhysicalDeviceRayTracingPipelineFeaturesKHR rt_pipe_feats = {
 		.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_RAY_TRACING_PIPELINE_FEATURES_KHR,
 	};
@@ -622,6 +607,11 @@ Device::Device(const PhysicalDeviceData* physical_device_data)
 	vk_CreateRayTracingPipelinesKHR = reinterpret_cast<PFN_vkCreateRayTracingPipelinesKHR>(vkGetDeviceProcAddr(mDevice, "vkCreateRayTracingPipelinesKHR"));
 	vk_CmdTraceRaysKHR = reinterpret_cast<PFN_vkCmdTraceRaysKHR>(vkGetDeviceProcAddr(mDevice, "vkCmdTraceRaysKHR"));
 	vk_GetBufferDeviceAddressKHR = reinterpret_cast<PFN_vkGetBufferDeviceAddressKHR>(vkGetDeviceProcAddr(mDevice, "vkGetBufferDeviceAddressKHR"));
+	vk_CreateAccelerationStructureKHR = reinterpret_cast<PFN_vkCreateAccelerationStructureKHR>(vkGetDeviceProcAddr(mDevice, "vkCreateAccelerationStructureKHR"));
+	vk_DestroyAccelerationStructureKHR = reinterpret_cast<PFN_vkDestroyAccelerationStructureKHR>(vkGetDeviceProcAddr(mDevice, "vkDestroyAccelerationStructureKHR"));
+	vk_CmdBuildAccelerationStructuresKHR = reinterpret_cast<PFN_vkCmdBuildAccelerationStructuresKHR>(vkGetDeviceProcAddr(mDevice, "vkCmdBuildAccelerationStructuresKHR"));
+	vk_GetAccelerationStructureBuildSizesKHR = reinterpret_cast<PFN_vkGetAccelerationStructureBuildSizesKHR>(vkGetDeviceProcAddr(mDevice, "vkGetAccelerationStructureBuildSizesKHR"));
+	vk_GetAccelerationStructureDeviceAddressKHR = reinterpret_cast<PFN_vkGetAccelerationStructureDeviceAddressKHR>(vkGetDeviceProcAddr(mDevice, "vkGetAccelerationStructureDeviceAddressKHR"));
 
 	VkDeviceQueueInfo2 queue_info = {
 		.sType = VK_STRUCTURE_TYPE_DEVICE_QUEUE_INFO_2,
@@ -653,37 +643,11 @@ Device::Device(const PhysicalDeviceData* physical_device_data)
 	}
 
 #ifdef _DEBUG
-	VkDebugUtilsObjectNameInfoEXT name_info = {
-		.sType = VK_STRUCTURE_TYPE_DEBUG_UTILS_OBJECT_NAME_INFO_EXT,
-		.objectType = VK_OBJECT_TYPE_DEVICE,
-		.objectHandle = reinterpret_cast<uint64_t>(mDevice),
-		.pObjectName = "device",
-	};
-
-	VK_CHECK("set device name", vkSetDebugUtilsObjectNameEXT(mDevice, &name_info));
-
-	name_info.objectType = VK_OBJECT_TYPE_QUEUE;
-	name_info.objectHandle = reinterpret_cast<uint64_t>(mGraphicsQueue);
-	name_info.pObjectName = "graphics queue";
-	VK_CHECK("set graphics queue name", vkSetDebugUtilsObjectNameEXT(mDevice, &name_info));
-
-	name_info.objectType = VK_OBJECT_TYPE_QUEUE;
-	name_info.objectHandle = reinterpret_cast<uint64_t>(mComputeQueue);
-	name_info.pObjectName = "compute queue";
-
-	VK_CHECK("set cmpt_q name", vkSetDebugUtilsObjectNameEXT(mDevice, &name_info));
-
-	name_info.objectType = VK_OBJECT_TYPE_QUEUE;
-	name_info.objectHandle = reinterpret_cast<uint64_t>(mTransferQueue);
-	name_info.pObjectName = "transfer queue";
-
-	VK_CHECK("set xfer_q name", vkSetDebugUtilsObjectNameEXT(mDevice, &name_info));
-
-	name_info.objectType = VK_OBJECT_TYPE_PHYSICAL_DEVICE;
-	name_info.objectHandle = reinterpret_cast<uint64_t>(physical_device_data->PhysicalDevice);
-	name_info.pObjectName = physical_device_data->Properties.properties.deviceName;
-
-	VK_CHECK("set physical device name", vkSetDebugUtilsObjectNameEXT(mDevice, &name_info));
+	Utils_SetObjectName(mDevice, VK_OBJECT_TYPE_DEVICE, reinterpret_cast<uint64_t>(mDevice), "device");
+	Utils_SetObjectName(mDevice, VK_OBJECT_TYPE_PHYSICAL_DEVICE, reinterpret_cast<uint64_t>(physical_device_data->PhysicalDevice), physical_device_data->Properties.properties.deviceName);
+	Utils_SetObjectName(mDevice, VK_OBJECT_TYPE_QUEUE, reinterpret_cast<uint64_t>(mGraphicsQueue), "graphics queue");
+	Utils_SetObjectName(mDevice, VK_OBJECT_TYPE_QUEUE, reinterpret_cast<uint64_t>(mComputeQueue), "compute queue");
+	Utils_SetObjectName(mDevice, VK_OBJECT_TYPE_QUEUE, reinterpret_cast<uint64_t>(mTransferQueue), "transfer queue");
 
 #endif	// _DEBUG
 }
@@ -711,4 +675,14 @@ VkQueue Device::GetComputeQueue() const
 VkQueue Device::GetTransferQueue() const
 {
 	return mTransferQueue;
+}
+
+AccelerationStructure::AccelerationStructure(const VkDevice device, const VmaAllocator allocator, const VkCommandBuffer command_buffer, const VkQueue queue)
+{
+}
+
+AccelerationStructure::~AccelerationStructure() noexcept
+{
+	if (mDevice != VK_NULL_HANDLE)
+		vkDestroyAccelerationStructureKHR(mDevice, mAccelerationStructure, nullptr);
 }

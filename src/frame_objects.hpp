@@ -4,7 +4,7 @@ class FrameObjects
 {
 public:
 	FrameObjects() = delete;
-	FrameObjects(const VkDevice device, const uint32_t queue_family_index, const uint8_t& max_frames_in_flight);
+	FrameObjects(const VkDevice device, const uint32_t queue_family_index, const uint8_t& max_frames_in_flight, const std::string& name);
 
 	FrameObjects(const FrameObjects& other) = delete;
 	FrameObjects& operator=(const FrameObjects& other) = delete;
@@ -18,8 +18,8 @@ public:
 	void NextFrame();
 
 private:
-	std::vector<VkSemaphore> mFrameSemaphores;
-	std::vector<uint64_t> mFrameSemaphoreValues;
+	std::vector<VkSemaphore> mSemaphores;
+	std::vector<uint64_t> mSemaphoreValues;
 	std::vector<VkCommandBuffer> mCommandBuffers;
 	VkCommandPool mCommandPool = VK_NULL_HANDLE;
 

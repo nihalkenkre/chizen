@@ -126,7 +126,7 @@ class TransferObjects
 {
 public:
 	TransferObjects() = delete;
-	TransferObjects(const VkDevice& device, const VkQueue& transfer_queue, const uint32_t transfer_queue_family_index);
+	TransferObjects(const VkDevice& device, const VkQueue& transfer_queue, const uint32_t transfer_queue_family_index, const std::string& name);
 
 	TransferObjects(const TransferObjects& other) = delete;
 	TransferObjects& operator=(const TransferObjects& other) = delete;
@@ -148,4 +148,19 @@ private:
 	VkDevice mDevice = VK_NULL_HANDLE;
 };
 
+class AccelerationStructure
+{
+public:
+	AccelerationStructure() = delete;
+	AccelerationStructure(const VkDevice device, const VmaAllocator allocator, const VkCommandBuffer command_buffer, const VkQueue queue);
 
+	AccelerationStructure(const AccelerationStructure& other) = delete;
+	AccelerationStructure& operator=(const AccelerationStructure& other) = delete;
+
+	~AccelerationStructure() noexcept;
+
+private:
+	VkAccelerationStructureKHR mAccelerationStructure = VK_NULL_HANDLE;
+	VkDeviceAddress mDeviceAddress = 0;
+	VkDevice mDevice = VK_NULL_HANDLE;
+};

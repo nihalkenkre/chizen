@@ -23,7 +23,7 @@ App::App(SDL_Window* window, const std::string& current_path)
 	Utils_InitializeImages({ mFinalRenderTarget->GetImage() }, mVulkanInterface->GetTransferObjects()->GetCommandBuffer(), mVulkanInterface->GetTransferObjects()->GetQueue());
 
 	mDisplay = std::make_unique<Display>(mVulkanInterface.get(), mFinalRenderTarget.get(), current_path);
-	mRaytrace = std::make_unique<Raytrace>(mVulkanInterface.get(), mFinalRenderTarget.get(), extent, current_path);
+	mRaytrace = std::make_unique<Raytrace>(mVulkanInterface.get(), mFinalRenderTarget.get(), extent, current_path, "raytrace");
 	mWindow = window;
 }
 
