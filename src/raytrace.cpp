@@ -416,12 +416,13 @@ void Raytrace::InitializeResources()
 	memcpy(mMissSBT->GetAllocationInfo2().allocationInfo.pMappedData, shader_handle_storage.data() + mRayTracingProperties.shaderGroupHandleSize, sbt_size);
 	memcpy(mCHSBT->GetAllocationInfo2().allocationInfo.pMappedData, shader_handle_storage.data() + (mRayTracingProperties.shaderGroupHandleSize * 2), sbt_size);
 
-	glm::highp_mat4 mats[2] = {
-		glm::inverse(glm::lookAtRH(glm::vec3(0.f,0.f,-0.25f), glm::vec3(0,0,0), glm::vec3(0,1,0))),
-		glm::inverse(glm::perspectiveRH(glm::radians(135.f), 1.77f, 0.1f, 100.f)),
-	};
+	auto proj = glm::perspective(glm::radians(135.f), 1.77f, 0.1f, 100.f);
+	proj[1][1] *= -1;
 
-	mats[1][1][1] *= -1;
+	glm::highp_mat4 mats[2] = {
+		glm::inverse(glm::lookAt(glm::vec3(10.f,10.f,10.f), glm::vec3(0,0,0), glm::vec3(0,1,0))),
+		glm::inverse(proj),
+	};
 
 	memcpy(mUniformBuffer->GetAllocationInfo2().allocationInfo.pMappedData, mats, sizeof(mats));
 }
