@@ -6,9 +6,6 @@ find_package(Vulkan REQUIRED)
 
 file(GLOB PROJECT_SRCS src/*)
 list(FILTER PROJECT_SRCS EXCLUDE REGEX "imgui.ini")
-file(GLOB GLSL_SHADER_SRCS shaders/glsl/*)
-list(FILTER GLSL_SHADER_SRCS EXCLUDE REGEX "spv|imgui.ini")
-file(GLOB SLANG_SHADER_SRCS shaders/slang/*)
 file(GLOB IMGUI_SRCS imgui/*.cpp imgui/*.h imgui/backends/imgui_impl_sdl3.* imgui/backends/imgui_impl_vulkan.*)
 file(GLOB IMGUI_FILE_DLG_SRCS ImGuiFileDialog/ImGuiFileDialog*.*)
 
@@ -25,7 +22,7 @@ elseif (CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang")
    set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -fno-exceptions")
 endif()
 
-add_executable(${PROJECT_NAME} ${PROJECT_SRCS} ${GLSL_SHADER_SRCS} ${SLANG_SHADER_SRCS} ${IMGUI_SRCS} ${IMGUI_FILE_DLG_SRCS})
+add_executable(${PROJECT_NAME} ${PROJECT_SRCS} ${IMGUI_SRCS} ${IMGUI_FILE_DLG_SRCS})
 
 target_precompile_headers(${PROJECT_NAME} PRIVATE 
                                        <vector>

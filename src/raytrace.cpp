@@ -417,8 +417,8 @@ void Raytrace::InitializeResources()
 	memcpy(mCHSBT->GetAllocationInfo2().allocationInfo.pMappedData, shader_handle_storage.data() + (mRayTracingProperties.shaderGroupHandleSize * 2), sbt_size);
 
 	glm::highp_mat4 mats[2] = {
-		glm::lookAtRH(glm::vec3(0.f,0.f,-0.25f), glm::vec3(0,0,0), glm::vec3(0,1,0)),
-		glm::perspectiveRH(45.f, 1.77f, 0.1f, 100.f),
+		glm::inverse(glm::lookAtRH(glm::vec3(0.f,0.f,-0.25f), glm::vec3(0,0,0), glm::vec3(0,1,0))),
+		glm::inverse(glm::perspectiveRH(glm::radians(135.f), 1.77f, 0.1f, 100.f)),
 	};
 
 	mats[1][1][1] *= -1;
@@ -700,6 +700,8 @@ void Raytrace::Render(bool* is_raytracing, const uint32_t max_samples)
 	const VkTransformMatrixKHR tlas_transform = blas_transform;
 	const VkAccelerationStructureInstanceKHR tlas_instance = {
 		.transform = tlas_transform,
+		.mask = 0xFF,
+		.flags= VK_GEOMETRY_INSTANCE_TRIANGLE_FACING_CULL_DISABLE_BIT_KHR,
 		.accelerationStructureReference = vkGetAccelerationStructureDeviceAddressKHR(mDevice, &blas_addr_info),
 	};
 
