@@ -57,11 +57,19 @@ public:
 	VmaAllocation GetAllocation() const;
 	VmaAllocationInfo2 GetAllocationInfo2() const;
 
+	VkDeviceAddress GetDeviceAddress() const;
+	VkDeviceOrHostAddressConstKHR GetDeviceOrHostAddressConstKHR() const;
+	VkDeviceOrHostAddressKHR GetDeviceOrHostAddressKHR() const;
+
 private:
 	VkDescriptorBufferInfo mDescriptorInfo = {};
 
 	VmaAllocation mAllocation = nullptr;
 	VmaAllocationInfo2 mAllocationInfo = {};
+
+	VkDeviceAddress mDeviceAddress = 0;
+	VkDeviceOrHostAddressConstKHR mDeviceOrHostAddressConst = { 0 };
+	VkDeviceOrHostAddressKHR mDeviceOrHostAddress = { 0 };
 
 	VmaAllocator mAllocator = nullptr;
 	VkDevice mDevice = VK_NULL_HANDLE;

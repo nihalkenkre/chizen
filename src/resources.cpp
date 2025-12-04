@@ -53,27 +53,9 @@ ImageResource::ImageResource(const VkDevice device, const VkExtent3D& extent, co
 	VK_CHECK("create sampler", vkCreateSampler(device, &s_ci, nullptr, &mDescriptorInfo.sampler));
 
 #ifdef _DEBUG
-	std::string n(name);
-	VkDebugUtilsObjectNameInfoEXT name_info = {
-		.sType = VK_STRUCTURE_TYPE_DEBUG_UTILS_OBJECT_NAME_INFO_EXT,
-		.objectType = VK_OBJECT_TYPE_IMAGE,
-		.objectHandle = reinterpret_cast<uint64_t>(mImage),
-		.pObjectName = n.append(" image").c_str(),
-	};
-	VK_CHECK("setting image name", vkSetDebugUtilsObjectNameEXT(device, &name_info));
-
-	n = name;
-	name_info.objectType = VK_OBJECT_TYPE_IMAGE_VIEW;
-	name_info.objectHandle = reinterpret_cast<uint64_t>(mDescriptorInfo.imageView);
-	name_info.pObjectName = n.append(" image view").c_str();
-	VK_CHECK("setting image view name", vkSetDebugUtilsObjectNameEXT(device, &name_info));
-
-	n = name;
-	name_info.objectType = VK_OBJECT_TYPE_SAMPLER;
-	name_info.objectHandle = reinterpret_cast<uint64_t>(mDescriptorInfo.sampler);
-	name_info.pObjectName = n.append(" sampler").c_str();
-	VK_CHECK("setting sampler name", vkSetDebugUtilsObjectNameEXT(device, &name_info));
-
+	Utils_SetObjectName(mDevice, VK_OBJECT_TYPE_IMAGE, reinterpret_cast<uint64_t>(mImage), std::string(name).append(" image").c_str());
+	Utils_SetObjectName(mDevice, VK_OBJECT_TYPE_IMAGE_VIEW, reinterpret_cast<uint64_t>(mDescriptorInfo.imageView), std::string(name).append(" image view").c_str());
+	Utils_SetObjectName(mDevice, VK_OBJECT_TYPE_SAMPLER, reinterpret_cast<uint64_t>(mDescriptorInfo.sampler), std::string(name).append(" sampler").c_str());
 #endif	// _DEBUG
 }
 
@@ -162,16 +144,25 @@ BufferResource::BufferResource(const VkDevice device, const VmaAllocator allocat
 
 	VK_CHECK("create buffer", vmaCreateBuffer(allocator, &create_info, &alloc_ci, &mDescriptorInfo.buffer, &mAllocation, &mAllocationInfo.allocationInfo));
 
-#ifdef _DEBUG
-	std::string n(name);
-	VkDebugUtilsObjectNameInfoEXT name_info = {
-		.sType = VK_STRUCTURE_TYPE_DEBUG_UTILS_OBJECT_NAME_INFO_EXT,
-		.objectType = VK_OBJECT_TYPE_BUFFER,
-		.objectHandle = reinterpret_cast<uint64_t>(mDescriptorInfo.buffer),
-		.pObjectName = n.append(" buffer").c_str(),
-	};
-	VK_CHECK("setting buffer name", vkSetDebugUtilsObjectNameEXT(device, &name_info));
+	//if (vma_alloc_create_flags & VMA_ALLOCATION_CREATE_MAPPED_BIT)
+	//{
+	//	mDeviceOrHostAddress.hostAddress = mAllocationInfo.allocationInfo.pMappedData;
+	//	mDeviceOrHostAddressConst.hostAddress = mAllocationInfo.allocationInfo.pMappedData;
+	//}
+ if (usage & VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT_KHR)
+	{
+		const VkBufferDeviceAddressInfoKHR addr_info = {
+			.sType = VK_STRUCTURE_TYPE_BUFFER_DEVICE_ADDRESS_INFO_KHR,
+			.buffer = mDescriptorInfo.buffer,
+		};
 
+		mDeviceAddress = vkGetBufferDeviceAddressKHR(mDevice, &addr_info);
+		mDeviceOrHostAddress.deviceAddress = mDeviceAddress;
+		mDeviceOrHostAddressConst.deviceAddress = mDeviceAddress;
+	}
+
+#ifdef _DEBUG
+	Utils_SetObjectName(mDevice, VK_OBJECT_TYPE_BUFFER, reinterpret_cast<uint64_t>(mDescriptorInfo.buffer), std::string(name).append(" buffer").c_str());
 #endif // _DEBUG
 }
 
@@ -241,3 +232,17 @@ VmaAllocationInfo2 BufferResource::GetAllocationInfo2() const
 	return mAllocationInfo;
 }
 
+VkDeviceAddress BufferResource::GetDeviceAddress() const
+{
+	return mDeviceAddress;
+}
+
+VkDeviceOrHostAddressConstKHR BufferResource::GetDeviceOrHostAddressConstKHR() const
+{
+	return mDeviceOrHostAddressConst;
+}
+
+VkDeviceOrHostAddressKHR BufferResource::GetDeviceOrHostAddressKHR() const
+{
+	return mDeviceOrHostAddress;
+}

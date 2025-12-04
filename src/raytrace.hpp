@@ -29,8 +29,11 @@ private:
 	std::unique_ptr<ImageResource> mAccumRenderTarget = nullptr;
 	std::unique_ptr<BufferResource> mRandomStates = nullptr;
 	std::unique_ptr<BufferResource> mRaygenSBT = nullptr;
+	std::unique_ptr<BufferResource> mMissSBT = nullptr;
+	std::unique_ptr<BufferResource> mCHSBT = nullptr;
 
 	std::unique_ptr<FrameObjects> mFrameObjects = nullptr;
+	std::unique_ptr<BufferResource> mUniformBuffer = nullptr;
 	std::vector<VkDescriptorSet> mDescriptorSets;
 	VkDescriptorPool mDescriptorPool = VK_NULL_HANDLE;
 	VkPhysicalDeviceRayTracingPipelinePropertiesKHR mRayTracingProperties = {};

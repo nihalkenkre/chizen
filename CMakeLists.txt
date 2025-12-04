@@ -46,10 +46,12 @@ target_precompile_headers(${PROJECT_NAME} PRIVATE
                                        <slang/slang.h>
                                        <slang/slang-com-ptr.h>
                                        <vma/vk_mem_alloc.h>
+                                       <glm/ext/matrix_clip_space.hpp>
+                                       <glm/ext/matrix_transform.hpp>
                            )
 set_property(TARGET ${PROJECT_NAME} PROPERTY CXX_STANDARD 23)
 
-target_include_directories(${PROJECT_NAME} PRIVATE SDL/include imgui imgui/backends ImGuiFileDialog $ENV{VULKAN_SDK}/Include)
+target_include_directories(${PROJECT_NAME} PRIVATE SDL/include imgui imgui/backends ImGuiFileDialog glm $ENV{VULKAN_SDK}/Include)
 
 target_link_directories(${PROJECT_NAME} PRIVATE $<IF:$<CONFIG:Debug>,${CMAKE_SOURCE_DIR}/SDL/build/Debug,> $<IF:$<CONFIG:MinSizeRel>,${CMAKE_SOURCE_DIR}/SDL/build/MinSizeRel,> $ENV{VULKAN_SDK}/Lib)
 target_link_libraries(${PROJECT_NAME} PRIVATE SDL3-static Vulkan::Vulkan slang winmm setupapi version)

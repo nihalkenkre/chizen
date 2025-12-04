@@ -187,6 +187,18 @@ RaytracePipelineData::RaytracePipelineData(const VulkanInterface* const vulkan_i
 			.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,
 			.descriptorCount = 1,
 			.stageFlags = VK_SHADER_STAGE_RAYGEN_BIT_KHR,
+		},
+		{
+			.binding = 3,
+			.descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER,
+			.descriptorCount = 1,
+			.stageFlags = VK_SHADER_STAGE_RAYGEN_BIT_KHR,
+		},
+		{
+			.binding = 4,
+			.descriptorType = VK_DESCRIPTOR_TYPE_ACCELERATION_STRUCTURE_KHR,
+			.descriptorCount = 1,
+			.stageFlags = VK_SHADER_STAGE_RAYGEN_BIT_KHR,
 		}
 	};
 
@@ -401,6 +413,17 @@ void Raytrace::InitializeResources()
 	VK_CHECK("get rt shader handles", vkGetRayTracingShaderGroupHandlesKHR(mDevice, mPipelineData->GetPipeline(), 0, static_cast<uint32_t>(std::size(mPipelineData->GetShaderGroups())), sbt_size, shader_handle_storage.data()));
 
 	memcpy(mRaygenSBT->GetAllocationInfo2().allocationInfo.pMappedData, shader_handle_storage.data(), sbt_size);
+	memcpy(mMissSBT->GetAllocationInfo2().allocationInfo.pMappedData, shader_handle_storage.data() + mRayTracingProperties.shaderGroupHandleSize, sbt_size);
+	memcpy(mCHSBT->GetAllocationInfo2().allocationInfo.pMappedData, shader_handle_storage.data() + (mRayTracingProperties.shaderGroupHandleSize * 2), sbt_size);
+
+	glm::highp_mat4 mats[2] = {
+		glm::lookAtRH(glm::vec3(0.f,0.f,-0.25f), glm::vec3(0,0,0), glm::vec3(0,1,0)),
+		glm::perspectiveRH(45.f, 1.77f, 0.1f, 100.f),
+	};
+
+	mats[1][1][1] *= -1;
+
+	memcpy(mUniformBuffer->GetAllocationInfo2().allocationInfo.pMappedData, mats, sizeof(mats));
 }
 
 Raytrace::Raytrace(const VulkanInterface* const vulkan_interface, ImageResource* final_render_target, const VkExtent3D& extent, const std::string& current_path, const std::string& name)
@@ -429,13 +452,25 @@ Raytrace::Raytrace(const VulkanInterface* const vulkan_interface, ImageResource*
 	mTransferQueue = vulkan_interface->GetTransferObjects()->GetQueue();
 	mTransferCommandBuffer = vulkan_interface->GetTransferObjects()->GetCommandBuffer();
 	mFrameObjects = std::make_unique<FrameObjects>(mDevice, vulkan_interface->GetPhysicalDeviceData()->ComputeQueueFamilyIndex, mMaxFramesInFlight, "raytrace frame objects");
-
+	mUniformBuffer = std::make_unique<BufferResource>(mDevice, mAllocator, sizeof(glm::highp_mat4) * 2,
+		VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT, VMA_ALLOCATION_CREATE_HOST_ACCESS_SEQUENTIAL_WRITE_BIT | VMA_ALLOCATION_CREATE_MAPPED_BIT,
+		VMA_MEMORY_USAGE_AUTO, "uniform buffer");
 	mPipelineData = std::make_unique<RaytracePipelineData>(vulkan_interface, current_path, "reytrace pipeline data");
 
 	mDescriptorSets.resize(mMaxFramesInFlight);
 
 	const uint32_t aligned_handle_size = static_cast<uint32_t>(ALIGNED_SIZE(mRayTracingProperties.shaderGroupHandleSize, mRayTracingProperties.shaderGroupHandleAlignment));
 	mRaygenSBT = std::make_unique<BufferResource>(
+		mDevice, mAllocator, aligned_handle_size,
+		VK_BUFFER_USAGE_SHADER_BINDING_TABLE_BIT_KHR | VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT,
+		VMA_ALLOCATION_CREATE_HOST_ACCESS_SEQUENTIAL_WRITE_BIT | VMA_ALLOCATION_CREATE_MAPPED_BIT,
+		VMA_MEMORY_USAGE_AUTO_PREFER_HOST, "rb sbt");
+	mMissSBT = std::make_unique<BufferResource>(
+		mDevice, mAllocator, aligned_handle_size,
+		VK_BUFFER_USAGE_SHADER_BINDING_TABLE_BIT_KHR | VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT,
+		VMA_ALLOCATION_CREATE_HOST_ACCESS_SEQUENTIAL_WRITE_BIT | VMA_ALLOCATION_CREATE_MAPPED_BIT,
+		VMA_MEMORY_USAGE_AUTO_PREFER_HOST, "rb sbt");
+	mCHSBT = std::make_unique<BufferResource>(
 		mDevice, mAllocator, aligned_handle_size,
 		VK_BUFFER_USAGE_SHADER_BINDING_TABLE_BIT_KHR | VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT,
 		VMA_ALLOCATION_CREATE_HOST_ACCESS_SEQUENTIAL_WRITE_BIT | VMA_ALLOCATION_CREATE_MAPPED_BIT,
@@ -507,6 +542,271 @@ void Raytrace::Render(bool* is_raytracing, const uint32_t max_samples)
 	uint64_t& frame_sem_value = mFrameObjects->GetFrameSemValue();
 	uint8_t frame_in_flight = mFrameObjects->GetFrameInFlight();
 
+	struct Vertex {
+		float pos[3];
+	};
+
+	const Vertex vertices[] = {
+	{{  1.0f,  1.0f, 0.0f }},
+	{{ -1.0f,  1.0f, 0.0f }},
+	{{  0.0f, -1.0f, 0.0f }}
+	};
+
+	size_t vertices_size = sizeof(vertices);
+
+	uint32_t indices[] = { 0, 1, 2 };
+	size_t indices_size = sizeof(indices);
+
+	VkTransformMatrixKHR blas_transform = {
+		1,0,0,0,
+		0,1,0,0,
+		0,0,1,0
+	};
+
+	auto vertices_buffer = std::make_unique<BufferResource>(mDevice, mAllocator, vertices_size,
+		VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT_KHR | VK_BUFFER_USAGE_ACCELERATION_STRUCTURE_BUILD_INPUT_READ_ONLY_BIT_KHR,
+		VMA_ALLOCATION_CREATE_HOST_ACCESS_SEQUENTIAL_WRITE_BIT | VMA_ALLOCATION_CREATE_MAPPED_BIT,
+		VMA_MEMORY_USAGE_AUTO, "vertices buffer");
+	memcpy(vertices_buffer->GetAllocationInfo2().allocationInfo.pMappedData, vertices, vertices_size);
+
+	auto indices_buffer = std::make_unique<BufferResource>(mDevice, mAllocator, indices_size,
+		VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT_KHR | VK_BUFFER_USAGE_ACCELERATION_STRUCTURE_BUILD_INPUT_READ_ONLY_BIT_KHR,
+		VMA_ALLOCATION_CREATE_HOST_ACCESS_SEQUENTIAL_WRITE_BIT | VMA_ALLOCATION_CREATE_MAPPED_BIT,
+		VMA_MEMORY_USAGE_AUTO, "indices buffer");
+	memcpy(indices_buffer->GetAllocationInfo2().allocationInfo.pMappedData, indices, indices_size);
+
+	auto transform_buffer = std::make_unique<BufferResource>(mDevice, mAllocator, sizeof(VkTransformMatrixKHR),
+		VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT_KHR | VK_BUFFER_USAGE_ACCELERATION_STRUCTURE_BUILD_INPUT_READ_ONLY_BIT_KHR,
+		VMA_ALLOCATION_CREATE_HOST_ACCESS_SEQUENTIAL_WRITE_BIT | VMA_ALLOCATION_CREATE_MAPPED_BIT,
+		VMA_MEMORY_USAGE_AUTO, "blas transform buffer");
+	memcpy(transform_buffer->GetAllocationInfo2().allocationInfo.pMappedData, &blas_transform.matrix, sizeof(VkTransformMatrixKHR));
+
+	const VkAccelerationStructureGeometryKHR blas_geom = {
+		.sType = VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_GEOMETRY_KHR,
+		.geometryType = VK_GEOMETRY_TYPE_TRIANGLES_KHR,
+		.geometry = {
+			.triangles = {
+				.sType = VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_GEOMETRY_TRIANGLES_DATA_KHR,
+				.vertexFormat = VK_FORMAT_R32G32B32_SFLOAT,
+				.vertexData = vertices_buffer->GetDeviceOrHostAddressConstKHR(),
+				.vertexStride = sizeof(Vertex),
+				.maxVertex = 2,
+				.indexType = VK_INDEX_TYPE_UINT32,
+				.indexData = indices_buffer->GetDeviceOrHostAddressConstKHR(),
+				.transformData = transform_buffer->GetDeviceOrHostAddressConstKHR(),
+			},
+		},
+	};
+
+	VkAccelerationStructureBuildGeometryInfoKHR blas_build_geom_info = {
+		.sType = VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_BUILD_GEOMETRY_INFO_KHR,
+		.type = VK_ACCELERATION_STRUCTURE_TYPE_BOTTOM_LEVEL_KHR,
+		.flags = VK_BUILD_ACCELERATION_STRUCTURE_PREFER_FAST_TRACE_BIT_KHR,
+		.mode = VK_BUILD_ACCELERATION_STRUCTURE_MODE_BUILD_KHR,
+		.geometryCount = 1,
+		.pGeometries = &blas_geom,
+	};
+
+	uint32_t max_triangles = 1;
+
+	VkAccelerationStructureBuildSizesInfoKHR blas_size_info = {
+		.sType = VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_BUILD_SIZES_INFO_KHR,
+	};
+
+	vkGetAccelerationStructureBuildSizesKHR(mDevice, VK_ACCELERATION_STRUCTURE_BUILD_TYPE_DEVICE_KHR,
+		&blas_build_geom_info, &max_triangles, &blas_size_info);
+
+	auto blas_buffer = std::make_unique<BufferResource>(mDevice, mAllocator, blas_size_info.accelerationStructureSize,
+		VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT_KHR | VK_BUFFER_USAGE_ACCELERATION_STRUCTURE_STORAGE_BIT_KHR,
+		0, VMA_MEMORY_USAGE_AUTO, "blas buffer");
+
+	auto blas_scratch_buffer = std::make_unique<BufferResource>(mDevice, mAllocator, blas_size_info.buildScratchSize,
+		VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT_KHR | VK_BUFFER_USAGE_STORAGE_BUFFER_BIT,
+		0, VMA_MEMORY_USAGE_AUTO, "blas scratch buffer");
+
+	VkAccelerationStructureKHR blas = VK_NULL_HANDLE;
+	const VkAccelerationStructureCreateInfoKHR blas_create_info = {
+		.sType = VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_CREATE_INFO_KHR,
+		.buffer = blas_buffer->GetDescriptorInfo().buffer,
+		.size = blas_size_info.accelerationStructureSize,
+		.type = VK_ACCELERATION_STRUCTURE_TYPE_BOTTOM_LEVEL_KHR,
+	};
+
+	VK_CHECK("create blas", vkCreateAccelerationStructureKHR(mDevice, &blas_create_info, nullptr, &blas));
+
+	const VkSemaphoreWaitInfo wait_info = {
+		.sType = VK_STRUCTURE_TYPE_SEMAPHORE_WAIT_INFO,
+		.semaphoreCount = 1,
+		.pSemaphores = &frame_sem,
+		.pValues = &frame_sem_value,
+	};
+
+	VK_CHECK("wait blas sem", vkWaitSemaphoresKHR(device, &wait_info, UINT64_MAX));
+
+	const VkCommandBufferBeginInfo blas_begin_info = {
+		.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO,
+		.flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT,
+	};
+	VK_CHECK("begin blas cmd_buff", vkBeginCommandBuffer(cmd_buff, &blas_begin_info));
+
+	VkAccelerationStructureBuildRangeInfoKHR blas_build_range_info = {
+		.primitiveCount = 1,
+	};
+
+	std::vector<VkAccelerationStructureBuildRangeInfoKHR*> blas_build_range_infos = {
+		&blas_build_range_info
+	};
+
+	blas_build_geom_info.dstAccelerationStructure = blas;
+	blas_build_geom_info.scratchData = blas_scratch_buffer->GetDeviceOrHostAddressKHR();
+
+	vkCmdBuildAccelerationStructuresKHR(cmd_buff, 1, &blas_build_geom_info, blas_build_range_infos.data());
+
+	VK_CHECK("end blas cmd_buff", vkEndCommandBuffer(cmd_buff));
+
+	const VkCommandBufferSubmitInfoKHR blas_cmd_buff_infos[] = {
+		{
+			.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_SUBMIT_INFO_KHR,
+			.commandBuffer = cmd_buff,
+		}
+	};
+
+	const VkSemaphoreSubmitInfoKHR blas_sig_sem_infos[] = {
+		{
+			.sType = VK_STRUCTURE_TYPE_SEMAPHORE_SUBMIT_INFO_KHR,
+			.semaphore = frame_sem,
+			.value = ++frame_sem_value,
+			.stageMask = VK_PIPELINE_STAGE_2_TOP_OF_PIPE_BIT_KHR,
+		}
+	};
+
+	const VkSubmitInfo2KHR blas_submit_infos[] = {
+		{
+			.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO_2_KHR,
+			.commandBufferInfoCount = std::size(blas_cmd_buff_infos),
+			.pCommandBufferInfos = blas_cmd_buff_infos,
+			.signalSemaphoreInfoCount = std::size(blas_sig_sem_infos),
+			.pSignalSemaphoreInfos = blas_sig_sem_infos,
+		},
+	};
+
+	VK_CHECK("submit blas", vkQueueSubmit2KHR(mComputeQueue, std::size(blas_submit_infos), blas_submit_infos, VK_NULL_HANDLE));
+
+	const VkAccelerationStructureDeviceAddressInfoKHR blas_addr_info = {
+		.sType = VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_DEVICE_ADDRESS_INFO_KHR,
+		.accelerationStructure = blas,
+	};
+
+	const VkTransformMatrixKHR tlas_transform = blas_transform;
+	const VkAccelerationStructureInstanceKHR tlas_instance = {
+		.transform = tlas_transform,
+		.accelerationStructureReference = vkGetAccelerationStructureDeviceAddressKHR(mDevice, &blas_addr_info),
+	};
+
+	auto instance_buffer = std::make_unique<BufferResource>(mDevice, mAllocator, sizeof(VkTransformMatrixKHR),
+		VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT_KHR | VK_BUFFER_USAGE_ACCELERATION_STRUCTURE_BUILD_INPUT_READ_ONLY_BIT_KHR,
+		VMA_ALLOCATION_CREATE_HOST_ACCESS_SEQUENTIAL_WRITE_BIT | VMA_ALLOCATION_CREATE_MAPPED_BIT, VMA_MEMORY_USAGE_AUTO,
+		"instance buffer");
+	memcpy(instance_buffer->GetAllocationInfo2().allocationInfo.pMappedData, &tlas_instance, sizeof(VkAccelerationStructureInstanceKHR));
+
+	const VkAccelerationStructureGeometryKHR tlas_geom = {
+		.sType = VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_GEOMETRY_KHR,
+		.geometryType = VK_GEOMETRY_TYPE_INSTANCES_KHR,
+		.geometry = {
+			.instances = {
+				.sType = VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_GEOMETRY_INSTANCES_DATA_KHR,
+				.data = instance_buffer->GetDeviceOrHostAddressConstKHR(),
+			},
+		},
+	};
+
+	VkAccelerationStructureBuildGeometryInfoKHR tlas_build_geom_info = {
+		.sType = VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_BUILD_GEOMETRY_INFO_KHR,
+		.type = VK_ACCELERATION_STRUCTURE_TYPE_TOP_LEVEL_KHR,
+		.flags = VK_BUILD_ACCELERATION_STRUCTURE_PREFER_FAST_TRACE_BIT_KHR,
+		.mode = VK_BUILD_ACCELERATION_STRUCTURE_MODE_BUILD_KHR,
+		.geometryCount = 1,
+		.pGeometries = &tlas_geom,
+	};
+
+	uint32_t primitive_count = 1;
+
+	VkAccelerationStructureBuildSizesInfoKHR tlas_size_info = {
+		.sType = VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_BUILD_SIZES_INFO_KHR,
+	};
+
+	vkGetAccelerationStructureBuildSizesKHR(mDevice, VK_ACCELERATION_STRUCTURE_BUILD_TYPE_DEVICE_KHR,
+		&tlas_build_geom_info, &primitive_count, &tlas_size_info);
+	
+	auto tlas_buffer = std::make_unique<BufferResource>(mDevice, mAllocator, tlas_size_info.accelerationStructureSize,
+		VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT_KHR | VK_BUFFER_USAGE_ACCELERATION_STRUCTURE_STORAGE_BIT_KHR,
+		0, VMA_MEMORY_USAGE_AUTO, "tlas buffer");
+
+	auto tlas_scratch_buffer = std::make_unique<BufferResource>(mDevice, mAllocator, tlas_size_info.buildScratchSize,
+		VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT_KHR | VK_BUFFER_USAGE_STORAGE_BUFFER_BIT,
+		0, VMA_MEMORY_USAGE_AUTO, "tlas scratch buffer");
+
+	const VkAccelerationStructureCreateInfoKHR tlas_create_info = {
+		.sType = VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_CREATE_INFO_KHR,
+		.buffer = tlas_buffer->GetDescriptorInfo().buffer,
+		.size = tlas_size_info.accelerationStructureSize,
+		.type = VK_ACCELERATION_STRUCTURE_TYPE_TOP_LEVEL_KHR,
+	};
+
+	VkAccelerationStructureKHR tlas = VK_NULL_HANDLE;
+	VK_CHECK("create tlas", vkCreateAccelerationStructureKHR(mDevice, &tlas_create_info, nullptr, &tlas));
+
+	VK_CHECK("wait tlas img", vkWaitSemaphoresKHR(device, &wait_info, UINT64_MAX));
+
+	const VkCommandBufferBeginInfo tlas_begin_info = {
+			.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO,
+			.flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT,
+	};
+	VK_CHECK("begin tlas cmd_buff", vkBeginCommandBuffer(cmd_buff, &tlas_begin_info));
+
+	VkAccelerationStructureBuildRangeInfoKHR tlas_build_range_info = {
+		.primitiveCount = primitive_count,
+	};
+
+	std::vector<VkAccelerationStructureBuildRangeInfoKHR*> tlas_build_range_infos = {
+		&tlas_build_range_info
+	};
+
+	tlas_build_geom_info.dstAccelerationStructure = tlas;
+	tlas_build_geom_info.scratchData = tlas_scratch_buffer->GetDeviceOrHostAddressKHR();
+
+	vkCmdBuildAccelerationStructuresKHR(cmd_buff, 1, &tlas_build_geom_info, tlas_build_range_infos.data());
+
+	VK_CHECK("end tlas cmd_buff", vkEndCommandBuffer(cmd_buff));
+
+	const VkCommandBufferSubmitInfoKHR tlas_cmd_buff_infos[] = {
+		{
+			.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_SUBMIT_INFO_KHR,
+			.commandBuffer = cmd_buff,
+		}
+	};
+
+	const VkSemaphoreSubmitInfoKHR tlas_sig_sem_infos[] = {
+		{
+			.sType = VK_STRUCTURE_TYPE_SEMAPHORE_SUBMIT_INFO_KHR,
+			.semaphore = frame_sem,
+			.value = ++frame_sem_value,
+			.stageMask = VK_PIPELINE_STAGE_2_TOP_OF_PIPE_BIT_KHR,
+		}
+	};
+
+	const VkSubmitInfo2KHR tlas_submit_infos[] = {
+		{
+			.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO_2_KHR,
+			.commandBufferInfoCount = std::size(tlas_cmd_buff_infos),
+			.pCommandBufferInfos = tlas_cmd_buff_infos,
+			.signalSemaphoreInfoCount = std::size(tlas_sig_sem_infos),
+			.pSignalSemaphoreInfos = tlas_sig_sem_infos,
+		},
+	};
+
+	VK_CHECK("submit tlas", vkQueueSubmit2KHR(mComputeQueue, std::size(tlas_submit_infos), tlas_submit_infos, VK_NULL_HANDLE));
+
 	uint32_t s = 1;
 
 	do {
@@ -556,9 +856,15 @@ void Raytrace::Render(bool* is_raytracing, const uint32_t max_samples)
 
 		vkCmdBindPipeline(cmd_buff, VK_PIPELINE_BIND_POINT_RAY_TRACING_KHR, mPipelineData->GetPipeline());
 
-		VkDescriptorImageInfo accum_target_desc_info = mAccumRenderTarget->GetDescriptorInfo();
-		VkDescriptorImageInfo final_render_desc_info = mFinalRenderTarget->GetDescriptorInfo();
-		VkDescriptorBufferInfo rand_states_desc_info = mRandomStates->GetDescriptorInfo();
+		const VkDescriptorImageInfo accum_target_desc_info = mAccumRenderTarget->GetDescriptorInfo();
+		const VkDescriptorImageInfo final_render_desc_info = mFinalRenderTarget->GetDescriptorInfo();
+		const VkDescriptorBufferInfo rand_states_desc_info = mRandomStates->GetDescriptorInfo();
+		const VkDescriptorBufferInfo uniform_buff_desc_info = mUniformBuffer->GetDescriptorInfo();
+		const VkWriteDescriptorSetAccelerationStructureKHR tlas_desc_info = {
+			.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET_ACCELERATION_STRUCTURE_KHR,
+			.accelerationStructureCount = 1,
+			.pAccelerationStructures = &tlas,
+		};
 
 		const VkWriteDescriptorSet rt_desc_writes[] = {
 			{
@@ -584,6 +890,22 @@ void Raytrace::Render(bool* is_raytracing, const uint32_t max_samples)
 				.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,
 				.pBufferInfo = &rand_states_desc_info,
 			},
+			{
+				.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
+				.dstSet = mDescriptorSets[frame_in_flight],
+				.dstBinding = 3,
+				.descriptorCount = 1,
+				.descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER,
+				.pBufferInfo = &uniform_buff_desc_info,
+			},
+			{
+				.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
+				.pNext = &tlas_desc_info,
+				.dstSet = mDescriptorSets[frame_in_flight],
+				.dstBinding = 4,
+				.descriptorCount = 1,
+				.descriptorType = VK_DESCRIPTOR_TYPE_ACCELERATION_STRUCTURE_KHR,
+			}
 		};
 
 		vkUpdateDescriptorSets(device, std::size(rt_desc_writes), rt_desc_writes, 0, nullptr);
@@ -612,19 +934,23 @@ void Raytrace::Render(bool* is_raytracing, const uint32_t max_samples)
 
 		vkCmdPushConstants2KHR(cmd_buff, &rt_pc_info);
 
-		const VkBufferDeviceAddressInfo rg_info = {
-			.sType = VK_STRUCTURE_TYPE_BUFFER_DEVICE_ADDRESS_INFO,
-			.buffer = mRaygenSBT->GetDescriptorInfo().buffer,
-		};
-
 		const VkStridedDeviceAddressRegionKHR rg_sbt = {
-			.deviceAddress = vkGetBufferDeviceAddressKHR(device, &rg_info),
+			.deviceAddress = mRaygenSBT->GetDeviceAddress(),
 			.stride = mRayTracingProperties.shaderGroupHandleSize,
 			.size = mRayTracingProperties.shaderGroupHandleSize,
 		};
 
-		const VkStridedDeviceAddressRegionKHR ms_sbt = {};
-		const VkStridedDeviceAddressRegionKHR ch_sbt = {};
+		const VkStridedDeviceAddressRegionKHR ms_sbt = {
+			.deviceAddress = mMissSBT->GetDeviceAddress(),
+			.stride = mRayTracingProperties.shaderGroupHandleSize,
+			.size = mRayTracingProperties.shaderGroupHandleSize,
+		};
+		const VkStridedDeviceAddressRegionKHR ch_sbt = {
+			.deviceAddress = mCHSBT->GetDeviceAddress(),
+			.stride = mRayTracingProperties.shaderGroupHandleSize,
+			.size = mRayTracingProperties.shaderGroupHandleSize,
+		};
+
 		const VkStridedDeviceAddressRegionKHR cl_sbt = {};
 
 		vkCmdTraceRaysKHR(cmd_buff, &rg_sbt, &ms_sbt, &ch_sbt, &cl_sbt, mExtent.width, mExtent.height, 1);
@@ -667,6 +993,9 @@ void Raytrace::Render(bool* is_raytracing, const uint32_t max_samples)
 
 	*is_raytracing = false;
 	mStopRendering = false;
+
+	vkDestroyAccelerationStructureKHR(mDevice, tlas, nullptr);
+	vkDestroyAccelerationStructureKHR(mDevice, blas, nullptr);
 }
 
 void Raytrace::UpdateFinalRenderTarget(ImageResource* FinalRenderTarget)

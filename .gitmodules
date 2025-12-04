@@ -7,3 +7,6 @@
 [submodule "ImGuiFileDialog"]
 	path = ImGuiFileDialog
 	url = git@github.com:aiekick/ImGuiFileDialog.git
+[submodule "glm"]
+	path = glm
+	url = git@github.com:glm
