@@ -44,7 +44,7 @@ Instance::Instance(const char* const* extensions, const uint32_t extensions_coun
 		.applicationVersion = VK_MAKE_API_VERSION(0, 1, 0, 0),
 		.pEngineName = "Chizen",
 		.engineVersion = VK_MAKE_API_VERSION(0, 1, 0, 0),
-		.apiVersion = VK_MAKE_API_VERSION(0, 1, 1, 0),
+		.apiVersion = VK_MAKE_API_VERSION(0, 1, 4, 328),
 	};
 
 	const VkInstanceCreateInfo create_info = {

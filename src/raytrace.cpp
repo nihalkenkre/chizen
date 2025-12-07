@@ -47,12 +47,19 @@ RaytracePipelineData::RaytracePipelineData(const VulkanInterface* const vulkan_i
 	const slang::TargetDesc target_descs[] = {
 		{
 			.format = SLANG_SPIRV,
-			.profile = slang_global_session->findProfile("spirv_1_1"),
+			.profile = slang_global_session->findProfile("spirv_1_6"),
 		}
 	};
 
-#ifdef _DEBUG
 	slang::CompilerOptionEntry compiler_options[] = {
+		{
+			.name = slang::CompilerOptionName::MatrixLayoutColumn,
+			.value = {
+				.kind = slang::CompilerOptionValueKind::Int,
+				.intValue0 = 1,
+			},
+		},
+#ifdef _DEBUG
 		{
 			.name = slang::CompilerOptionName::DebugInformation,
 			.value = {
@@ -60,8 +67,8 @@ RaytracePipelineData::RaytracePipelineData(const VulkanInterface* const vulkan_i
 				.intValue0 = SLANG_DEBUG_INFO_LEVEL_MAXIMAL,
 			},
 		}
-	};
 #endif	// _DEBUG
+	};
 
 	slang::SessionDesc compile_session_desc = {
 		.targets = target_descs,
@@ -168,6 +175,72 @@ RaytracePipelineData::RaytracePipelineData(const VulkanInterface* const vulkan_i
 
 	VkShaderModule ch_mod = VK_NULL_HANDLE;
 	VK_CHECK("create shader module", vkCreateShaderModule(vulkan_interface->GetDevice()->GetDevice(), &ch_mod_ci, nullptr, &ch_mod));
+
+	//std::filesystem::path rg_path = std::string(current_path).append("/shaders/glsl/raytrace.rgen.glsl.spv");
+	//VkShaderModule rg_mod = VK_NULL_HANDLE;
+	//if (std::filesystem::exists(rg_path))
+	//{
+	//	std::uintmax_t file_size = std::filesystem::file_size(rg_path);
+	//	std::ifstream rgen_file(rg_path.c_str(), std::ios::binary);
+
+	//	std::vector<char> rg_code(file_size, 0);
+	//	rgen_file.read(rg_code.data(), file_size);
+
+	//	const VkShaderModuleCreateInfo ci = {
+	//		.sType = VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO,
+	//		.codeSize = file_size,
+	//		.pCode = reinterpret_cast<uint32_t*>(rg_code.data()),
+	//	};
+	//	VK_CHECK("create rgen module", vkCreateShaderModule(mDevice, &ci, nullptr, &rg_mod));
+	//}
+	//else
+	//{
+	//	std::println("Could not find {}", rg_path.string());
+	//}
+
+	//std::filesystem::path ms_path = std::string(current_path).append("/shaders/glsl/raytrace.rmiss.glsl.spv");
+	//VkShaderModule ms_mod = VK_NULL_HANDLE;
+	//if (std::filesystem::exists(ms_path))
+	//{
+	//	std::uintmax_t file_size = std::filesystem::file_size(ms_path);
+	//	std::ifstream ms_file(ms_path.c_str(), std::ios::binary);
+
+	//	std::vector<char> miss_code(file_size, 0);
+	//	ms_file.read(miss_code.data(), file_size);
+
+	//	const VkShaderModuleCreateInfo ci = {
+	//		.sType = VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO,
+	//		.codeSize = file_size,
+	//		.pCode = reinterpret_cast<uint32_t*>(miss_code.data()),
+	//	};
+	//	VK_CHECK("create rgen module", vkCreateShaderModule(mDevice, &ci, nullptr, &ms_mod));
+	//}
+	//else
+	//{
+	//	std::println("Could not find {}", ms_path.string());
+	//}
+
+	//std::filesystem::path ch_path = std::string(current_path).append("/shaders/glsl/raytrace.rchit.glsl.spv");
+	//VkShaderModule ch_mod = VK_NULL_HANDLE;
+	//if (std::filesystem::exists(ch_path))
+	//{
+	//	std::uintmax_t file_size = std::filesystem::file_size(ch_path);
+	//	std::ifstream ch_file(ch_path.c_str(), std::ios::binary);
+
+	//	std::vector<char> ch_code(file_size, 0);
+	//	ch_file.read(ch_code.data(), file_size);
+
+	//	const VkShaderModuleCreateInfo ci = {
+	//		.sType = VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO,
+	//		.codeSize = file_size,
+	//		.pCode = reinterpret_cast<uint32_t*>(ch_code.data()),
+	//	};
+	//	VK_CHECK("create rgen module", vkCreateShaderModule(mDevice, &ci, nullptr, &ch_mod));
+	//}
+	//else
+	//{
+	//	std::println("Could not find {}", ch_path.string());
+	//}
 
 	const VkDescriptorSetLayoutBinding bindings[] = {
 		{
@@ -416,11 +489,11 @@ void Raytrace::InitializeResources()
 	memcpy(mMissSBT->GetAllocationInfo2().allocationInfo.pMappedData, shader_handle_storage.data() + mRayTracingProperties.shaderGroupHandleSize, sbt_size);
 	memcpy(mCHSBT->GetAllocationInfo2().allocationInfo.pMappedData, shader_handle_storage.data() + (mRayTracingProperties.shaderGroupHandleSize * 2), sbt_size);
 
-	auto proj = glm::perspective(glm::radians(135.f), 1.77f, 0.1f, 100.f);
+	auto proj = glm::perspective(glm::radians(135.f), 1.77f, 0.001f, 100.f);
 	proj[1][1] *= -1;
 
 	glm::highp_mat4 mats[2] = {
-		glm::inverse(glm::lookAt(glm::vec3(10.f,10.f,10.f), glm::vec3(0,0,0), glm::vec3(0,1,0))),
+		glm::inverse(glm::lookAt(glm::vec3(0.f,0.f,1.f), glm::vec3(0,0,0), glm::vec3(0,1,0))),
 		glm::inverse(proj),
 	};
 
@@ -702,7 +775,7 @@ void Raytrace::Render(bool* is_raytracing, const uint32_t max_samples)
 	const VkAccelerationStructureInstanceKHR tlas_instance = {
 		.transform = tlas_transform,
 		.mask = 0xFF,
-		.flags= VK_GEOMETRY_INSTANCE_TRIANGLE_FACING_CULL_DISABLE_BIT_KHR,
+		.flags = VK_GEOMETRY_INSTANCE_TRIANGLE_FACING_CULL_DISABLE_BIT_KHR,
 		.accelerationStructureReference = vkGetAccelerationStructureDeviceAddressKHR(mDevice, &blas_addr_info),
 	};
 
@@ -740,7 +813,7 @@ void Raytrace::Render(bool* is_raytracing, const uint32_t max_samples)
 
 	vkGetAccelerationStructureBuildSizesKHR(mDevice, VK_ACCELERATION_STRUCTURE_BUILD_TYPE_DEVICE_KHR,
 		&tlas_build_geom_info, &primitive_count, &tlas_size_info);
-	
+
 	auto tlas_buffer = std::make_unique<BufferResource>(mDevice, mAllocator, tlas_size_info.accelerationStructureSize,
 		VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT_KHR | VK_BUFFER_USAGE_ACCELERATION_STRUCTURE_STORAGE_BIT_KHR,
 		0, VMA_MEMORY_USAGE_AUTO, "tlas buffer");
