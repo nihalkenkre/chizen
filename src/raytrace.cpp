@@ -47,7 +47,7 @@ RaytracePipelineData::RaytracePipelineData(const VulkanInterface* const vulkan_i
 	const slang::TargetDesc target_descs[] = {
 		{
 			.format = SLANG_SPIRV,
-			.profile = slang_global_session->findProfile("spirv_1_6"),
+			.profile = slang_global_session->findProfile("spirv_1_1"),
 		}
 	};
 

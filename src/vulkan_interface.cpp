@@ -9,12 +9,15 @@ VulkanInterface::VulkanInterface(SDL_Window* window)
 
 	mInstance = std::make_unique<Instance>(vk_extensions, vk_extensions_count);
 	mSurface = std::make_unique<Surface>(window, mInstance->GetInstance());
-	mPhysicalDeviceData = std::make_unique<PhysicalDeviceData>(mInstance->GetPhysicalDeviceData(mSurface->GetSurface()));
+	mPhysicalDeviceData = std::make_unique<PhysicalDeviceData>(mInstance->GetPhysicalDeviceData(mSurface->GetSurfaceKHR()));
 	mSurface->PopulateSurfaceData(mPhysicalDeviceData->PhysicalDevice);
 	mDevice = std::make_unique<Device>(mPhysicalDeviceData.get());
 	mSwapchain = std::make_unique<Swapchain>(mDevice->GetDevice(), mSurface.get(), mPhysicalDeviceData->GraphicsQueueFamilyIndex, "swapchain");
 	mAllocator = std::make_unique<Allocator>(mInstance->GetInstance(), mPhysicalDeviceData->PhysicalDevice, mDevice->GetDevice());
 	mTransferObjects = std::make_unique<TransferObjects>(mDevice->GetDevice(), mDevice->GetTransferQueue(), mPhysicalDeviceData->TransferQueueFamilyIndex, "transfer objects");
+
+	Utils_SetObjectName(mDevice->GetDevice(), VK_OBJECT_TYPE_INSTANCE, reinterpret_cast<uint64_t>(mInstance->GetInstance()), "instance");
+	Utils_SetObjectName(mDevice->GetDevice(), VK_OBJECT_TYPE_SURFACE_KHR, reinterpret_cast<uint64_t>(mSurface->GetSurfaceKHR()), "surface");
 }
 
 Instance* VulkanInterface::GetInstance() const
@@ -27,7 +30,7 @@ PhysicalDeviceData* VulkanInterface::GetPhysicalDeviceData() const
 	return mPhysicalDeviceData.get();
 }
 
-Surface* VulkanInterface::GetSurface() const
+Surface* VulkanInterface::GetSurfaceKHR() const
 {
 	return mSurface.get();
 }

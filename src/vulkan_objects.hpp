@@ -41,7 +41,7 @@ public:
 
 	~Surface() noexcept;
 
-	VkSurfaceKHR GetSurface() const;
+	VkSurfaceKHR GetSurfaceKHR() const;
 	VkPresentModeKHR GetPresentMode() const;
 	VkSurfaceFormatKHR GetSurfaceFormat() const;
 	VkSurfaceCapabilities2KHR GetSurfaceCapabilities() const;
@@ -132,7 +132,6 @@ public:
 	TransferObjects& operator=(const TransferObjects& other) = delete;
 
 	~TransferObjects() noexcept;
-	void PrepareImage(const VkImage& image);
 
 	VkCommandPool GetCommandPool() const;
 	VkCommandBuffer GetCommandBuffer() const;

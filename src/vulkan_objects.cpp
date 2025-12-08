@@ -44,7 +44,7 @@ Instance::Instance(const char* const* extensions, const uint32_t extensions_coun
 		.applicationVersion = VK_MAKE_API_VERSION(0, 1, 0, 0),
 		.pEngineName = "Chizen",
 		.engineVersion = VK_MAKE_API_VERSION(0, 1, 0, 0),
-		.apiVersion = VK_MAKE_API_VERSION(0, 1, 4, 328),
+		.apiVersion = VK_MAKE_API_VERSION(0, 1, 1, 0),
 	};
 
 	const VkInstanceCreateInfo create_info = {
@@ -160,7 +160,6 @@ PhysicalDeviceData Instance::GetPhysicalDeviceData(const VkSurfaceKHR& surface) 
 					break;
 				}
 			}
-
 		}
 	}
 
@@ -180,7 +179,7 @@ Surface::~Surface() noexcept
 		vkDestroySurfaceKHR(mInstance, mSurface, nullptr);
 }
 
-VkSurfaceKHR Surface::GetSurface() const
+VkSurfaceKHR Surface::GetSurfaceKHR() const
 {
 	return mSurface;
 }
@@ -269,7 +268,7 @@ Swapchain::Swapchain(const VkDevice device, const Surface* surface_data, const u
 {
 	VkSwapchainCreateInfoKHR create_info = {
 		.sType = VK_STRUCTURE_TYPE_SWAPCHAIN_CREATE_INFO_KHR,
-		.surface = surface_data->GetSurface(),
+		.surface = surface_data->GetSurfaceKHR(),
 		.minImageCount = surface_data->GetSurfaceCapabilities().surfaceCapabilities.minImageCount,
 		.imageFormat = surface_data->GetSurfaceFormat().format,
 		.imageColorSpace = surface_data->GetSurfaceFormat().colorSpace,
@@ -386,59 +385,6 @@ TransferObjects::~TransferObjects() noexcept
 	{
 		vkDestroyCommandPool(mDevice, mCommandPool, nullptr);
 	}
-}
-
-void TransferObjects::PrepareImage(const VkImage& image)
-{
-	const VkCommandBufferBeginInfo begin_info = {
-		.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO,
-		.flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT,
-	};
-
-	VK_CHECK("begin cmd buff", vkBeginCommandBuffer(mCommandBuffer, &begin_info));
-
-	Utils_ChangeImageLayout(mCommandBuffer,
-		VK_PIPELINE_STAGE_2_TOP_OF_PIPE_BIT, 0,
-		VK_PIPELINE_STAGE_2_CLEAR_BIT, VK_ACCESS_2_TRANSFER_WRITE_BIT,
-		VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_GENERAL,
-		VK_QUEUE_FAMILY_IGNORED, VK_QUEUE_FAMILY_IGNORED,
-		image);
-
-	const VkImageSubresourceRange ranges[] = {
-		{
-			.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT,
-			.levelCount = 1,
-			.layerCount = 1,
-		},
-	};
-
-	const VkClearColorValue clear_color = {
-		.float32 = {
-			0, 0, 0, 1,
-		},
-	};
-
-	vkCmdClearColorImage(mCommandBuffer, image, VK_IMAGE_LAYOUT_GENERAL, &clear_color, std::size(ranges), ranges);
-
-	VK_CHECK("end emd buff", vkEndCommandBuffer(mCommandBuffer));
-
-	const VkCommandBufferSubmitInfo cmd_buff_infos[] = {
-		{
-			.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_SUBMIT_INFO,
-			.commandBuffer = mCommandBuffer,
-		},
-	};
-
-	const VkSubmitInfo2 submit_infos[] = {
-		{
-			.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO_2,
-			.commandBufferInfoCount = std::size(cmd_buff_infos),
-			.pCommandBufferInfos = cmd_buff_infos,
-		},
-	};
-
-	VK_CHECK("submit tranfer commands", vkQueueSubmit2(mQueue, std::size(submit_infos), submit_infos, VK_NULL_HANDLE));
-	VK_CHECK("queue wait idle", vkQueueWaitIdle(mQueue));
 }
 
 VkCommandPool TransferObjects::GetCommandPool() const

@@ -1,5 +1,6 @@
 #include "app.hpp"
 #include "vulkan_interface.hpp"
+#include "rasterizer.hpp"
 #include "display.hpp"
 #include "raytrace.hpp"
 #include "imgui_state.hpp"
@@ -29,6 +30,7 @@ App::App(SDL_Window* window, const std::string& current_path)
 
 void App::RunDisplay()
 {
+	//mRasterizer->Render();
 	mDisplay->Render(mDeltaMousePosition, mZoomLevel, mImGUIState.get());
 }
 
@@ -72,7 +74,7 @@ void App::RecreateSwapchain()
 {
 	mVulkanInterface->RecreateSwapchain();
 	mDisplay->UpdateSwapchain(mVulkanInterface->GetSwapchain());
-	mDisplay->UpdateExtent(mVulkanInterface->GetSurface()->GetSurfaceCapabilities().surfaceCapabilities.currentExtent);
+	mDisplay->UpdateExtent(mVulkanInterface->GetSurfaceKHR()->GetSurfaceCapabilities().surfaceCapabilities.currentExtent);
 }
 
 VulkanInterface* App::GetVulkanInterface() const

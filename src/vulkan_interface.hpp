@@ -19,7 +19,7 @@ public:
 
 	Instance* GetInstance() const;
 	PhysicalDeviceData* GetPhysicalDeviceData() const;
-	Surface* GetSurface() const;
+	Surface* GetSurfaceKHR() const;
 	Device* GetDevice() const;
 	Swapchain* GetSwapchain() const;
 	Allocator* GetAllocator() const;

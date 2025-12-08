@@ -353,7 +353,7 @@ Display::Display(const VulkanInterface* vulkan_interface, ImageResource* final_r
 {
 	mFinalRenderTarget = final_render_target;
 	mMaxFramesInFlight = static_cast<uint8_t>(vulkan_interface->GetSwapchain()->GetImagesCount());
-	mExtent = vulkan_interface->GetSurface()->GetSurfaceCapabilities().surfaceCapabilities.currentExtent;
+	mExtent = vulkan_interface->GetSurfaceKHR()->GetSurfaceCapabilities().surfaceCapabilities.currentExtent;
 	mSwapchain = vulkan_interface->GetSwapchain();
 	mQueue = vulkan_interface->GetDevice()->GetGraphicsQueue();
 	mDevice = vulkan_interface->GetDevice()->GetDevice();

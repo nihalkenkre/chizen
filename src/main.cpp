@@ -65,8 +65,8 @@ SDL_AppResult SDL_AppEvent(void* appstate, SDL_Event* event)
 		{
 			if (is_tracking_mouse)
 			{
-				delta_mouse_position[0] += ((last_mouse_position[0] - event->motion.x) / static_cast<float>(app->GetVulkanInterface()->GetSurface()->GetSurfaceCapabilities().surfaceCapabilities.currentExtent.width)) * 2;
-				delta_mouse_position[1] += ((last_mouse_position[1] - event->motion.y) / static_cast<float>(app->GetVulkanInterface()->GetSurface()->GetSurfaceCapabilities().surfaceCapabilities.currentExtent.height)) * 2;
+				delta_mouse_position[0] += ((last_mouse_position[0] - event->motion.x) / static_cast<float>(app->GetVulkanInterface()->GetSurfaceKHR()->GetSurfaceCapabilities().surfaceCapabilities.currentExtent.width)) * 2;
+				delta_mouse_position[1] += ((last_mouse_position[1] - event->motion.y) / static_cast<float>(app->GetVulkanInterface()->GetSurfaceKHR()->GetSurfaceCapabilities().surfaceCapabilities.currentExtent.height)) * 2;
 
 				last_mouse_position[0] = event->motion.x;
 				last_mouse_position[1] = event->motion.y;

@@ -33,7 +33,7 @@ ImGUIState::ImGUIState(const VulkanInterface* vulkan_interface) : mDevice (vulka
 	ImGui::CreateContext();
 	ImGui::GetIO().ConfigFlags |= ImGuiConfigFlags_DockingEnable;
 
-	VkFormat color_attachment_format = vulkan_interface->GetSurface()->GetSurfaceFormat().format;
+	VkFormat color_attachment_format = vulkan_interface->GetSurfaceKHR()->GetSurfaceFormat().format;
 	ImGui_ImplVulkan_InitInfo imgui_init_info = {
 		.Instance = vulkan_interface->GetInstance()->GetInstance(),
 		.PhysicalDevice = vulkan_interface->GetPhysicalDeviceData()->PhysicalDevice,

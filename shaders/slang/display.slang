@@ -9,7 +9,7 @@ struct VSInput
 struct VSOutput
 {
     float4 pos : SV_Position;
-    [[vk_location(0)]]
+    [[vk::location(0)]]
     float2 uv;
 }
 
