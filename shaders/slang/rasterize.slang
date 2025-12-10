@@ -3,45 +3,57 @@ struct VSInput
     [[vk::location(0)]]
     float3 pos;
     [[vk::location(1)]]
-    float3 nrm;
-    [[vk::location(2)]]
     float2 uv;
+    [[vk::location(2)]]
+    float3 nrm;
 }
 
 struct VSOutput
 {
     float4 pos : SV_Position;
     [[vk::location(0)]]
-    float3 nrm;
-    [[vk::location(1)]]
     float2 uv;
+    [[vk::location(1)]]
+    float3 nrm;
 }
 
-struct UniformBuffer
+struct ViewProj
 {
-    float4x4 model;
     float4x4 view;
     float4x4 proj;
 }
 
-ConstantBuffer<UniformBuffer> uniform_buffer;
+struct Model
+{
+    float4x4 model;
+}
+
+[[vk::binding(0, 0)]]
+ConstantBuffer<ViewProj> view_proj;
+[[vk::binding(0, 1)]]
+ConstantBuffer<Model> model;
 
 [shader("vertex")]
 VSOutput vertex_main(VSInput in)
 {
-    VSOutput out;
-    out.pos = mul(uniform_buffer.proj * uniform_buffer.view * uniform_buffer.model, float4(in.pos, 1));
-    out.nrm = in.nrm;
-    out.uv = in.uv;
+    VSOutput out = {
+        mul(view_proj.proj, mul(view_proj.view, mul(model.model, float4(in.pos, 1)))),
+        // mul(view_proj.proj * view_proj.view * model.model, float4(in.pos, 1)),
+        in.uv,
+        in.nrm,
+    };
 
     return out;
 }
 
-[[vk::binding(0, 0)]]
-Sampler2D diffuse;
+struct FSOutput
+{
+    float4 color;
+}
 
 [shader("fragment")]
-float4 frag_main(VSOutput in)
+FSOutput fragment_main(VSOutput in)
 {
-    return diffuse.Sample(in.uv);
+    FSOutput fs_output = { float4(in.uv, 0, 1) };
+    return fs_output;
 }

@@ -2,20 +2,20 @@
 
 class VulkanInterface;
 class FrameObjects;
-class RaytracePipelineData;
+class RaytracerPipelineData;
 class ImageResource;
 class BufferResource;
 
-class Raytrace
+class Raytracer
 {
 public:
-	Raytrace() = delete;
-	Raytrace(const VulkanInterface* const vulkan_interface, ImageResource* final_render_target, const VkExtent3D& extent, const std::string& current_path, const std::string& name);
+	Raytracer() = delete;
+	Raytracer(const VulkanInterface* const vulkan_interface, ImageResource* final_render_target, const VkExtent3D& extent, const std::string& current_path, const std::string& name);
 
-	Raytrace(const Raytrace& other) = delete;
-	Raytrace& operator=(const Raytrace& other) = delete;
+	Raytracer(const Raytracer& other) = delete;
+	Raytracer& operator=(const Raytracer& other) = delete;
 
-	~Raytrace() noexcept;
+	~Raytracer() noexcept;
 
 	void RecreateRenderResources(const VkExtent2D& extent);
 	void Render(bool * is_raytracing, const uint32_t max_samples);
@@ -38,7 +38,7 @@ private:
 	VkDescriptorPool mDescriptorPool = VK_NULL_HANDLE;
 	VkPhysicalDeviceRayTracingPipelinePropertiesKHR mRayTracingProperties = {};
 
-	std::unique_ptr<RaytracePipelineData> mPipelineData = nullptr;
+	std::unique_ptr<RaytracerPipelineData> mPipelineData = nullptr;
 
 	VkExtent3D mExtent = {};
 	VkQueue mComputeQueue = VK_NULL_HANDLE;

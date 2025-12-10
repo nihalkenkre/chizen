@@ -25,7 +25,7 @@ public:
 
 	VkPipeline GetPipeline() const;
 	VkPipelineLayout GetPipelineLayout() const;
-	std::vector<VkDescriptorSetLayout> GetDescriptorSetLayouts() const;
+	const std::vector<VkDescriptorSetLayout>& GetDescriptorSetLayouts() const;
 
 private:
 
@@ -42,99 +42,148 @@ DisplayPipelineData::DisplayPipelineData(const VulkanInterface* vulkan_interface
 
 	mDescriptorSetLayouts.resize(1);
 
-	Slang::ComPtr<slang::IGlobalSession> slang_global_session;
-	SLANG_CHECK("create global session", slang::createGlobalSession(slang_global_session.writeRef()));
+//	Slang::ComPtr<slang::IGlobalSession> slang_global_session;
+//	SLANG_CHECK("create global session", slang::createGlobalSession(slang_global_session.writeRef()));
+//
+//	const slang::TargetDesc target_descs[] = {
+//		{
+//			.format = SLANG_SPIRV,
+//			.profile = slang_global_session->findProfile("spirv_1_1"),
+//		}
+//	};
+//
+//	slang::CompilerOptionEntry compiler_options[] = {
+//		{
+//			.name = slang::CompilerOptionName::MatrixLayoutColumn,
+//			.value = {
+//				.kind = slang::CompilerOptionValueKind::Int,
+//				.intValue0 = 1,
+//			},
+//		},
+//#ifdef _DEBUG
+//		{
+//			.name = slang::CompilerOptionName::DebugInformation,
+//			.value = {
+//				.kind = slang::CompilerOptionValueKind::Int,
+//				.intValue0 = SLANG_DEBUG_INFO_LEVEL_MAXIMAL,
+//			}
+//		},
+//#endif	// _DEBUG
+//	};
+//
+//	slang::SessionDesc session_desc = {
+//		.targets = target_descs,
+//		.targetCount = std::size(target_descs),
+//		.compilerOptionEntries = compiler_options,
+//		.compilerOptionEntryCount = std::size(compiler_options),
+//	};
+//
+//	Slang::ComPtr<slang::ISession> compile_session;
+//	SLANG_CHECK("create compile session", slang_global_session->createSession(session_desc, compile_session.writeRef()));
+//
+//	const std::string slang_shader_path = std::string(current_path).append("/shaders/slang/display.slang");
+//
+//	Slang::ComPtr<slang::IBlob> diagnostic_blob;
+//	slang::IModule* slang_module = compile_session->loadModule(slang_shader_path.c_str(), diagnostic_blob.writeRef());
+//
+//	if (diagnostic_blob != nullptr)
+//	{
+//		std::println("{}", reinterpret_cast<const char*>(diagnostic_blob->getBufferPointer()));
+//	}
+//
+//	Slang::ComPtr<slang::IEntryPoint> vert_entry_point;
+//	slang_module->findEntryPointByName("vertex_main", vert_entry_point.writeRef());
+//
+//	std::array<slang::IComponentType*, 2> vert_component_types = { slang_module, vert_entry_point };
+//	Slang::ComPtr<slang::IComponentType> vert_composed_program;
+//	diagnostic_blob.setNull();
+//	SLANG_CHECK("create program", compile_session->createCompositeComponentType(vert_component_types.data(), vert_component_types.size(), vert_composed_program.writeRef(), diagnostic_blob.writeRef()));
+//
+//	Slang::ComPtr<slang::IComponentType> vert_linked_program;
+//	diagnostic_blob.setNull();
+//	SLANG_CHECK("link program", vert_composed_program->link(vert_linked_program.writeRef(), diagnostic_blob.writeRef()));
+//
+//	Slang::ComPtr<slang::IBlob> vert_spirv_code;
+//	diagnostic_blob.setNull();
+//	SLANG_CHECK("get spirv code", vert_composed_program->getEntryPointCode(0, 0, vert_spirv_code.writeRef(), diagnostic_blob.writeRef()));
+//
+//	const VkShaderModuleCreateInfo vert_mod_ci = {
+//		.sType = VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO,
+//		.codeSize = vert_spirv_code->getBufferSize(),
+//		.pCode = reinterpret_cast<const uint32_t*>(vert_spirv_code->getBufferPointer()),
+//	};
+//
+//	VkShaderModule vert_mod = VK_NULL_HANDLE;
+//	VK_CHECK("create vert shader module", vkCreateShaderModule(vulkan_interface->GetDevice()->GetDevice(), &vert_mod_ci, nullptr, &vert_mod));
+//
+//	Slang::ComPtr<slang::IEntryPoint> frag_entry_point;
+//	slang_module->findEntryPointByName("fragment_main", frag_entry_point.writeRef());
+//
+//	std::array<slang::IComponentType*, 2> frag_component_types = { slang_module, frag_entry_point };
+//	Slang::ComPtr<slang::IComponentType> frag_composed_program;
+//	diagnostic_blob.setNull();
+//	SLANG_CHECK("create program", compile_session->createCompositeComponentType(frag_component_types.data(), frag_component_types.size(), frag_composed_program.writeRef(), diagnostic_blob.writeRef()));
+//
+//	Slang::ComPtr<slang::IComponentType> frag_linked_program;
+//	diagnostic_blob.setNull();
+//	SLANG_CHECK("link program", frag_composed_program->link(frag_linked_program.writeRef(), diagnostic_blob.writeRef()));
+//
+//	Slang::ComPtr<slang::IBlob> frag_spirv_code;
+//	diagnostic_blob.setNull();
+//	SLANG_CHECK("get spirv code", frag_composed_program->getEntryPointCode(0, 0, frag_spirv_code.writeRef(), diagnostic_blob.writeRef()));
+//
+//	const VkShaderModuleCreateInfo frag_mod_ci = {
+//		.sType = VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO,
+//		.codeSize = frag_spirv_code->getBufferSize(),
+//		.pCode = reinterpret_cast<const uint32_t*>(frag_spirv_code->getBufferPointer()),
+//	};
+//
+//	VkShaderModule frag_mod = VK_NULL_HANDLE;
+//	VK_CHECK("create frag shader module", vkCreateShaderModule(vulkan_interface->GetDevice()->GetDevice(), &frag_mod_ci, nullptr, &frag_mod));
 
-	const slang::TargetDesc target_descs[] = {
-		{
-			.format = SLANG_SPIRV,
-			.profile = slang_global_session->findProfile("spirv_1_1"),
-		}
-	};
-
-#ifdef _DEBUG
-	slang::CompilerOptionEntry compiler_options[] = {
-		{
-			.name = slang::CompilerOptionName::DebugInformation,
-			.value = {
-				.kind = slang::CompilerOptionValueKind::Int,
-				.intValue0 = SLANG_DEBUG_INFO_LEVEL_MAXIMAL,
-			}
-		},
-	};
-#endif	// _DEBUG
-
-	slang::SessionDesc session_desc = {
-		.targets = target_descs,
-		.targetCount = std::size(target_descs),
-#ifdef _DEBUG
-		.compilerOptionEntries = compiler_options,
-		.compilerOptionEntryCount = std::size(compiler_options),
-#endif	// _DEBUG
-	};
-
-	Slang::ComPtr<slang::ISession> compile_session;
-	SLANG_CHECK("create compile session", slang_global_session->createSession(session_desc, compile_session.writeRef()));
-
-	const std::string slang_shader_path = std::string(current_path).append("/shaders/slang/display.slang");
-
-	Slang::ComPtr<slang::IBlob> diagnostic_blob;
-	slang::IModule* slang_module = compile_session->loadModule(slang_shader_path.c_str(), diagnostic_blob.writeRef());
-
-	if (diagnostic_blob != nullptr)
+	std::filesystem::path vert_path = std::string(current_path).append("/shaders/glsl/display.vert.glsl.spv");
+	VkShaderModule vert_mod = VK_NULL_HANDLE;
+	if (std::filesystem::exists(vert_path))
 	{
-		std::println("{}", reinterpret_cast<const char*>(diagnostic_blob->getBufferPointer()));
+		std::uintmax_t file_size = std::filesystem::file_size(vert_path);
+		std::ifstream vert_file(vert_path.c_str(), std::ios::binary);
+
+		std::vector<char> vert_code(file_size, 0);
+		vert_file.read(vert_code.data(), file_size);
+
+		const VkShaderModuleCreateInfo ci = {
+			.sType = VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO,
+			.codeSize = file_size,
+			.pCode = reinterpret_cast<uint32_t*>(vert_code.data()),
+		};
+		VK_CHECK("create rgen module", vkCreateShaderModule(mDevice, &ci, nullptr, &vert_mod));
+	}
+	else
+	{
+		std::println("Could not find {}", vert_path.string());
 	}
 
-	Slang::ComPtr<slang::IEntryPoint> vert_entry_point;
-	slang_module->findEntryPointByName("vertex_main", vert_entry_point.writeRef());
-
-	std::array<slang::IComponentType*, 2> vert_component_types = { slang_module, vert_entry_point };
-	Slang::ComPtr<slang::IComponentType> vert_composed_program;
-	diagnostic_blob.setNull();
-	SLANG_CHECK("create program", compile_session->createCompositeComponentType(vert_component_types.data(), vert_component_types.size(), vert_composed_program.writeRef(), diagnostic_blob.writeRef()));
-
-	Slang::ComPtr<slang::IComponentType> vert_linked_program;
-	diagnostic_blob.setNull();
-	SLANG_CHECK("link program", vert_composed_program->link(vert_linked_program.writeRef(), diagnostic_blob.writeRef()));
-
-	Slang::ComPtr<slang::IBlob> vert_spirv_code;
-	diagnostic_blob.setNull();
-	SLANG_CHECK("get spirv code", vert_composed_program->getEntryPointCode(0, 0, vert_spirv_code.writeRef(), diagnostic_blob.writeRef()));
-
-	const VkShaderModuleCreateInfo vert_mod_ci = {
-		.sType = VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO,
-		.codeSize = vert_spirv_code->getBufferSize(),
-		.pCode = reinterpret_cast<const uint32_t*>(vert_spirv_code->getBufferPointer()),
-	};
-
-	VkShaderModule vert_mod = VK_NULL_HANDLE;
-	VK_CHECK("create vert shader module", vkCreateShaderModule(vulkan_interface->GetDevice()->GetDevice(), &vert_mod_ci, nullptr, &vert_mod));
-
-	Slang::ComPtr<slang::IEntryPoint> frag_entry_point;
-	slang_module->findEntryPointByName("fragment_main", frag_entry_point.writeRef());
-
-	std::array<slang::IComponentType*, 2> frag_component_types = { slang_module, frag_entry_point };
-	Slang::ComPtr<slang::IComponentType> frag_composed_program;
-	diagnostic_blob.setNull();
-	SLANG_CHECK("create program", compile_session->createCompositeComponentType(frag_component_types.data(), frag_component_types.size(), frag_composed_program.writeRef(), diagnostic_blob.writeRef()));
-
-	Slang::ComPtr<slang::IComponentType> frag_linked_program;
-	diagnostic_blob.setNull();
-	SLANG_CHECK("link program", frag_composed_program->link(frag_linked_program.writeRef(), diagnostic_blob.writeRef()));
-
-	Slang::ComPtr<slang::IBlob> frag_spirv_code;
-	diagnostic_blob.setNull();
-	SLANG_CHECK("get spirv code", frag_composed_program->getEntryPointCode(0, 0, frag_spirv_code.writeRef(), diagnostic_blob.writeRef()));
-
-	const VkShaderModuleCreateInfo frag_mod_ci = {
-		.sType = VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO,
-		.codeSize = frag_spirv_code->getBufferSize(),
-		.pCode = reinterpret_cast<const uint32_t*>(frag_spirv_code->getBufferPointer()),
-	};
-
+	std::filesystem::path frag_path = std::string(current_path).append("/shaders/glsl/display.frag.glsl.spv");
 	VkShaderModule frag_mod = VK_NULL_HANDLE;
-	VK_CHECK("create frag shader module", vkCreateShaderModule(vulkan_interface->GetDevice()->GetDevice(), &frag_mod_ci, nullptr, &frag_mod));
+	if (std::filesystem::exists(frag_path))
+	{
+		std::uintmax_t file_size = std::filesystem::file_size(frag_path);
+		std::ifstream frag_file(frag_path.c_str(), std::ios::binary);
+
+		std::vector<char> frag_code(file_size, 0);
+		frag_file.read(frag_code.data(), file_size);
+
+		const VkShaderModuleCreateInfo ci = {
+			.sType = VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO,
+			.codeSize = file_size,
+			.pCode = reinterpret_cast<uint32_t*>(frag_code.data()),
+		};
+		VK_CHECK("create frag module", vkCreateShaderModule(mDevice, &ci, nullptr, &frag_mod));
+	}
+	else
+	{
+		std::println("Could not find {}", frag_path.string());
+	}
 
 	const VkPipelineShaderStageCreateInfo stages[] = {
 		{
@@ -318,7 +367,6 @@ DisplayPipelineData::DisplayPipelineData(const VulkanInterface* vulkan_interface
 	{
 		Utils_SetObjectName(mDevice, VK_OBJECT_TYPE_DESCRIPTOR_SET_LAYOUT, reinterpret_cast<uint64_t>(mDescriptorSetLayouts[dsl]), std::string(name).append(" descriptor set layout ").append(std::to_string(dsl)));
 	}
-
 #endif // _DEBUG
 }
 
@@ -344,7 +392,7 @@ VkPipelineLayout DisplayPipelineData::GetPipelineLayout() const
 	return mPipelineLayout;
 }
 
-std::vector<VkDescriptorSetLayout> DisplayPipelineData::GetDescriptorSetLayouts() const
+const std::vector<VkDescriptorSetLayout>& DisplayPipelineData::GetDescriptorSetLayouts() const
 {
 	return mDescriptorSetLayouts;
 }
@@ -426,7 +474,7 @@ Display::Display(const VulkanInterface* vulkan_interface, ImageResource* final_r
 	staging_buffer->CopyToBuffer(
 		vulkan_interface->GetTransferObjects()->GetCommandBuffer(),
 		vulkan_interface->GetTransferObjects()->GetQueue(),
-		mGeometryBuffer->GetDescriptorInfo().buffer, 
+		mGeometryBuffer->GetDescriptorInfo().buffer,
 		verts_size);
 }
 
@@ -449,7 +497,7 @@ void Display::Render(const float position_offset[], const float zoom_level, ImGU
 	VkDevice device = mDevice;
 	VkCommandBuffer cmd_buff = mFrameObjects->GetCommandBuffer();
 	VkSemaphore frame_sem = mFrameObjects->GetSemaphore();
-	uint64_t& frame_sem_value =mFrameObjects->GetFrameSemValue();
+	uint64_t& frame_sem_value = mFrameObjects->GetFrameSemValue();
 	uint8_t frame_in_flight = mFrameObjects->GetFrameInFlight();
 
 	const VkSemaphoreWaitInfo wait_info = {
@@ -484,6 +532,7 @@ void Display::Render(const float position_offset[], const float zoom_level, ImGU
 		VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT, VK_ACCESS_2_COLOR_ATTACHMENT_WRITE_BIT,
 		VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
 		VK_QUEUE_FAMILY_IGNORED, VK_QUEUE_FAMILY_IGNORED,
+		VK_IMAGE_ASPECT_COLOR_BIT,
 		mSwapchain->GetImages()[img_idx]);
 
 	VkRenderingAttachmentInfo col_attachs[] = {
@@ -590,44 +639,7 @@ void Display::Render(const float position_offset[], const float zoom_level, ImGU
 
 	vkCmdDraw(cmd_buff, 6, 1, 0, 0);
 
-	ImGui_ImplVulkan_NewFrame();
-	ImGui_ImplSDL3_NewFrame();
-	ImGui::NewFrame();
-
-	ImGui::Begin("Awesome Panel");
-
-	int* render_target_extent = imgui_state->GetRenderTargetExtent();
-
-	if (ImGui::InputInt2("Render Dims", render_target_extent))
-	{
-		render_target_extent[0] = std::clamp(render_target_extent[0], 1, 8192);
-		render_target_extent[1] = std::clamp(render_target_extent[1], 1, 8192);
-	}
-
-	int& max_samples = imgui_state->GetMaxSamples();
-	if (ImGui::DragInt("Num Samples", &max_samples))
-	{
-		if (max_samples <= 0)
-		{
-			max_samples = 1;
-		}
-	}
-
-	if (ImGui::Button("Render"))
-	{
-		imgui_state->GetShouldStartRaytracing() = true;
-	}
-
-	ImGui::End();
-	ImGui::Render();
-
-	ImGui_ImplVulkan_RenderDrawData(ImGui::GetDrawData(), cmd_buff);
-
-	if (ImGui::GetIO().ConfigFlags & ImGuiConfigFlags_ViewportsEnable)
-	{
-		ImGui::UpdatePlatformWindows();
-		ImGui::RenderPlatformWindowsDefault();
-	}
+	imgui_state->Render(cmd_buff);
 
 	vkCmdEndRenderingKHR(cmd_buff);
 
@@ -636,6 +648,7 @@ void Display::Render(const float position_offset[], const float zoom_level, ImGU
 		VK_PIPELINE_STAGE_2_BOTTOM_OF_PIPE_BIT, 0,
 		VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL, VK_IMAGE_LAYOUT_PRESENT_SRC_KHR,
 		VK_QUEUE_FAMILY_IGNORED, VK_QUEUE_FAMILY_IGNORED,
+		VK_IMAGE_ASPECT_COLOR_BIT,
 		mSwapchain->GetImages()[img_idx]);
 
 	VK_CHECK("end display cmd buff", vkEndCommandBuffer(cmd_buff));

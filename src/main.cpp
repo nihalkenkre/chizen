@@ -8,6 +8,9 @@
 #define VMA_IMPLEMENTATION
 #include <vma/vk_mem_alloc.h>
 
+#define CGLTF_IMPLEMENTATION
+#include <cgltf.h>
+
 SDL_AppResult SDL_AppInit(void** appstate, int argc, char** argv)
 {
 	SDL_CHECK(SDL_Init(SDL_INIT_VIDEO));
@@ -91,6 +94,16 @@ SDL_AppResult SDL_AppEvent(void* appstate, SDL_Event* event)
 	{
 		app->RecreateSwapchain();
 	}
+	else if (event->type == SDL_EVENT_KEY_DOWN)
+	{
+		if (event->key.key == SDLK_ESCAPE)
+		{
+			app->StopRaytracing();
+		}
+	}
+	else {
+		app->ProcessEvent(event);
+	}
 
 	return SDL_APP_CONTINUE;
 }
@@ -104,32 +117,7 @@ SDL_AppResult SDL_AppIterate(void* appstate)
 		return SDL_APP_CONTINUE;
 	}
 
-	if (app->GetImGUIState()->GetShouldStartRaytracing())
-	{
-		if (app->IsRaytracing()) app->StopRaytracing();
-
-		VkExtent2D& render_target_extent = app->GetRenderTargetExtent();
-		int* tmp_render_target_extent = app->GetImGUIState()->GetRenderTargetExtent();
-
-		if (render_target_extent.width != tmp_render_target_extent[0] ||
-			render_target_extent.height != tmp_render_target_extent[1])
-		{
-			render_target_extent.width = tmp_render_target_extent[0];
-			render_target_extent.height = tmp_render_target_extent[1];
-			app->RecreateRenderTarget();
-		}
-
-		int& tmp_max_samples = app->GetImGUIState()->GetMaxSamples();
-		uint32_t& max_samples = app->GetMaxSamples();
-		if (max_samples != tmp_max_samples)
-		{
-			max_samples = tmp_max_samples;
-		}
-
-		app->RunRaytrace();
-	}
-
-	app->RunDisplay();
+	app->RunRasterizer();
 
 	return SDL_APP_CONTINUE;
 }

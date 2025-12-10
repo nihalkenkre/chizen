@@ -6,6 +6,7 @@ void Utils_ChangeImageLayout(
 	const VkPipelineStageFlags2 dst_stage_mask, const VkAccessFlags2 dst_access_mask,
 	const VkImageLayout old_layout, const VkImageLayout new_layout,
 	const uint32_t src_q_fly_idx, const uint32_t dst_q_fly_idx,
+	const VkImageAspectFlags aspect_mask,
 	const VkImage& image)
 {
 	const VkImageMemoryBarrier2 img_mem_barr = {
@@ -20,7 +21,7 @@ void Utils_ChangeImageLayout(
 		.dstQueueFamilyIndex = dst_q_fly_idx,
 		.image = image,
 		.subresourceRange = {
-			.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT,
+			.aspectMask = aspect_mask,
 			.levelCount = 1,
 			.layerCount = 1,
 		},
@@ -51,6 +52,7 @@ void Utils_InitializeImages(const std::vector<VkImage> images, const VkCommandBu
 			VK_PIPELINE_STAGE_2_BOTTOM_OF_PIPE_BIT, 0,
 			VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_GENERAL,
 			VK_QUEUE_FAMILY_IGNORED, VK_QUEUE_FAMILY_IGNORED,
+			VK_IMAGE_ASPECT_COLOR_BIT,
 			image);
 	}
 

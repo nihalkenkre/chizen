@@ -3,7 +3,7 @@
 #include "utils.hpp"
 #include "vulkan_objects.hpp"
 
-ImGUIState::ImGUIState(const VulkanInterface* vulkan_interface) : mDevice (vulkan_interface->GetDevice()->GetDevice())
+ImGUIState::ImGUIState(const VulkanInterface* vulkan_interface) : mDevice(vulkan_interface->GetDevice()->GetDevice())
 {
 	const VkDescriptorPoolSize pool_sizes[] =
 	{
@@ -32,6 +32,8 @@ ImGUIState::ImGUIState(const VulkanInterface* vulkan_interface) : mDevice (vulka
 
 	ImGui::CreateContext();
 	ImGui::GetIO().ConfigFlags |= ImGuiConfigFlags_DockingEnable;
+	ImGui::GetIO().IniFilename = nullptr;
+	ImGui::GetIO().LogFilename = nullptr;
 
 	VkFormat color_attachment_format = vulkan_interface->GetSurfaceKHR()->GetSurfaceFormat().format;
 	ImGui_ImplVulkan_InitInfo imgui_init_info = {
@@ -47,12 +49,17 @@ ImGUIState::ImGUIState(const VulkanInterface* vulkan_interface) : mDevice (vulka
 				.sType = VK_STRUCTURE_TYPE_PIPELINE_RENDERING_CREATE_INFO,
 				.colorAttachmentCount = 1,
 				.pColorAttachmentFormats = &color_attachment_format,
+				.depthAttachmentFormat = VK_FORMAT_D32_SFLOAT,
 			},
 		},
 		.UseDynamicRendering = true,
 	};
 
 	SDL_CHECK(ImGui_ImplVulkan_Init(&imgui_init_info));
+
+	mFileOpenEvent.type = SDL_RegisterEvents(3);
+	mStartRayTraceEvent.type = mFileOpenEvent.type + 1;
+	mStopRaytraceEvent.type = mStartRayTraceEvent.type + 1;
 }
 
 ImGUIState::~ImGUIState() noexcept
@@ -63,6 +70,65 @@ ImGUIState::~ImGUIState() noexcept
 
 	if (mDevice != VK_NULL_HANDLE)
 		vkDestroyDescriptorPool(mDevice, mDescriptorPool, nullptr);
+}
+
+void ImGUIState::Render(const VkCommandBuffer cmd_buff)
+{
+	ImGui_ImplVulkan_NewFrame();
+	ImGui_ImplSDL3_NewFrame();
+	ImGui::NewFrame();
+
+	ImGui::Begin("Awesome Panel");
+
+	if (ImGui::Button("Load GLTF"))
+	{
+		IGFD::FileDialogConfig config;
+		config.path = ".";
+		ImGuiFileDialog::Instance()->OpenDialog("GLTFDlg", "Choose GLTF File", ".glb,.gltf", config);
+	}
+
+	if (ImGuiFileDialog::Instance()->Display("GLTFDlg"))
+	{
+		if (ImGuiFileDialog::Instance()->IsOk())
+		{
+			file_path = ImGuiFileDialog::Instance()->GetFilePathName();
+
+			mFileOpenEvent.user.data1 = reinterpret_cast<void*>((char*)file_path.c_str());
+			SDL_CHECK(SDL_PushEvent(&mFileOpenEvent));
+		}
+
+		ImGuiFileDialog::Instance()->Close();
+	}
+
+	if (ImGui::InputInt2("Render Dims", mRenderTargetExtent))
+	{
+		mRenderTargetExtent[0] = std::clamp(mRenderTargetExtent[0], 1, 8192);
+		mRenderTargetExtent[1] = std::clamp(mRenderTargetExtent[1], 1, 8192);
+	}
+
+	if (ImGui::DragInt("Num Samples", &mMaxSamples))
+	{
+		if (mMaxSamples <= 0)
+		{
+			mMaxSamples = 1;
+		}
+	}
+
+	if (ImGui::Button("Render"))
+	{
+		SDL_CHECK(SDL_PushEvent(&mStartRayTraceEvent));
+	}
+
+	ImGui::End();
+	ImGui::Render();
+
+	ImGui_ImplVulkan_RenderDrawData(ImGui::GetDrawData(), cmd_buff);
+
+	if (ImGui::GetIO().ConfigFlags & ImGuiConfigFlags_ViewportsEnable)
+	{
+		ImGui::UpdatePlatformWindows();
+		ImGui::RenderPlatformWindowsDefault();
+	}
 }
 
 bool& ImGUIState::GetShouldStartRaytracing()
@@ -78,4 +144,19 @@ int& ImGUIState::GetMaxSamples()
 int* ImGUIState::GetRenderTargetExtent()
 {
 	return mRenderTargetExtent;
+}
+
+uint32_t ImGUIState::GetFileOpenEventType() const
+{
+	return mFileOpenEvent.type;
+}
+
+uint32_t ImGUIState::GetStartRaytraceEventType() const
+{
+	return mStartRayTraceEvent.type;
+}
+
+uint32_t ImGUIState::GetStopRaytraceEventType() const
+{
+	return mStopRaytraceEvent.type;
 }

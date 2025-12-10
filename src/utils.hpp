@@ -28,6 +28,7 @@ void Utils_ChangeImageLayout(
 	const VkPipelineStageFlags2 dst_stage_mask, const VkAccessFlags2 dst_access_mask,
 	const VkImageLayout old_layout, const VkImageLayout new_layout,
 	const uint32_t src_q_fly_idx, const uint32_t dst_q_fly_idx,
+	const VkImageAspectFlags aspect_mask,
 	const VkImage& image);
 
 void Utils_InitializeImages(

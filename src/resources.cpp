@@ -1,7 +1,7 @@
 #include "resources.hpp"
 #include "utils.hpp"
 
-ImageResource::ImageResource(const VkDevice device, const VkExtent3D& extent, const VkFormat format, const VkImageUsageFlags usage, const VmaAllocator allocator, const VmaAllocationCreateFlags vma_alloc_create_flags, const VmaMemoryUsage vma_mem_usage, const std::vector<uint32_t>& queue_family_indices, const std::string& name)
+ImageResource::ImageResource(const VkDevice device, const VkExtent3D& extent, const VkFormat format, const VkImageUsageFlags usage, const VmaAllocator allocator, const std::vector<uint32_t>& queue_family_indices, const std::string& name)
 {
 	mDescriptorInfo = {
 		.imageLayout = VK_IMAGE_LAYOUT_GENERAL,
@@ -26,13 +26,12 @@ ImageResource::ImageResource(const VkDevice device, const VkExtent3D& extent, co
 	};
 
 	const VmaAllocationCreateInfo alloc_ci = {
-		.flags = vma_alloc_create_flags,
-		.usage = vma_mem_usage,
+		.usage = VMA_MEMORY_USAGE_AUTO_PREFER_DEVICE,
 	};
 
 	VK_CHECK("create image", vmaCreateImage(allocator, &create_info, &alloc_ci, &mImage, &mAllocation, &mAllocationInfo.allocationInfo));
 
-	const VkImageViewCreateInfo iv_ci = {
+	VkImageViewCreateInfo iv_ci = {
 		.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO,
 		.image = mImage,
 		.viewType = VK_IMAGE_VIEW_TYPE_2D,
@@ -43,6 +42,12 @@ ImageResource::ImageResource(const VkDevice device, const VkExtent3D& extent, co
 			.layerCount = 1,
 		},
 	};
+	if (format == VK_FORMAT_D32_SFLOAT || format == VK_FORMAT_D32_SFLOAT_S8_UINT ||
+		format == VK_FORMAT_D16_UNORM || format == VK_FORMAT_D16_UNORM_S8_UINT ||
+		format == VK_FORMAT_D16_UNORM || format == VK_FORMAT_D16_UNORM_S8_UINT)
+	{
+		iv_ci.subresourceRange.aspectMask = VK_IMAGE_ASPECT_DEPTH_BIT;
+	}
 
 	VK_CHECK("create image view", vkCreateImageView(device, &iv_ci, nullptr, &mDescriptorInfo.imageView));
 
@@ -69,34 +74,34 @@ ImageResource::~ImageResource() noexcept
 	}
 }
 
-void ImageResource::ChangeImageLayout(const VkCommandBuffer cmd_buff, const VkPipelineStageFlags2 src_stage_mask, const VkAccessFlags2 src_access_mask, const VkPipelineStageFlags2 dst_stage_mask, const VkAccessFlags2 dst_access_mask, const VkImageLayout old_layout, const VkImageLayout new_layout, const uint32_t src_q_fly_idx, const uint32_t dst_q_fly_idx)
-{
-	const VkImageMemoryBarrier2 img_mem_barr = {
-		.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER_2,
-		.srcStageMask = src_stage_mask,
-		.srcAccessMask = src_access_mask,
-		.dstStageMask = dst_stage_mask,
-		.dstAccessMask = dst_access_mask,
-		.oldLayout = old_layout,
-		.newLayout = new_layout,
-		.srcQueueFamilyIndex = src_q_fly_idx,
-		.dstQueueFamilyIndex = dst_q_fly_idx,
-		.image = mImage,
-		.subresourceRange = {
-			.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT,
-			.levelCount = 1,
-			.layerCount = 1,
-		},
-	};
-
-	const VkDependencyInfo dep_info = {
-		.sType = VK_STRUCTURE_TYPE_DEPENDENCY_INFO,
-		.imageMemoryBarrierCount = 1,
-		.pImageMemoryBarriers = &img_mem_barr,
-	};
-
-	vkCmdPipelineBarrier2KHR(cmd_buff, &dep_info);
-}
+//void ImageResource::ChangeImageLayout(const VkCommandBuffer cmd_buff, const VkPipelineStageFlags2 src_stage_mask, const VkAccessFlags2 src_access_mask, const VkPipelineStageFlags2 dst_stage_mask, const VkAccessFlags2 dst_access_mask, const VkImageLayout old_layout, const VkImageLayout new_layout, const uint32_t src_q_fly_idx, const uint32_t dst_q_fly_idx, const VkImageAspectFlags aspect_mask)
+//{
+//	const VkImageMemoryBarrier2 img_mem_barr = {
+//		.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER_2,
+//		.srcStageMask = src_stage_mask,
+//		.srcAccessMask = src_access_mask,
+//		.dstStageMask = dst_stage_mask,
+//		.dstAccessMask = dst_access_mask,
+//		.oldLayout = old_layout,
+//		.newLayout = new_layout,
+//		.srcQueueFamilyIndex = src_q_fly_idx,
+//		.dstQueueFamilyIndex = dst_q_fly_idx,
+//		.image = mImage,
+//		.subresourceRange = {
+//			.aspectMask = aspect_mask,
+//			.levelCount = 1,
+//			.layerCount = 1,
+//		},
+//	};
+//
+//	const VkDependencyInfo dep_info = {
+//		.sType = VK_STRUCTURE_TYPE_DEPENDENCY_INFO,
+//		.imageMemoryBarrierCount = 1,
+//		.pImageMemoryBarriers = &img_mem_barr,
+//	};
+//
+//	vkCmdPipelineBarrier2KHR(cmd_buff, &dep_info);
+//}
 
 VkImage ImageResource::GetImage() const
 {
@@ -130,6 +135,7 @@ BufferResource::BufferResource(const VkDevice device, const VmaAllocator allocat
 	};
 	mAllocator = allocator;
 	mDevice = device;
+	mSize = size;
 
 	const VkBufferCreateInfo create_info = {
 		.sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO,
@@ -144,11 +150,6 @@ BufferResource::BufferResource(const VkDevice device, const VmaAllocator allocat
 
 	VK_CHECK("create buffer", vmaCreateBuffer(allocator, &create_info, &alloc_ci, &mDescriptorInfo.buffer, &mAllocation, &mAllocationInfo.allocationInfo));
 
-	//if (vma_alloc_create_flags & VMA_ALLOCATION_CREATE_MAPPED_BIT)
-	//{
-	//	mDeviceOrHostAddress.hostAddress = mAllocationInfo.allocationInfo.pMappedData;
-	//	mDeviceOrHostAddressConst.hostAddress = mAllocationInfo.allocationInfo.pMappedData;
-	//}
  if (usage & VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT_KHR)
 	{
 		const VkBufferDeviceAddressInfoKHR addr_info = {
@@ -230,6 +231,11 @@ VmaAllocation BufferResource::GetAllocation() const
 VmaAllocationInfo2 BufferResource::GetAllocationInfo2() const
 {
 	return mAllocationInfo;
+}
+
+VkDeviceSize BufferResource::GetBufferSize() const
+{
+	return mSize;
 }
 
 VkDeviceAddress BufferResource::GetDeviceAddress() const

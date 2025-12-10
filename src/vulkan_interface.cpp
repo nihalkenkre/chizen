@@ -16,8 +16,10 @@ VulkanInterface::VulkanInterface(SDL_Window* window)
 	mAllocator = std::make_unique<Allocator>(mInstance->GetInstance(), mPhysicalDeviceData->PhysicalDevice, mDevice->GetDevice());
 	mTransferObjects = std::make_unique<TransferObjects>(mDevice->GetDevice(), mDevice->GetTransferQueue(), mPhysicalDeviceData->TransferQueueFamilyIndex, "transfer objects");
 
+#ifdef _DEBUG
 	Utils_SetObjectName(mDevice->GetDevice(), VK_OBJECT_TYPE_INSTANCE, reinterpret_cast<uint64_t>(mInstance->GetInstance()), "instance");
 	Utils_SetObjectName(mDevice->GetDevice(), VK_OBJECT_TYPE_SURFACE_KHR, reinterpret_cast<uint64_t>(mSurface->GetSurfaceKHR()), "surface");
+#endif // _DEBUG
 }
 
 Instance* VulkanInterface::GetInstance() const

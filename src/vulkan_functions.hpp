@@ -9,6 +9,7 @@ extern "C" PFN_vkWaitSemaphoresKHR vk_WaitSemaphoresKHR;
 extern "C" PFN_vkCmdBeginRenderingKHR vk_CmdBeginRenderingKHR;
 extern "C" PFN_vkCmdBindDescriptorSets2KHR vk_CmdBindDescriptorSets2KHR;
 extern "C" PFN_vkCmdBindVertexBuffers2EXT vk_CmdBindVertexBuffers2EXT;
+extern "C" PFN_vkCmdBindIndexBuffer2KHR vk_CmdBindIndexBuffer2KHR;
 extern "C" PFN_vkCmdPushConstants2KHR vk_CmdPushConstants2KHR;
 extern "C" PFN_vkCmdEndRenderingKHR vk_CmdEndRenderingKHR;
 extern "C" PFN_vkGetRayTracingShaderGroupHandlesKHR vk_GetRayTracingShaderGroupHandlesKHR;

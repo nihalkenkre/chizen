@@ -3,28 +3,37 @@
 class VulkanInterface;
 class Swapchain;
 class FrameObjects;
+class RasterizerPipelineData;
+class ImGUIState;
+class Scene;
+class ImageResource;
 
 class Rasterizer
 {
 public:
 	Rasterizer() = delete;
 
-	Rasterizer(const VulkanInterface* vulkan_interface, const std::string& name);
+	Rasterizer(const VulkanInterface* vulkan_interface, const std::string& current_path, const std::string& name);
 
 	Rasterizer(const Rasterizer& other) = delete;
 	Rasterizer& operator=(const Rasterizer& other) = delete;
 
 	~Rasterizer() noexcept;
 
-	void Render();
+	void Render(const Scene* scene, ImGUIState* imgui_state);
 	void UpdateSwapchain(Swapchain* swapchain);
+	void UpdateExtent(const VkExtent2D& extent);
+	void InitializeResources(const VkCommandBuffer cmd_buff, const VkQueue queue);
+
+	const std::vector<VkDescriptorSetLayout>& GetDescriptorSetLayouts() const;
 
 private:
-
 	std::unique_ptr<FrameObjects> mFrameObjects;
 	std::vector<VkSemaphore> mPresentWaitSemaphores;
 	std::vector<VkSemaphore> mAcquireSignalSemaphores;
-	std::vector<VkDescriptorSet> mDescriptorSets;
+	std::unique_ptr<ImageResource> mDepthTexture;
+	
+	std::unique_ptr<RasterizerPipelineData> mPipelineData;
 
 	VkDescriptorPool mDescriptorPool = VK_NULL_HANDLE;
 

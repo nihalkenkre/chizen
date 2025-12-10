@@ -19,11 +19,11 @@ for /R %%F in (*.spv) do (
 echo building glsl %source_dir:/=\%\shaders
 for /R %%F in (*.glsl) do (
    if "%2" == "Debug" (
-      glslang %%F -gVS -Od --target-env vulkan1.3 -o %%F.spv
+      glslang %%F -gVS -Od --target-env vulkan1.2 -o %%F.spv
    )
       
    if "%2" == "MinSizeRel" (
-      glslang %%F --target-env vulkan1.3 -o %%F.spv
+      glslang %%F --target-env vulkan1.2 -o %%F.spv
    )
 )
 

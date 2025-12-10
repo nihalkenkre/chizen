@@ -1,10 +1,12 @@
 #pragma once
 
 class VulkanInterface;
+class Rasterizer;
 class Display;
-class Raytrace;
+class Raytracer;
 class ImGUIState;
 class ImageResource;
+class Scene;
 
 class App
 {
@@ -17,14 +19,17 @@ public:
 
 	~App() noexcept;
 
+	void ProcessEvent(SDL_Event* event);
+	void RunRasterizer();
 	void RunDisplay();
-	void RunRaytrace();
+	void StartRaytracer();
 	void RecreateRenderTarget();
 	void StopRaytracing();
 
 	void RecreateSwapchain();
 
 	VulkanInterface* GetVulkanInterface() const;
+	Rasterizer* GetRasterizer() const;
 	Display* GetDisplay() const;
 
 	SDL_Window* GetWindow() const;
@@ -47,10 +52,12 @@ private:
 	float mZoomLevel = 1.f;
 	uint32_t mMaxSamples = 1024;
 	std::unique_ptr<VulkanInterface> mVulkanInterface = nullptr;
+	std::unique_ptr<Rasterizer> mRasterizer = nullptr;
 	std::unique_ptr<Display> mDisplay = nullptr;
-	std::unique_ptr<Raytrace> mRaytrace = nullptr;
+	std::unique_ptr<Raytracer> mRaytracer = nullptr;
 	std::unique_ptr<ImageResource> mFinalRenderTarget = nullptr;
 	std::unique_ptr<ImGUIState> mImGUIState = nullptr;
+	std::unique_ptr<Scene> mScene = nullptr;
 	SDL_Window* mWindow = nullptr;
 	VkExtent2D mRenderTargetExtent = { 1280, 720 };
 	std::thread mRaytraceThread = {};

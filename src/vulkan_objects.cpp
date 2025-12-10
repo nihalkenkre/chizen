@@ -44,7 +44,7 @@ Instance::Instance(const char* const* extensions, const uint32_t extensions_coun
 		.applicationVersion = VK_MAKE_API_VERSION(0, 1, 0, 0),
 		.pEngineName = "Chizen",
 		.engineVersion = VK_MAKE_API_VERSION(0, 1, 0, 0),
-		.apiVersion = VK_MAKE_API_VERSION(0, 1, 1, 0),
+		.apiVersion = VK_MAKE_API_VERSION(0, 1, 2, 0),
 	};
 
 	const VkInstanceCreateInfo create_info = {
@@ -424,9 +424,11 @@ Device::Device(const PhysicalDeviceData* physical_device_data)
 		VK_KHR_SYNCHRONIZATION_2_EXTENSION_NAME,
 		VK_KHR_TIMELINE_SEMAPHORE_EXTENSION_NAME,
 		VK_KHR_COPY_COMMANDS_2_EXTENSION_NAME,
+		"VK_KHR_maintenance5",
 		"VK_KHR_maintenance6",
 		VK_EXT_DESCRIPTOR_INDEXING_EXTENSION_NAME,
 		VK_EXT_EXTENDED_DYNAMIC_STATE_EXTENSION_NAME,
+		VK_EXT_ROBUSTNESS_2_EXTENSION_NAME,
 	};
 
 	uint32_t property_count = 0;
@@ -491,8 +493,13 @@ Device::Device(const PhysicalDeviceData* physical_device_data)
 		}
 	}
 
+	VkPhysicalDeviceRobustness2FeaturesEXT rob2_feats = {
+		.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_ROBUSTNESS_2_FEATURES_EXT,
+	};
+
 	VkPhysicalDeviceRayTracingPipelineFeaturesKHR rt_pipe_feats = {
 		.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_RAY_TRACING_PIPELINE_FEATURES_KHR,
+		.pNext = &rob2_feats,
 	};
 
 	VkPhysicalDeviceAccelerationStructureFeaturesKHR accel_struct_feats = {
@@ -547,6 +554,7 @@ Device::Device(const PhysicalDeviceData* physical_device_data)
 	vk_CmdBeginRenderingKHR = reinterpret_cast<PFN_vkCmdBeginRenderingKHR>(vkGetDeviceProcAddr(mDevice, "vkCmdBeginRenderingKHR"));
 	vk_CmdBindDescriptorSets2KHR = reinterpret_cast<PFN_vkCmdBindDescriptorSets2KHR>(vkGetDeviceProcAddr(mDevice, "vkCmdBindDescriptorSets2KHR"));
 	vk_CmdBindVertexBuffers2EXT = reinterpret_cast<PFN_vkCmdBindVertexBuffers2EXT>(vkGetDeviceProcAddr(mDevice, "vkCmdBindVertexBuffers2EXT"));
+	vk_CmdBindIndexBuffer2KHR = reinterpret_cast<PFN_vkCmdBindIndexBuffer2KHR>(vkGetDeviceProcAddr(mDevice, "vkCmdBindIndexBuffer2KHR"));
 	vk_CmdPushConstants2KHR = reinterpret_cast<PFN_vkCmdPushConstants2KHR>(vkGetDeviceProcAddr(mDevice, "vkCmdPushConstants2KHR"));
 	vk_CmdEndRenderingKHR = reinterpret_cast<PFN_vkCmdEndRenderingKHR>(vkGetDeviceProcAddr(mDevice, "vkCmdEndRenderingKHR"));
 	vk_GetRayTracingShaderGroupHandlesKHR = reinterpret_cast<PFN_vkGetRayTracingShaderGroupHandlesKHR>(vkGetDeviceProcAddr(mDevice, "vkGetRayTracingShaderGroupHandlesKHR"));

@@ -14,7 +14,7 @@ source_group("Shaders/Slang" FILES ${SLANG_SHADER_SRCS})
 source_group("ImGui" FILES ${IMGUI_SRCS})
 source_group("ImGuiFileDialog" FILES ${IMGUI_FILE_DLG_SRCS})
 
-add_compile_definitions(_HAS_EXCEPTIONS=0 SDL_MAIN_USE_CALLBACKS IMGUI_DEFINE_MATH_OPERATORS)
+add_compile_definitions(_HAS_EXCEPTIONS=0 SDL_MAIN_USE_CALLBACKS IMGUI_DEFINE_MATH_OPERATORS _CRT_SECURE_NO_WARNINGS GLM_FORCE_DEPTH_ZERO_TO_ONE)
 
 if (CMAKE_CXX_COMPILER_ID MATCHES "MSVC")
    set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} /EHs-c-")
@@ -45,10 +45,12 @@ target_precompile_headers(${PROJECT_NAME} PRIVATE
                                        <vma/vk_mem_alloc.h>
                                        <glm/ext/matrix_clip_space.hpp>
                                        <glm/ext/matrix_transform.hpp>
+                                       <glm/gtc/type_ptr.hpp>
+                                       <cgltf.h>
                            )
 set_property(TARGET ${PROJECT_NAME} PROPERTY CXX_STANDARD 23)
 
-target_include_directories(${PROJECT_NAME} PRIVATE SDL/include imgui imgui/backends ImGuiFileDialog glm $ENV{VULKAN_SDK}/Include)
+target_include_directories(${PROJECT_NAME} PRIVATE SDL/include imgui imgui/backends ImGuiFileDialog glm cgltf $ENV{VULKAN_SDK}/Include)
 
 target_link_directories(${PROJECT_NAME} PRIVATE $<IF:$<CONFIG:Debug>,${CMAKE_SOURCE_DIR}/SDL/build/Debug,> $<IF:$<CONFIG:MinSizeRel>,${CMAKE_SOURCE_DIR}/SDL/build/MinSizeRel,> $ENV{VULKAN_SDK}/Lib)
 target_link_libraries(${PROJECT_NAME} PRIVATE SDL3-static Vulkan::Vulkan slang winmm setupapi version)

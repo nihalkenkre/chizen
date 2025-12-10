@@ -6,18 +6,19 @@ class ImageResource
 {
 public:
 	ImageResource() = delete;
-	ImageResource(const VkDevice device, const VkExtent3D& extent, const VkFormat format, const VkImageUsageFlags usage, const VmaAllocator allocator, const VmaAllocationCreateFlags vma_alloc_create_flags, const VmaMemoryUsage vma_mem_usage, const std::vector<uint32_t>& queue_family_indices, const std::string& name);
+	ImageResource(const VkDevice device, const VkExtent3D& extent, const VkFormat format, const VkImageUsageFlags usage, const VmaAllocator allocator, const std::vector<uint32_t>& queue_family_indices, const std::string& name);
 
 	ImageResource(const ImageResource& other) = delete;
 	ImageResource& operator=(const ImageResource& other) = delete;
 
 	~ImageResource() noexcept;
 
-	void ChangeImageLayout(const VkCommandBuffer cmd_buff,
-		const VkPipelineStageFlags2 src_stage_mask, const VkAccessFlags2 src_access_mask,
-		const VkPipelineStageFlags2 dst_stage_mask, const VkAccessFlags2 dst_access_mask,
-		const VkImageLayout old_layout, const VkImageLayout new_layout,
-		const uint32_t src_q_fly_idx, const uint32_t dst_q_fly_idx);
+	//void ChangeImageLayout(const VkCommandBuffer cmd_buff,
+	//	const VkPipelineStageFlags2 src_stage_mask, const VkAccessFlags2 src_access_mask,
+	//	const VkPipelineStageFlags2 dst_stage_mask, const VkAccessFlags2 dst_access_mask,
+	//	const VkImageLayout old_layout, const VkImageLayout new_layout,
+	//	const uint32_t src_q_fly_idx, const uint32_t dst_q_fly_idx,
+	//	const VkImageAspectFlags aspect_mask);
 
 	VkImage GetImage() const;
 	VkDescriptorImageInfo GetDescriptorInfo() const;
@@ -56,6 +57,7 @@ public:
 
 	VmaAllocation GetAllocation() const;
 	VmaAllocationInfo2 GetAllocationInfo2() const;
+	VkDeviceSize GetBufferSize() const;
 
 	VkDeviceAddress GetDeviceAddress() const;
 	VkDeviceOrHostAddressConstKHR GetDeviceOrHostAddressConstKHR() const;
@@ -70,6 +72,7 @@ private:
 	VkDeviceAddress mDeviceAddress = 0;
 	VkDeviceOrHostAddressConstKHR mDeviceOrHostAddressConst = { 0 };
 	VkDeviceOrHostAddressKHR mDeviceOrHostAddress = { 0 };
+	VkDeviceSize mSize = 0;
 
 	VmaAllocator mAllocator = nullptr;
 	VkDevice mDevice = VK_NULL_HANDLE;

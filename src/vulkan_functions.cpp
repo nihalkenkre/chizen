@@ -9,6 +9,7 @@ PFN_vkWaitSemaphoresKHR vk_WaitSemaphoresKHR = nullptr;
 PFN_vkCmdBeginRenderingKHR vk_CmdBeginRenderingKHR = nullptr;
 PFN_vkCmdBindDescriptorSets2KHR vk_CmdBindDescriptorSets2KHR = nullptr;
 PFN_vkCmdBindVertexBuffers2EXT vk_CmdBindVertexBuffers2EXT = nullptr;
+PFN_vkCmdBindIndexBuffer2KHR vk_CmdBindIndexBuffer2KHR = nullptr;
 PFN_vkCmdPushConstants2KHR vk_CmdPushConstants2KHR = nullptr;
 PFN_vkCmdEndRenderingKHR vk_CmdEndRenderingKHR = nullptr;
 PFN_vkGetRayTracingShaderGroupHandlesKHR vk_GetRayTracingShaderGroupHandlesKHR = nullptr;
@@ -64,6 +65,11 @@ VKAPI_ATTR void VKAPI_CALL vkCmdBindDescriptorSets2KHR(VkCommandBuffer commandBu
 VKAPI_ATTR void VKAPI_CALL vkCmdBindVertexBuffers2EXT(VkCommandBuffer commandBuffer, uint32_t firstBinding, uint32_t bindingCount, const VkBuffer* pBuffers, const VkDeviceSize* pOffsets, const VkDeviceSize* pSizes, const VkDeviceSize* pStrides)
 {
 	return vk_CmdBindVertexBuffers2EXT(commandBuffer, firstBinding, bindingCount, pBuffers, pOffsets, pSizes, pStrides);
+}
+
+VKAPI_ATTR void VKAPI_CALL vkCmdBindIndexBuffer2KHR(VkCommandBuffer commandBuffer, VkBuffer buffer, VkDeviceSize offset, VkDeviceSize size, VkIndexType indexType)
+{
+	return vk_CmdBindIndexBuffer2KHR(commandBuffer, buffer, offset, size, indexType);
 }
 
 VKAPI_ATTR void VKAPI_CALL vkCmdPushConstants2KHR(VkCommandBuffer commandBuffer, const VkPushConstantsInfo* pPushConstantsInfo)
