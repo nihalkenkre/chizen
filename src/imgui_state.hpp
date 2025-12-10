@@ -13,15 +13,12 @@ public:
 
 	~ImGUIState() noexcept;
 
+	void ProcessEvent(SDL_Event* event);
 	void Render(const VkCommandBuffer cmd_buff);
 
 	bool& GetShouldStartRaytracing();
 	int& GetMaxSamples();
 	int* GetRenderTargetExtent();
-
-	uint32_t GetFileOpenEventType() const;
-	uint32_t GetStartRaytraceEventType() const;
-	uint32_t GetStopRaytraceEventType() const;
 
 private:
 	VkDescriptorPool mDescriptorPool = VK_NULL_HANDLE;
@@ -31,8 +28,5 @@ private:
 	int mMaxSamples = 1024;
 	int mRenderTargetExtent[2] = { 1280, 720 };
 	std::string file_path = {};
-
-	SDL_Event mFileOpenEvent = {};
-	SDL_Event mStartRayTraceEvent = {};
-	SDL_Event mStopRaytraceEvent = {};
+	bool mRaytracingStarted = false;
 };

@@ -400,7 +400,7 @@ const std::vector<VkDescriptorSetLayout>& DisplayPipelineData::GetDescriptorSetL
 Display::Display(const VulkanInterface* vulkan_interface, ImageResource* final_render_target, const std::string& current_path)
 {
 	mFinalRenderTarget = final_render_target;
-	mMaxFramesInFlight = static_cast<uint8_t>(vulkan_interface->GetSwapchain()->GetImagesCount());
+	mMaxFramesInFlight = static_cast<uint8_t>(vulkan_interface->GetSwapchain()->GetImagesCount()) + 2;
 	mExtent = vulkan_interface->GetSurfaceKHR()->GetSurfaceCapabilities().surfaceCapabilities.currentExtent;
 	mSwapchain = vulkan_interface->GetSwapchain();
 	mQueue = vulkan_interface->GetDevice()->GetGraphicsQueue();
@@ -707,7 +707,11 @@ void Display::Render(const float position_offset[], const float zoom_level, ImGU
 	};
 
 	VK_CHECK("q present", vkQueuePresentKHR(mQueue, &present_info));
-	VK_CHECK("gfx q wait idle", vkQueueWaitIdle(mQueue));
+
+	// vkQueueWaitIdle is required for the compute queue to fly. 
+	// Else cmpt queue syncs with the gfx queue, WIERD!!!
+	// Need to check
+	VK_CHECK("gfx q wait idle", vkQueueWaitIdle(mQueue)); 
 
 	mFrameObjects->NextFrame();
 }

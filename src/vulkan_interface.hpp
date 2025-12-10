@@ -25,7 +25,7 @@ public:
 	Allocator* GetAllocator() const;
 	TransferObjects* GetTransferObjects() const;
 
-	void RecreateSwapchain();
+	void RecreateRasterSwapchain();
 
 private:
 	std::unique_ptr<Instance> mInstance;

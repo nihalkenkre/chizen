@@ -22,11 +22,11 @@ public:
 	void ProcessEvent(SDL_Event* event);
 	void RunRasterizer();
 	void RunDisplay();
-	void StartRaytracer();
+	void StartRaytracing();
 	void RecreateRenderTarget();
 	void StopRaytracing();
 
-	void RecreateSwapchain();
+	void RecreateRasterSwapchain();
 
 	VulkanInterface* GetVulkanInterface() const;
 	Rasterizer* GetRasterizer() const;

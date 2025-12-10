@@ -57,9 +57,10 @@ TransferObjects* VulkanInterface::GetTransferObjects() const
 	return mTransferObjects.get();
 }
 
-void VulkanInterface::RecreateSwapchain()
+void VulkanInterface::RecreateRasterSwapchain()
 {
 	VK_CHECK("queue wait idle", vkQueueWaitIdle(mDevice->GetGraphicsQueue()));
+	//VK_CHECK("device wait idle", vkDeviceWaitIdle(mDevice->GetDevice()));
 
 	mSwapchain.reset();
 	mSurface->PopulateSurfaceData(mPhysicalDeviceData->PhysicalDevice);

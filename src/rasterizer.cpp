@@ -433,26 +433,35 @@ const std::vector<VkDescriptorSetLayout>& RasterizerPipelineData::GetDescriptorS
 	return mDescriptorSetLayouts;
 }
 
-Rasterizer::Rasterizer(const VulkanInterface* vulkan_interface, const std::string& current_path, const std::string& name) : mDevice(vulkan_interface->GetDevice()->GetDevice()), mSwapchain(vulkan_interface->GetSwapchain()), mQueue(vulkan_interface->GetDevice()->GetGraphicsQueue())
+Rasterizer::Rasterizer(const VulkanInterface* vulkan_interface, const std::string& current_path, const std::string& name) :
+	mDevice(vulkan_interface->GetDevice()->GetDevice()),
+	mSwapchain(vulkan_interface->GetSwapchain()),
+	mQueue(vulkan_interface->GetDevice()->GetGraphicsQueue()),
+	mAllocator(vulkan_interface->GetAllocator()),
+	mQueueFamilyIndices({
+			vulkan_interface->GetPhysicalDeviceData()->GraphicsQueueFamilyIndex,
+			vulkan_interface->GetPhysicalDeviceData()->ComputeQueueFamilyIndex,
+			vulkan_interface->GetPhysicalDeviceData()->TransferQueueFamilyIndex,
+		}),
+		mExtent({
+				vulkan_interface->GetSurfaceKHR()->GetSurfaceCapabilities().surfaceCapabilities.currentExtent.width,
+				vulkan_interface->GetSurfaceKHR()->GetSurfaceCapabilities().surfaceCapabilities.currentExtent.height,
+			})
 {
-	mMaxFramesInFlight = static_cast<uint8_t>(vulkan_interface->GetSwapchain()->GetImagesCount());
+	mMaxFramesInFlight = static_cast<uint8_t>(vulkan_interface->GetSwapchain()->GetImagesCount()) + 2;
 	mFrameObjects = std::make_unique<FrameObjects>(vulkan_interface->GetDevice()->GetDevice(), vulkan_interface->GetPhysicalDeviceData()->GraphicsQueueFamilyIndex, mMaxFramesInFlight, "rasterizer frame objects");
 	mPipelineData = std::make_unique<RasterizerPipelineData>(vulkan_interface, current_path, "rasterizer pipeline data");
 	mDepthTexture = std::make_unique<ImageResource>(
 		vulkan_interface->GetDevice()->GetDevice(),
 		VkExtent3D{
-			vulkan_interface->GetSurfaceKHR()->GetSurfaceCapabilities().surfaceCapabilities.currentExtent.width,
-			vulkan_interface->GetSurfaceKHR()->GetSurfaceCapabilities().surfaceCapabilities.currentExtent.height,
+			mExtent.width,
+			mExtent.height,
 			1,
 		},
 		VK_FORMAT_D32_SFLOAT, VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT, vulkan_interface->GetAllocator()->GetAllocator(),
-		std::vector<uint32_t>{
-			vulkan_interface->GetPhysicalDeviceData()->GraphicsQueueFamilyIndex,
-			vulkan_interface->GetPhysicalDeviceData()->ComputeQueueFamilyIndex,
-			vulkan_interface->GetPhysicalDeviceData()->TransferQueueFamilyIndex,
-		},
+		mQueueFamilyIndices,
 		"raster depth texture"
-	);
+		);
 
 	mAcquireSignalSemaphores.resize(mMaxFramesInFlight, VK_NULL_HANDLE);
 	mPresentWaitSemaphores.resize(mMaxFramesInFlight, VK_NULL_HANDLE);
@@ -691,7 +700,11 @@ void Rasterizer::Render(const Scene* scene, ImGUIState* imgui_state)
 	};
 
 	VK_CHECK("q present", vkQueuePresentKHR(mQueue, &present_info));
-	//VK_CHECK("gfx q wait idle", vkQueueWaitIdle(mQueue));
+
+	// vkQueueWaitIdle is required for the compute queue to fly. 
+	// Else cmpt queue with the gfx queue, WIERD!!!
+	// Need to check
+	VK_CHECK("gfx q wait idle", vkQueueWaitIdle(mQueue));
 
 	mFrameObjects->NextFrame();
 }
@@ -704,6 +717,21 @@ void Rasterizer::UpdateSwapchain(Swapchain* swapchain)
 void Rasterizer::UpdateExtent(const VkExtent2D& extent)
 {
 	mExtent = extent;
+}
+
+void Rasterizer::RecreateDepthTexture()
+{
+	mDepthTexture = std::make_unique<ImageResource>(
+		mDevice,
+		VkExtent3D{
+			mExtent.width,
+			mExtent.height,
+			1,
+		},
+		VK_FORMAT_D32_SFLOAT, VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT, mAllocator->GetAllocator(),
+		mQueueFamilyIndices,
+		"raster depth texture"
+		);
 }
 
 const std::vector<VkDescriptorSetLayout>& Rasterizer::GetDescriptorSetLayouts() const

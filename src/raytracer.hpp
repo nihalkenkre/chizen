@@ -18,9 +18,9 @@ public:
 	~Raytracer() noexcept;
 
 	void RecreateRenderResources(const VkExtent2D& extent);
-	void Render(bool * is_raytracing, const uint32_t max_samples);
-	void UpdateFinalRenderTarget( ImageResource* FinalRenderTarget);
-	void StopRendering();
+	void Start(const uint32_t max_samples);
+	void UpdateFinalRenderTarget(ImageResource* FinalRenderTarget);
+	void Stop();
 
 private:
 	void InitializeResources();

@@ -5,11 +5,14 @@
 #include "vulkan_objects.hpp"
 #include "display.hpp"
 
+#include "events.hpp"
+
 #define VMA_IMPLEMENTATION
 #include <vma/vk_mem_alloc.h>
 
 #define CGLTF_IMPLEMENTATION
 #include <cgltf.h>
+
 
 SDL_AppResult SDL_AppInit(void** appstate, int argc, char** argv)
 {
@@ -27,6 +30,8 @@ SDL_AppResult SDL_AppInit(void** appstate, int argc, char** argv)
 	*appstate = &app;
 
 	SDL_CHECK(ImGui_ImplSDL3_InitForVulkan(window));
+
+	Events_Initialize();
 
 	return SDL_APP_CONTINUE;
 }
@@ -92,7 +97,7 @@ SDL_AppResult SDL_AppEvent(void* appstate, SDL_Event* event)
 	}
 	else if (event->type == SDL_EVENT_WINDOW_RESIZED)
 	{
-		app->RecreateSwapchain();
+		app->RecreateRasterSwapchain();
 	}
 	else if (event->type == SDL_EVENT_KEY_DOWN)
 	{

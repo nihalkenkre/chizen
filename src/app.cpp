@@ -8,6 +8,7 @@
 #include "vulkan_objects.hpp"
 #include "resources.hpp"
 #include "scene.hpp"
+#include "events.hpp"
 
 App::App(SDL_Window* window, const std::string& current_path) : mWindow(window)
 {
@@ -32,7 +33,7 @@ App::App(SDL_Window* window, const std::string& current_path) : mWindow(window)
 
 void App::ProcessEvent(SDL_Event* event)
 {
-	if (event->type == mImGUIState->GetFileOpenEventType())
+	if (event->type == events.FileOpenEvent.type)
 	{
 		StopRaytracing();
 
@@ -43,11 +44,11 @@ void App::ProcessEvent(SDL_Event* event)
 			mVulkanInterface->GetTransferObjects()->GetQueue(),
 			reinterpret_cast<const char*>(event->user.data1));
 	}
-	else if (event->type == mImGUIState->GetStartRaytraceEventType())
+	else if (event->type == events.StartRaytraceEvent.type)
 	{
 		std::println("start raytrace");
 
-		StopRaytracing();
+		SDL_CHECK(SDL_PushEvent(&events.RaytraceStartedEvent));
 
 		int* tmp_render_target_extent = mImGUIState->GetRenderTargetExtent();
 
@@ -65,12 +66,16 @@ void App::ProcessEvent(SDL_Event* event)
 			mMaxSamples = tmp_max_samples;
 		}
 
-		StartRaytracer();
+		StartRaytracing();
 	}
-	else if (event->type == mImGUIState->GetStopRaytraceEventType())
+	else if (event->type == events.StopRaytraceEvent.type)
 	{
 		std::println("stop raytrace");
 		StopRaytracing();
+	}
+	else
+	{
+		mImGUIState->ProcessEvent(event);
 	}
 }
 
@@ -84,15 +89,10 @@ void App::RunDisplay()
 	mDisplay->Render(mDeltaMousePosition, mZoomLevel, mImGUIState.get());
 }
 
-void App::StartRaytracer()
+void App::StartRaytracing()
 {
-	if (!mIsRaytracing)
-	{
-		mRaytraceThread = std::thread(&Raytracer::Render, mRaytracer.get(), &mIsRaytracing, mMaxSamples);
-		mRaytraceThread.detach();
-		mIsRaytracing = true;
-		mImGUIState->GetShouldStartRaytracing() = false;
-	}
+	mRaytraceThread = std::thread(&Raytracer::Start, mRaytracer.get(), mMaxSamples);
+	mRaytraceThread.detach();
 }
 
 void App::RecreateRenderTarget()
@@ -115,17 +115,18 @@ void App::RecreateRenderTarget()
 
 void App::StopRaytracing()
 {
-	mRaytracer->StopRendering();
-	while (mIsRaytracing) {}
+	mRaytracer->Stop();
+	mIsRaytracing = false;
 }
 
-void App::RecreateSwapchain()
+void App::RecreateRasterSwapchain()
 {
-	mVulkanInterface->RecreateSwapchain();
+	mVulkanInterface->RecreateRasterSwapchain();
 	mDisplay->UpdateSwapchain(mVulkanInterface->GetSwapchain());
 	mDisplay->UpdateExtent(mVulkanInterface->GetSurfaceKHR()->GetSurfaceCapabilities().surfaceCapabilities.currentExtent);
 	mRasterizer->UpdateSwapchain(mVulkanInterface->GetSwapchain());
 	mRasterizer->UpdateExtent(mVulkanInterface->GetSurfaceKHR()->GetSurfaceCapabilities().surfaceCapabilities.currentExtent);
+	mRasterizer->RecreateDepthTexture();
 }
 
 VulkanInterface* App::GetVulkanInterface() const

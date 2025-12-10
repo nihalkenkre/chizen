@@ -22,5 +22,5 @@ void main()
 {
    gl_Position = view_proj.proj * view_proj.view * model.model * vec4(in_pos, 1);
    out_uv = in_uv;
-   out_nrm = in_nrm;
+   out_nrm = normalize((transpose(inverse(model.model)) * vec4(in_nrm, 1)).xyz);
 }
