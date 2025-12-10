@@ -20,6 +20,7 @@ public:
 	~App() noexcept;
 
 	void ProcessEvent(SDL_Event* event);
+	void Iterate();
 	void RunRasterizer();
 	void RunDisplay();
 	void StartRaytracing();
@@ -62,5 +63,5 @@ private:
 	VkExtent2D mRenderTargetExtent = { 1280, 720 };
 	std::thread mRaytraceThread = {};
 	bool mIsTrackingMouse = false;
-	bool mIsRaytracing = false;
+	bool mDisplayRender = false;
 };

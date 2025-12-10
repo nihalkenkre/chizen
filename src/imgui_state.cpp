@@ -57,10 +57,6 @@ ImGUIState::ImGUIState(const VulkanInterface* vulkan_interface) : mDevice(vulkan
 	};
 
 	SDL_CHECK(ImGui_ImplVulkan_Init(&imgui_init_info));
-
-	//mFileOpenEvent.type = SDL_RegisterEvents(3);
-	//mStartRayTraceEvent.type = mFileOpenEvent.type + 1;
-	//mStopRaytraceEvent.type = mStartRayTraceEvent.type + 1;
 }
 
 ImGUIState::~ImGUIState() noexcept
@@ -75,11 +71,11 @@ ImGUIState::~ImGUIState() noexcept
 
 void ImGUIState::ProcessEvent(SDL_Event* event)
 {
-	if (event->type == events.RaytraceStartedEvent.type)
+	if (event->type == events.RaytraceStarted.type)
 	{
 		mRaytracingStarted = true;
 	}
-	else if (event->type == events.RaytraceStoppedEvent.type)
+	else if (event->type == events.RaytraceStopped.type)
 	{
 		mRaytracingStarted = false;
 	}
@@ -107,8 +103,8 @@ void ImGUIState::Render(const VkCommandBuffer cmd_buff)
 		{
 			file_path = ImGuiFileDialog::Instance()->GetFilePathName();
 
-			events.FileOpenEvent.user.data1 = reinterpret_cast<void*>((char*)file_path.c_str());
-			SDL_CHECK(SDL_PushEvent(&events.FileOpenEvent));
+			events.FileOpen.user.data1 = reinterpret_cast<void*>((char*)file_path.c_str());
+			SDL_CHECK(SDL_PushEvent(&events.FileOpen));
 		}
 
 		ImGuiFileDialog::Instance()->Close();
@@ -130,7 +126,7 @@ void ImGUIState::Render(const VkCommandBuffer cmd_buff)
 
 	if (ImGui::Button("Render"))
 	{
-		SDL_CHECK(SDL_PushEvent(&events.StartRaytraceEvent));
+		SDL_CHECK(SDL_PushEvent(&events.StartRaytrace));
 	}
 
 	ImGui::EndDisabled();

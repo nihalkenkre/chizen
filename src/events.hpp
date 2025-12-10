@@ -2,12 +2,12 @@
 
 struct Events
 {
-	SDL_Event FileOpenEvent = {};
-	SDL_Event StartRaytraceEvent = {};
-	SDL_Event StopRaytraceEvent = {};
+	SDL_Event FileOpen = {};
+	SDL_Event StartRaytrace = {};
+	SDL_Event StopRaytrace = {};
 
-	SDL_Event RaytraceStartedEvent = {};
-	SDL_Event RaytraceStoppedEvent = {};
+	SDL_Event RaytraceStarted = {};
+	SDL_Event RaytraceStopped = {};
 };
 
 extern "C" Events events;

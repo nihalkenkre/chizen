@@ -1073,7 +1073,7 @@ void Raytracer::Start(const uint32_t max_samples)
 	vkDestroyAccelerationStructureKHR(mDevice, tlas, nullptr);
 	vkDestroyAccelerationStructureKHR(mDevice, blas, nullptr);
 
-	SDL_CHECK(SDL_PushEvent(&events.RaytraceStoppedEvent));
+	SDL_CHECK(SDL_PushEvent(&events.RaytraceStopped));
 }
 
 void Raytracer::UpdateFinalRenderTarget(ImageResource* FinalRenderTarget)

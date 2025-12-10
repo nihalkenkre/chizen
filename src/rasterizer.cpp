@@ -496,7 +496,7 @@ void Rasterizer::InitializeResources(const VkCommandBuffer cmd_buff, const VkQue
 		cmd_buff,
 		VK_PIPELINE_STAGE_2_TOP_OF_PIPE_BIT, 0,
 		VK_PIPELINE_STAGE_2_BOTTOM_OF_PIPE_BIT, 0,
-		VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_GENERAL,
+		VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_DEPTH_ATTACHMENT_OPTIMAL,
 		VK_QUEUE_FAMILY_IGNORED, VK_QUEUE_FAMILY_IGNORED,
 		VK_IMAGE_ASPECT_DEPTH_BIT,
 		mDepthTexture->GetImage()
@@ -564,7 +564,8 @@ void Rasterizer::Render(const Scene* scene, ImGUIState* imgui_state)
 		VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
 		VK_QUEUE_FAMILY_IGNORED, VK_QUEUE_FAMILY_IGNORED,
 		VK_IMAGE_ASPECT_COLOR_BIT,
-		mSwapchain->GetImages()[img_idx]);
+		mSwapchain->GetImages()[img_idx]
+	);
 
 	VkRenderingAttachmentInfo col_attachs[] = {
 		{
@@ -614,8 +615,8 @@ void Rasterizer::Render(const Scene* scene, ImGUIState* imgui_state)
 
 	const VkViewport viewports[] = {
 		{
-			.width = static_cast<float>(mExtent.width),
-			.height = static_cast<float>(mExtent.height),
+			.width = 1920.f,//static_cast<float>(mExtent.width),
+			.height = 1080.f,//static_cast<float>(mExtent.height),
 			.maxDepth = 1.f,
 		},
 	};
@@ -642,7 +643,8 @@ void Rasterizer::Render(const Scene* scene, ImGUIState* imgui_state)
 		VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL, VK_IMAGE_LAYOUT_PRESENT_SRC_KHR,
 		VK_QUEUE_FAMILY_IGNORED, VK_QUEUE_FAMILY_IGNORED,
 		VK_IMAGE_ASPECT_COLOR_BIT,
-		mSwapchain->GetImages()[img_idx]);
+		mSwapchain->GetImages()[img_idx]
+	);
 
 	VK_CHECK("end rasterizer cmd buff", vkEndCommandBuffer(cmd_buff));
 

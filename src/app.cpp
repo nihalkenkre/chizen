@@ -33,22 +33,23 @@ App::App(SDL_Window* window, const std::string& current_path) : mWindow(window)
 
 void App::ProcessEvent(SDL_Event* event)
 {
-	if (event->type == events.FileOpenEvent.type)
+	if (event->type == events.FileOpen.type)
 	{
-		StopRaytracing();
-
 		std::println("open file {}", reinterpret_cast<const char*>(event->user.data1));
 		mScene = std::make_unique<WorldScene>(mVulkanInterface.get(),
 			mVulkanInterface->GetTransferObjects()->GetCommandBuffer(),
 			mRasterizer->GetDescriptorSetLayouts(),
 			mVulkanInterface->GetTransferObjects()->GetQueue(),
-			reinterpret_cast<const char*>(event->user.data1));
+			reinterpret_cast<const char*>(event->user.data1)
+		);
+
+		mDisplayRender = false;
 	}
-	else if (event->type == events.StartRaytraceEvent.type)
+	else if (event->type == events.StartRaytrace.type)
 	{
 		std::println("start raytrace");
 
-		SDL_CHECK(SDL_PushEvent(&events.RaytraceStartedEvent));
+		SDL_CHECK(SDL_PushEvent(&events.RaytraceStarted));
 
 		int* tmp_render_target_extent = mImGUIState->GetRenderTargetExtent();
 
@@ -68,15 +69,25 @@ void App::ProcessEvent(SDL_Event* event)
 
 		StartRaytracing();
 	}
-	else if (event->type == events.StopRaytraceEvent.type)
+	else if (event->type == events.StopRaytrace.type)
 	{
 		std::println("stop raytrace");
 		StopRaytracing();
 	}
-	else
+	else if (event->type == events.RaytraceStarted.type)
 	{
-		mImGUIState->ProcessEvent(event);
+		mDisplayRender = true;
 	}
+
+	mImGUIState->ProcessEvent(event);
+}
+
+void App::Iterate()
+{
+	if (mDisplayRender)
+		RunDisplay();
+	else
+		RunRasterizer();
 }
 
 void App::RunRasterizer()
@@ -116,7 +127,6 @@ void App::RecreateRenderTarget()
 void App::StopRaytracing()
 {
 	mRaytracer->Stop();
-	mIsRaytracing = false;
 }
 
 void App::RecreateRasterSwapchain()
@@ -181,7 +191,7 @@ uint32_t& App::GetMaxSamples()
 
 bool& App::IsRaytracing()
 {
-	return mIsRaytracing;
+	return mDisplayRender;
 }
 
 VkExtent2D& App::GetRenderTargetExtent()

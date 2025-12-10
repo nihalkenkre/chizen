@@ -57,39 +57,33 @@ SDL_AppResult SDL_AppEvent(void* appstate, SDL_Event* event)
 		app->StopRaytracing();
 		return SDL_APP_SUCCESS;
 	}
-	else if (event->type == SDL_EVENT_MOUSE_BUTTON_DOWN)
+	else if (event->type == SDL_EVENT_MOUSE_BUTTON_DOWN &&
+		event->button.button == 1 &&
+		!io.WantCaptureMouse)
 	{
-		if (!io.WantCaptureMouse)
-		{
-			is_tracking_mouse = true;
+		is_tracking_mouse = true;
 
-			last_mouse_position[0] = event->motion.x;
-			last_mouse_position[1] = event->motion.y;
-		}
+		last_mouse_position[0] = event->motion.x;
+		last_mouse_position[1] = event->motion.y;
 	}
-	else if (event->type == SDL_EVENT_MOUSE_MOTION)
+	else if (event->type == SDL_EVENT_MOUSE_MOTION &&
+		!io.WantCaptureMouse &&
+		is_tracking_mouse)
 	{
-		if (!io.WantCaptureMouse)
-		{
-			if (is_tracking_mouse)
-			{
-				delta_mouse_position[0] += ((last_mouse_position[0] - event->motion.x) / static_cast<float>(app->GetVulkanInterface()->GetSurfaceKHR()->GetSurfaceCapabilities().surfaceCapabilities.currentExtent.width)) * 2;
-				delta_mouse_position[1] += ((last_mouse_position[1] - event->motion.y) / static_cast<float>(app->GetVulkanInterface()->GetSurfaceKHR()->GetSurfaceCapabilities().surfaceCapabilities.currentExtent.height)) * 2;
+		delta_mouse_position[0] += ((last_mouse_position[0] - event->motion.x) / 1920.f) * 2;
+		delta_mouse_position[1] += ((last_mouse_position[1] - event->motion.y) / 1080.f) * 2;
 
-				last_mouse_position[0] = event->motion.x;
-				last_mouse_position[1] = event->motion.y;
-			}
-		}
+		last_mouse_position[0] = event->motion.x;
+		last_mouse_position[1] = event->motion.y;
 	}
-	else if (event->type == SDL_EVENT_MOUSE_BUTTON_UP)
+	else if (event->type == SDL_EVENT_MOUSE_BUTTON_UP &&
+		event->button.button == 1 &&
+		!io.WantCaptureMouse)
 	{
-		if (!io.WantCaptureMouse)
-		{
-			last_mouse_position[0] = 0;
-			last_mouse_position[1] = 0;
+		last_mouse_position[0] = 0;
+		last_mouse_position[1] = 0;
 
-			is_tracking_mouse = false;
-		}
+		is_tracking_mouse = false;
 	}
 	else if (event->type == SDL_EVENT_MOUSE_WHEEL)
 	{
@@ -122,7 +116,7 @@ SDL_AppResult SDL_AppIterate(void* appstate)
 		return SDL_APP_CONTINUE;
 	}
 
-	app->RunRasterizer();
+	app->Iterate();
 
 	return SDL_APP_CONTINUE;
 }

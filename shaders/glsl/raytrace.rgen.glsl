@@ -1,6 +1,5 @@
 #version 460
 #extension GL_EXT_ray_tracing : enable
-#extension GL_EXT_shader_image_load_formatted : enable
 
 layout(set=0, binding=0, rgba32f) uniform image2D accum_target;
 layout(set=0, binding=1, rgba32f) uniform writeonly image2D final_render;

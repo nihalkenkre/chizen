@@ -438,7 +438,7 @@ VkDescriptorPool WorldScene::Mesh::Primitive::GetDescriptorPool() const
 
 WorldScene::CameraInstance::CameraInstance()
 {
-	mViewMatrix = glm::lookAt(glm::vec3(-1, 2, 15), glm::vec3(0, 0, 0), glm::vec3(0, 1, 0));
+	mViewMatrix = glm::lookAt(glm::vec3(-1, 2, 5), glm::vec3(0, 0, 0), glm::vec3(0, 1, 0));
 	mCameraIndex = 0;
 }
 
