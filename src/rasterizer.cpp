@@ -615,8 +615,10 @@ void Rasterizer::Render(const Scene* scene, ImGUIState* imgui_state)
 
 	const VkViewport viewports[] = {
 		{
+			//.y = 1080.f,
 			.width = 1920.f,//static_cast<float>(mExtent.width),
 			.height = 1080.f,//static_cast<float>(mExtent.height),
+			.minDepth = 0.f,
 			.maxDepth = 1.f,
 		},
 	};

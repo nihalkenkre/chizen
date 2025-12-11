@@ -6,7 +6,7 @@
 
 #include <cgltf.h>
 
-WorldScene::WorldScene(const VulkanInterface* vulkan_interface, const VkCommandBuffer cmd_buff, const std::vector<VkDescriptorSetLayout>& desc_set_layouts, const VkQueue queue, const std::string& path)
+WorldScene::WorldScene(const VulkanInterface* vulkan_interface, const VkCommandBuffer cmd_buff, const std::vector<VkDescriptorSetLayout>& desc_set_layouts, const VkQueue queue, const std::string& path) : mDevice(vulkan_interface->GetDevice()->GetDevice())
 {
 	cgltf_options options = {};
 	cgltf_data* gltf = nullptr;
@@ -72,11 +72,11 @@ WorldScene::WorldScene(const VulkanInterface* vulkan_interface, const VkCommandB
 		.pPoolSizes = pool_sizes,
 	};
 
-	VK_CHECK("create view proj desc pool", vkCreateDescriptorPool(device, &dsp_ci, nullptr, &view_proj_desc_pool));
+	VK_CHECK("create view proj desc pool", vkCreateDescriptorPool(device, &dsp_ci, nullptr, &mViewProjDescPool));
 
 	const VkDescriptorSetAllocateInfo ds_ai = {
 		.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO,
-		.descriptorPool = view_proj_desc_pool,
+		.descriptorPool = mViewProjDescPool,
 		.descriptorSetCount = 1,
 		.pSetLayouts = &desc_set_layouts[0],
 	};
@@ -96,7 +96,7 @@ WorldScene::WorldScene(const VulkanInterface* vulkan_interface, const VkCommandB
 	vkUpdateDescriptorSets(device, 1, &view_proj_desc_write, 0, nullptr);
 
 #ifdef _DEBUG
-	Utils_SetObjectName(device, VK_OBJECT_TYPE_DESCRIPTOR_POOL, reinterpret_cast<uint64_t>(view_proj_desc_pool), "view proj desc pool");
+	Utils_SetObjectName(device, VK_OBJECT_TYPE_DESCRIPTOR_POOL, reinterpret_cast<uint64_t>(mViewProjDescPool), "view proj desc pool");
 	Utils_SetObjectName(device, VK_OBJECT_TYPE_DESCRIPTOR_SET, reinterpret_cast<uint64_t>(view_proj_desc_set), "view proj desc set");
 #endif // _DEBUG
 }
@@ -104,7 +104,9 @@ WorldScene::WorldScene(const VulkanInterface* vulkan_interface, const VkCommandB
 WorldScene::~WorldScene() noexcept
 {
 	if (mDevice != VK_NULL_HANDLE)
-		vkDestroyDescriptorPool(mDevice, view_proj_desc_pool, nullptr);
+	{
+		vkDestroyDescriptorPool(mDevice, mViewProjDescPool, nullptr);
+	}
 }
 
 void WorldScene::Render(const VkDevice device, const VkCommandBuffer cmd_buff, const VkPipelineLayout pipeline_layout, const uint32_t cam_index) const
@@ -176,29 +178,7 @@ WorldScene::MeshInstance::MeshInstance(const cgltf_data* gltf, const cgltf_node*
 {
 	mMeshIndex = static_cast<uint32_t>(cgltf_mesh_index(gltf, node->mesh));
 
-	if (node->has_matrix)
-	{
-		mTransformMatrix = glm::make_mat4(node->matrix);
-	}
-	else
-	{
-		if (node->has_translation)
-		{
-			mTransformMatrix = glm::translate(mTransformMatrix, glm::make_vec3(node->translation));
-		}
-
-		if (node->has_rotation)
-		{
-			auto rot_quat = glm::make_quat(node->rotation);
-			auto axis = glm::axis(rot_quat);
-			mTransformMatrix = glm::rotate(mTransformMatrix, glm::angle(rot_quat), axis);
-		}
-
-		if (node->has_scale)
-		{
-			mTransformMatrix = glm::scale(mTransformMatrix, glm::make_vec3(node->scale));
-		}
-	}
+	mTransformMatrix = Utils_GetTransformForGLTFNode(node);
 
 	mModelMatrixBuffer = std::make_unique<BufferResource>(device, allocator, sizeof(mTransformMatrix),
 		VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT,
@@ -438,37 +418,14 @@ VkDescriptorPool WorldScene::Mesh::Primitive::GetDescriptorPool() const
 
 WorldScene::CameraInstance::CameraInstance()
 {
-	mViewMatrix = glm::lookAt(glm::vec3(-1, 2, 5), glm::vec3(0, 0, 0), glm::vec3(0, 1, 0));
 	mCameraIndex = 0;
+	mTransformMatrix = glm::lookAt(glm::vec3(10, 10, 10), glm::vec3(0, 0, 0), glm::vec3(0, 1, 0));
 }
 
 WorldScene::CameraInstance::CameraInstance(const cgltf_data* gltf, const cgltf_node* node)
 {
 	mCameraIndex = static_cast<uint32_t>(cgltf_camera_index(gltf, node->camera));
-
-	if (node->has_matrix)
-	{
-		mViewMatrix = glm::make_mat4(node->matrix);
-	}
-	else
-	{
-		if (node->has_translation)
-		{
-			mViewMatrix = glm::translate(mViewMatrix, glm::make_vec3(node->translation));
-		}
-
-		if (node->has_rotation)
-		{
-			auto rot_quat = glm::make_quat(node->rotation);
-			auto axis = glm::axis(rot_quat);
-			mViewMatrix = glm::rotate(mViewMatrix, glm::angle(rot_quat), axis);
-		}
-
-		if (node->has_scale)
-		{
-			mViewMatrix = glm::scale(mViewMatrix, glm::make_vec3(node->scale));
-		}
-	}
+	mTransformMatrix = glm::inverse(Utils_GetTransformForGLTFNode(node));
 }
 
 uint32_t WorldScene::CameraInstance::GetCameraIndex() const
@@ -478,7 +435,7 @@ uint32_t WorldScene::CameraInstance::GetCameraIndex() const
 
 glm::mat4 WorldScene::CameraInstance::GetViewMatrix() const
 {
-	return mViewMatrix;
+	return mTransformMatrix;
 }
 
 WorldScene::Camera::Camera()

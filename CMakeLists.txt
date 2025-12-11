@@ -9,12 +9,10 @@ list(FILTER PROJECT_SRCS EXCLUDE REGEX "imgui.ini")
 file(GLOB IMGUI_SRCS imgui/*.cpp imgui/*.h imgui/backends/imgui_impl_sdl3.* imgui/backends/imgui_impl_vulkan.*)
 file(GLOB IMGUI_FILE_DLG_SRCS ImGuiFileDialog/ImGuiFileDialog*.*)
 
-source_group("Shaders/GLSL" FILES ${GLSL_SHADER_SRCS})
-source_group("Shaders/Slang" FILES ${SLANG_SHADER_SRCS})
 source_group("ImGui" FILES ${IMGUI_SRCS})
 source_group("ImGuiFileDialog" FILES ${IMGUI_FILE_DLG_SRCS})
 
-add_compile_definitions(_HAS_EXCEPTIONS=0 SDL_MAIN_USE_CALLBACKS IMGUI_DEFINE_MATH_OPERATORS _CRT_SECURE_NO_WARNINGS GLM_FORCE_DEPTH_ZERO_TO_ONE)
+add_compile_definitions(_HAS_EXCEPTIONS=0 SDL_MAIN_USE_CALLBACKS IMGUI_DEFINE_MATH_OPERATORS _CRT_SECURE_NO_WARNINGS GLM_FORCE_DEPTH_ZERO_TO_ONE GLM_ENABLE_EXPERIMENTAL )
 
 if (CMAKE_CXX_COMPILER_ID MATCHES "MSVC")
    set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} /EHs-c-")

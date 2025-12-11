@@ -61,7 +61,6 @@ ImGUIState::ImGUIState(const VulkanInterface* vulkan_interface) : mDevice(vulkan
 
 ImGUIState::~ImGUIState() noexcept
 {
-	ImGui_ImplSDL3_Shutdown();
 	ImGui_ImplVulkan_Shutdown();
 	ImGui::DestroyContext();
 

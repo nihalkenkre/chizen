@@ -33,7 +33,58 @@ App::App(SDL_Window* window, const std::string& current_path) : mWindow(window)
 
 void App::ProcessEvent(SDL_Event* event)
 {
-	if (event->type == events.FileOpen.type)
+	ImGuiIO& io = ImGui::GetIO();
+
+	if (event->type == SDL_EVENT_MOUSE_BUTTON_DOWN &&
+		!io.WantCaptureMouse)
+	{
+		if (event->button.button == 1)
+		{
+			mIsTrackingMouse = true;
+
+			mLastMousePosition[0] = event->motion.x;
+			mLastMousePosition[1] = event->motion.y;
+		}
+		else if (event->button.button == 2)
+		{
+			mDisplayRender = !mDisplayRender;
+		}
+	}
+	else if (event->type == SDL_EVENT_MOUSE_MOTION &&
+		!io.WantCaptureMouse &&
+		mIsTrackingMouse)
+	{
+		mDeltaMousePosition[0] += ((mLastMousePosition[0] - event->motion.x) / 1920.f) * 2;
+		mDeltaMousePosition[1] += ((mLastMousePosition[1] - event->motion.y) / 1080.f) * 2;
+
+		mLastMousePosition[0] = event->motion.x;
+		mLastMousePosition[1] = event->motion.y;
+	}
+	else if (event->type == SDL_EVENT_MOUSE_BUTTON_UP &&
+		event->button.button == 1 &&
+		!io.WantCaptureMouse)
+	{
+		mLastMousePosition[0] = 0;
+		mLastMousePosition[1] = 0;
+
+		mIsTrackingMouse = false;
+	}
+	else if (event->type == SDL_EVENT_MOUSE_WHEEL)
+	{
+		mZoomLevel = std::max(0.01f, mZoomLevel + event->wheel.y / 20.f);
+	}
+	else if (event->type == SDL_EVENT_WINDOW_RESIZED)
+	{
+		RecreateRasterSwapchain();
+	}
+	else if (event->type == SDL_EVENT_KEY_DOWN)
+	{
+		if (event->key.key == SDLK_ESCAPE)
+		{
+			StopRaytracing();
+		}
+	}
+	else if (event->type == events.FileOpen.type)
 	{
 		std::println("open file {}", reinterpret_cast<const char*>(event->user.data1));
 		mScene = std::make_unique<WorldScene>(mVulkanInterface.get(),

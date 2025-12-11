@@ -112,3 +112,33 @@ void Utils_SetObjectName(const VkDevice device, const VkObjectType type, const u
 	VK_CHECK("setting name", vkSetDebugUtilsObjectNameEXT(device, &name_info));
 }
 
+glm::mat4 Utils_GetTransformForGLTFNode(const cgltf_node* node)
+{
+	glm::mat4 xform = glm::mat4(1.f);
+
+	if (node->has_matrix)
+	{
+		xform = glm::make_mat4(node->matrix);
+	}
+	else
+	{
+		if (node->has_translation)
+		{
+			xform = glm::translate(xform, glm::make_vec3(node->translation));
+		}
+
+		if (node->has_rotation)
+		{
+			auto rot_quat = glm::make_quat(node->rotation);
+			xform = glm::rotate(xform, glm::angle(rot_quat), glm::axis(rot_quat));
+		}
+
+		if (node->has_scale)
+		{
+			xform = glm::scale(xform, glm::make_vec3(node->scale));
+		}
+	}
+
+	return xform;
+}
+

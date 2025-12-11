@@ -44,3 +44,4 @@ void Utils_InsertMemoryBarrier(
 );
 
 void Utils_SetObjectName(const VkDevice device, const VkObjectType type, const uint64_t handle, const std::string& name);
+glm::mat4 Utils_GetTransformForGLTFNode(const cgltf_node* node);

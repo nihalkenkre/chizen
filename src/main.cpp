@@ -44,63 +44,13 @@ SDL_AppResult SDL_AppEvent(void* appstate, SDL_Event* event)
 		return SDL_APP_CONTINUE;
 	}
 
-	ImGui_ImplSDL3_ProcessEvent(event);
-	ImGuiIO& io = ImGui::GetIO();
-
-	float* delta_mouse_position = app->GetDeltaMousePosition();
-	float* last_mouse_position = app->GetLastMousePosition();
-	bool& is_tracking_mouse = app->IsTrackingMouse();
-	float& zoom_level = app->GetZoomLevel();
-
 	if (event->type == SDL_EVENT_QUIT)
 	{
 		app->StopRaytracing();
 		return SDL_APP_SUCCESS;
 	}
-	else if (event->type == SDL_EVENT_MOUSE_BUTTON_DOWN &&
-		event->button.button == 1 &&
-		!io.WantCaptureMouse)
-	{
-		is_tracking_mouse = true;
-
-		last_mouse_position[0] = event->motion.x;
-		last_mouse_position[1] = event->motion.y;
-	}
-	else if (event->type == SDL_EVENT_MOUSE_MOTION &&
-		!io.WantCaptureMouse &&
-		is_tracking_mouse)
-	{
-		delta_mouse_position[0] += ((last_mouse_position[0] - event->motion.x) / 1920.f) * 2;
-		delta_mouse_position[1] += ((last_mouse_position[1] - event->motion.y) / 1080.f) * 2;
-
-		last_mouse_position[0] = event->motion.x;
-		last_mouse_position[1] = event->motion.y;
-	}
-	else if (event->type == SDL_EVENT_MOUSE_BUTTON_UP &&
-		event->button.button == 1 &&
-		!io.WantCaptureMouse)
-	{
-		last_mouse_position[0] = 0;
-		last_mouse_position[1] = 0;
-
-		is_tracking_mouse = false;
-	}
-	else if (event->type == SDL_EVENT_MOUSE_WHEEL)
-	{
-		zoom_level = std::max(0.01f, zoom_level + event->wheel.y / 20.f);
-	}
-	else if (event->type == SDL_EVENT_WINDOW_RESIZED)
-	{
-		app->RecreateRasterSwapchain();
-	}
-	else if (event->type == SDL_EVENT_KEY_DOWN)
-	{
-		if (event->key.key == SDLK_ESCAPE)
-		{
-			app->StopRaytracing();
-		}
-	}
 	else {
+		ImGui_ImplSDL3_ProcessEvent(event);
 		app->ProcessEvent(event);
 	}
 
@@ -123,4 +73,5 @@ SDL_AppResult SDL_AppIterate(void* appstate)
 
 void SDL_AppQuit(void* appstate, SDL_AppResult result)
 {
+	ImGui_ImplSDL3_Shutdown();
 }

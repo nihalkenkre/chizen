@@ -7,6 +7,7 @@ class Scene
 {
 public:
 	virtual void Render(const VkDevice device, const VkCommandBuffer cmd_buff, const VkPipelineLayout pipeline_layout, const uint32_t cam_index) const = 0;
+	virtual ~Scene() noexcept {}
 };
 
 class EmptyScene : public Scene
@@ -24,7 +25,7 @@ public:
 	WorldScene(const WorldScene& other) = delete;
 	WorldScene& operator=(const WorldScene& other) = delete;
 
-	~WorldScene() noexcept;
+	~WorldScene() noexcept override;
 
 	class MeshInstance
 	{
@@ -108,7 +109,7 @@ public:
 
 	private:
 		uint32_t mCameraIndex = -1;
-		glm::mat4 mViewMatrix = glm::mat4(1.f);
+		glm::mat4 mTransformMatrix = glm::mat4(1.f);
 	};
 
 	class Camera
@@ -136,7 +137,7 @@ private:
 	std::vector<std::unique_ptr<WorldScene::Mesh>> mMeshes;
 	std::unique_ptr<BufferResource> mViewProjBuffer = nullptr;
 	VkDescriptorSet view_proj_desc_set = VK_NULL_HANDLE;
-	VkDescriptorPool view_proj_desc_pool = VK_NULL_HANDLE;
+	VkDescriptorPool mViewProjDescPool = VK_NULL_HANDLE;
 
 	VkDevice mDevice = VK_NULL_HANDLE;
 };
