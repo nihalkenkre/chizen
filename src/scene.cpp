@@ -30,7 +30,9 @@ WorldScene::WorldScene(const VulkanInterface* vulkan_interface, const VkCommandB
 		}
 		else if (curr_node->camera != nullptr)
 		{
-			mCameraInstances.push_back(std::make_unique<WorldScene::CameraInstance>(gltf, curr_node));
+			auto camera = std::make_unique<WorldScene::CameraInstance>(gltf, curr_node);
+			mCameraNames.push_back(camera->GetName().c_str());
+			mCameraInstances.push_back(std::move(camera));
 		}
 	}
 
@@ -50,11 +52,13 @@ WorldScene::WorldScene(const VulkanInterface* vulkan_interface, const VkCommandB
 
 	mViewProjBuffer = std::make_unique<BufferResource>(device, allocator, sizeof(glm::mat4) * 2,
 		VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT, VMA_ALLOCATION_CREATE_HOST_ACCESS_SEQUENTIAL_WRITE_BIT | VMA_ALLOCATION_CREATE_MAPPED_BIT,
-		VMA_MEMORY_USAGE_AUTO_PREFER_HOST, "view proj buffer");
+		VMA_MEMORY_USAGE_AUTO_PREFER_HOST, "view proj uniform");
 
 	if (mCameraInstances.size() == 0)
 	{
-		mCameraInstances.push_back(std::make_unique<WorldScene::CameraInstance>());
+		auto camera_instance = std::make_unique<WorldScene::CameraInstance>();
+		mCameraNames.push_back(camera_instance->GetName().c_str());
+		mCameraInstances.push_back(std::move(camera_instance));
 		mCameras.push_back(std::make_unique<WorldScene::Camera>());
 	}
 
@@ -164,14 +168,28 @@ void WorldScene::Render(const VkDevice device, const VkCommandBuffer cmd_buff, c
 			const VkDeviceSize offsets[] = { 0,0,0 };
 
 			vkCmdBindVertexBuffers2EXT(cmd_buff, 0, 3, buffers, offsets, nullptr, nullptr);
-			vkCmdBindIndexBuffer2KHR(cmd_buff,
-				curr_prim->GetIndicesBuffer()->GetDescriptorInfo().buffer, 0,
-				curr_prim->GetIndicesBuffer()->GetBufferSize(),
-				curr_prim->GetIndexType()
-			);
-			vkCmdDrawIndexed(cmd_buff, curr_prim->GetIndicesCount(), 1, 0, 0, 0);
+
+			if (curr_prim->GetIndicesBuffer() != nullptr)
+			{
+				vkCmdBindIndexBuffer2KHR(cmd_buff,
+					curr_prim->GetIndicesBuffer()->GetDescriptorInfo().buffer, 0,
+					curr_prim->GetIndicesBuffer()->GetBufferSize(),
+					curr_prim->GetIndexType()
+				);
+
+				vkCmdDrawIndexed(cmd_buff, curr_prim->GetIndicesCount(), 1, 0, 0, 0);
+			}
+			else
+			{
+				vkCmdDraw(cmd_buff, curr_prim->GetVertexCount(), 1, 0, 0);
+			}
 		}
 	}
+}
+
+const std::vector<const char*>& WorldScene::GetCameraNames() const
+{
+	return mCameraNames;
 }
 
 WorldScene::MeshInstance::MeshInstance(const cgltf_data* gltf, const cgltf_node* node, const VkDevice device, const VmaAllocator allocator, const VkDescriptorSetLayout desc_set_layout, const VkCommandBuffer cmd_buff, const VkQueue queue) : mDevice(device)
@@ -182,13 +200,13 @@ WorldScene::MeshInstance::MeshInstance(const cgltf_data* gltf, const cgltf_node*
 
 	mModelMatrixBuffer = std::make_unique<BufferResource>(device, allocator, sizeof(mTransformMatrix),
 		VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT,
-		0, VMA_MEMORY_USAGE_AUTO_PREFER_DEVICE, std::string(node->name == nullptr ? "node" : node->name).append(" xform buffer"));
+		0, VMA_MEMORY_USAGE_AUTO_PREFER_DEVICE, std::string(node->name == nullptr ? "node" : node->name).append(" xform"));
 	auto staging_buffer = std::make_unique<BufferResource>(
 		device,
 		allocator,
 		sizeof(glm::mat4), VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
 		VMA_ALLOCATION_CREATE_HOST_ACCESS_SEQUENTIAL_WRITE_BIT | VMA_ALLOCATION_CREATE_MAPPED_BIT,
-		VMA_MEMORY_USAGE_AUTO_PREFER_HOST, std::string("instance staging buffer"));
+		VMA_MEMORY_USAGE_AUTO_PREFER_HOST, std::string("instance staging"));
 	std::memcpy(
 		staging_buffer->GetAllocationInfo2().allocationInfo.pMappedData,
 		&mTransformMatrix,
@@ -294,31 +312,32 @@ WorldScene::Mesh::Primitive::Primitive(const cgltf_data* gltf, const cgltf_primi
 		{
 			mPositionsBuffer = std::make_unique<BufferResource>(device, allocator, curr_attr->data->buffer_view->size,
 				VK_BUFFER_USAGE_VERTEX_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT, 0,
-				VMA_MEMORY_USAGE_AUTO_PREFER_DEVICE, std::string(name).append(" positions buffer"));
+				VMA_MEMORY_USAGE_AUTO_PREFER_DEVICE, std::string(name).append(" positions"));
 			auto staging_buffer = std::make_unique<BufferResource>(
 				device,
 				allocator,
 				curr_attr->data->buffer_view->size, VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
 				VMA_ALLOCATION_CREATE_HOST_ACCESS_SEQUENTIAL_WRITE_BIT | VMA_ALLOCATION_CREATE_MAPPED_BIT,
-				VMA_MEMORY_USAGE_AUTO_PREFER_HOST, std::string("positions staging buffer"));
+				VMA_MEMORY_USAGE_AUTO_PREFER_HOST, std::string("positions staging"));
 			std::memcpy(
 				staging_buffer->GetAllocationInfo2().allocationInfo.pMappedData,
 				reinterpret_cast<uint8_t*>(curr_attr->data->buffer_view->buffer->data) + curr_attr->data->buffer_view->offset + curr_attr->data->offset,
 				curr_attr->data->buffer_view->size
 			);
 			staging_buffer->CopyToBuffer(cmd_buff, queue, mPositionsBuffer->GetDescriptorInfo().buffer, curr_attr->data->buffer_view->size);
+			mVertexCount = static_cast<uint32_t>(curr_attr->data->count);
 		}
 		else if (std::string(curr_attr->name) == std::string("TEXCOORD_0"))
 		{
 			mTexCoordsBuffer = std::make_unique<BufferResource>(device, allocator, curr_attr->data->buffer_view->size,
 				VK_BUFFER_USAGE_VERTEX_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT, 0,
-				VMA_MEMORY_USAGE_AUTO_PREFER_DEVICE, std::string(name).append(" texcoords buffer"));
+				VMA_MEMORY_USAGE_AUTO_PREFER_DEVICE, std::string(name).append(" texcoords"));
 			auto staging_buffer = std::make_unique<BufferResource>(
 				device,
 				allocator,
 				curr_attr->data->buffer_view->size, VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
 				VMA_ALLOCATION_CREATE_HOST_ACCESS_SEQUENTIAL_WRITE_BIT | VMA_ALLOCATION_CREATE_MAPPED_BIT,
-				VMA_MEMORY_USAGE_AUTO_PREFER_HOST, std::string("texcoords staging buffer"));
+				VMA_MEMORY_USAGE_AUTO_PREFER_HOST, std::string("texcoords staging"));
 			std::memcpy(
 				staging_buffer->GetAllocationInfo2().allocationInfo.pMappedData,
 				reinterpret_cast<uint8_t*>(curr_attr->data->buffer_view->buffer->data) + curr_attr->data->buffer_view->offset + curr_attr->data->offset,
@@ -330,13 +349,13 @@ WorldScene::Mesh::Primitive::Primitive(const cgltf_data* gltf, const cgltf_primi
 		{
 			mNormalsBuffer = std::make_unique<BufferResource>(device, allocator, curr_attr->data->buffer_view->size,
 				VK_BUFFER_USAGE_VERTEX_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT, 0,
-				VMA_MEMORY_USAGE_AUTO_PREFER_DEVICE, std::string(name).append(" normals buffer"));
+				VMA_MEMORY_USAGE_AUTO_PREFER_DEVICE, std::string(name).append(" normals"));
 			auto staging_buffer = std::make_unique<BufferResource>(
 				device,
 				allocator,
 				curr_attr->data->buffer_view->size, VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
 				VMA_ALLOCATION_CREATE_HOST_ACCESS_SEQUENTIAL_WRITE_BIT | VMA_ALLOCATION_CREATE_MAPPED_BIT,
-				VMA_MEMORY_USAGE_AUTO_PREFER_HOST, std::string("normals staging buffer"));
+				VMA_MEMORY_USAGE_AUTO_PREFER_HOST, std::string("normals staging"));
 			std::memcpy(
 				staging_buffer->GetAllocationInfo2().allocationInfo.pMappedData,
 				reinterpret_cast<uint8_t*>(curr_attr->data->buffer_view->buffer->data) + curr_attr->data->buffer_view->offset + curr_attr->data->offset,
@@ -346,29 +365,46 @@ WorldScene::Mesh::Primitive::Primitive(const cgltf_data* gltf, const cgltf_primi
 		}
 	}
 
-	mIndicesCount = static_cast<uint32_t>(primitive->indices->count);
-
-	if (primitive->indices->component_type == cgltf_component_type_r_32u)
+	if (mTexCoordsBuffer == nullptr)
 	{
-		mIndexType = VK_INDEX_TYPE_UINT32;
+		mTexCoordsBuffer = std::make_unique<BufferResource>(device, allocator, mVertexCount * sizeof(float) * 2,
+			VK_BUFFER_USAGE_VERTEX_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT, 0,
+			VMA_MEMORY_USAGE_AUTO_PREFER_DEVICE, std::string(name).append(" texcoords"));
 	}
 
+	if (mNormalsBuffer == nullptr)
 	{
-		mIndicesBuffer = std::make_unique<BufferResource>(device, allocator, primitive->indices->buffer_view->size,
-			VK_BUFFER_USAGE_INDEX_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT, 0,
-			VMA_MEMORY_USAGE_AUTO_PREFER_DEVICE, std::string(name).append(" indices buffer"));
-		auto staging_buffer = std::make_unique<BufferResource>(
-			device,
-			allocator,
-			primitive->indices->buffer_view->size, VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
-			VMA_ALLOCATION_CREATE_HOST_ACCESS_SEQUENTIAL_WRITE_BIT | VMA_ALLOCATION_CREATE_MAPPED_BIT,
-			VMA_MEMORY_USAGE_AUTO_PREFER_HOST, std::string("indices staging buffer"));
-		std::memcpy(
-			staging_buffer->GetAllocationInfo2().allocationInfo.pMappedData,
-			reinterpret_cast<uint8_t*>(primitive->indices->buffer_view->buffer->data) + primitive->indices->buffer_view->offset + primitive->indices->offset,
-			primitive->indices->buffer_view->size
-		);
-		staging_buffer->CopyToBuffer(cmd_buff, queue, mIndicesBuffer->GetDescriptorInfo().buffer, primitive->indices->buffer_view->size);
+		mNormalsBuffer = std::make_unique<BufferResource>(device, allocator,  mVertexCount * sizeof(float) * 3,
+			VK_BUFFER_USAGE_VERTEX_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT, 0,
+			VMA_MEMORY_USAGE_AUTO_PREFER_DEVICE, std::string(name).append(" normals"));
+	}
+
+	if (primitive->indices != nullptr)
+	{
+		mIndicesCount = static_cast<uint32_t>(primitive->indices->count);
+
+		if (primitive->indices->component_type == cgltf_component_type_r_32u)
+		{
+			mIndexType = VK_INDEX_TYPE_UINT32;
+		}
+
+		{
+			mIndicesBuffer = std::make_unique<BufferResource>(device, allocator, primitive->indices->buffer_view->size,
+				VK_BUFFER_USAGE_INDEX_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT, 0,
+				VMA_MEMORY_USAGE_AUTO_PREFER_DEVICE, std::string(name).append(" indices"));
+			auto staging_buffer = std::make_unique<BufferResource>(
+				device,
+				allocator,
+				primitive->indices->buffer_view->size, VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
+				VMA_ALLOCATION_CREATE_HOST_ACCESS_SEQUENTIAL_WRITE_BIT | VMA_ALLOCATION_CREATE_MAPPED_BIT,
+				VMA_MEMORY_USAGE_AUTO_PREFER_HOST, std::string("indices staging"));
+			std::memcpy(
+				staging_buffer->GetAllocationInfo2().allocationInfo.pMappedData,
+				reinterpret_cast<uint8_t*>(primitive->indices->buffer_view->buffer->data) + primitive->indices->buffer_view->offset + primitive->indices->offset,
+				primitive->indices->buffer_view->size
+			);
+			staging_buffer->CopyToBuffer(cmd_buff, queue, mIndicesBuffer->GetDescriptorInfo().buffer, primitive->indices->buffer_view->size);
+		}
 	}
 }
 
@@ -406,6 +442,11 @@ uint32_t WorldScene::Mesh::Primitive::GetIndicesCount() const
 	return mIndicesCount;
 }
 
+uint32_t WorldScene::Mesh::Primitive::GetVertexCount() const
+{
+	return mVertexCount;
+}
+
 VkDescriptorSet WorldScene::Mesh::Primitive::GetDescriptorSet() const
 {
 	return mDescriptorSet;
@@ -419,13 +460,17 @@ VkDescriptorPool WorldScene::Mesh::Primitive::GetDescriptorPool() const
 WorldScene::CameraInstance::CameraInstance()
 {
 	mCameraIndex = 0;
-	mTransformMatrix = glm::lookAt(glm::vec3(10, 10, 10), glm::vec3(0, 0, 0), glm::vec3(0, 1, 0));
+
+	mViewMatrix = glm::lookAt(glm::vec3(10, 10, 10), glm::vec3(0, 0, 0), glm::vec3(0, 1, 0));
+	mTransformMatrix = glm::inverse(mViewMatrix);
 }
 
 WorldScene::CameraInstance::CameraInstance(const cgltf_data* gltf, const cgltf_node* node)
 {
 	mCameraIndex = static_cast<uint32_t>(cgltf_camera_index(gltf, node->camera));
-	mTransformMatrix = glm::inverse(Utils_GetTransformForGLTFNode(node));
+	mTransformMatrix = Utils_GetTransformForGLTFNode(node);
+	mViewMatrix = glm::inverse(mTransformMatrix);
+	mName = std::string(node->name == nullptr ? "scene cam" : node->name);
 }
 
 uint32_t WorldScene::CameraInstance::GetCameraIndex() const
@@ -433,9 +478,19 @@ uint32_t WorldScene::CameraInstance::GetCameraIndex() const
 	return mCameraIndex;
 }
 
-glm::mat4 WorldScene::CameraInstance::GetViewMatrix() const
+glm::mat4 WorldScene::CameraInstance::GetTranformMatrix() const
 {
 	return mTransformMatrix;
+}
+
+glm::mat4 WorldScene::CameraInstance::GetViewMatrix() const
+{
+	return mViewMatrix;
+}
+
+const std::string& WorldScene::CameraInstance::GetName() const
+{
+	return mName;
 }
 
 WorldScene::Camera::Camera()

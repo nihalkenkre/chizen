@@ -86,7 +86,6 @@ void App::ProcessEvent(SDL_Event* event)
 	}
 	else if (event->type == events.FileOpen.type)
 	{
-		std::println("open file {}", reinterpret_cast<const char*>(event->user.data1));
 		mScene = std::make_unique<WorldScene>(mVulkanInterface.get(),
 			mVulkanInterface->GetTransferObjects()->GetCommandBuffer(),
 			mRasterizer->GetDescriptorSetLayouts(),
@@ -94,12 +93,12 @@ void App::ProcessEvent(SDL_Event* event)
 			reinterpret_cast<const char*>(event->user.data1)
 		);
 
+		auto world_scene = dynamic_cast<WorldScene*>(mScene.get());
+		mImGUIState->SetCameraNames(world_scene->GetCameraNames());
 		mDisplayRender = false;
 	}
 	else if (event->type == events.StartRaytrace.type)
 	{
-		std::println("start raytrace");
-
 		SDL_CHECK(SDL_PushEvent(&events.RaytraceStarted));
 
 		int* tmp_render_target_extent = mImGUIState->GetRenderTargetExtent();
@@ -122,7 +121,6 @@ void App::ProcessEvent(SDL_Event* event)
 	}
 	else if (event->type == events.StopRaytrace.type)
 	{
-		std::println("stop raytrace");
 		StopRaytracing();
 	}
 	else if (event->type == events.RaytraceStarted.type)

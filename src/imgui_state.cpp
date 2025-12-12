@@ -80,6 +80,16 @@ void ImGUIState::ProcessEvent(SDL_Event* event)
 	}
 }
 
+void ImGUIState::SetCameraNames(const std::vector<const char*>& names)
+{
+	mCameraNames.clear();
+
+	for (auto const& name : names)
+	{
+		mCameraNames.push_back(name);
+	}
+}
+
 void ImGUIState::Render(const VkCommandBuffer cmd_buff)
 {
 	ImGui_ImplVulkan_NewFrame();
@@ -123,6 +133,25 @@ void ImGUIState::Render(const VkCommandBuffer cmd_buff)
 		}
 	}
 
+	if (mCameraNames.size() > 0)
+	{
+		const char* mSelectedCameraName = mCameraNames[mSelectedCameraIndex];
+		if (ImGui::BeginCombo("Cameras", mSelectedCameraName))
+		{
+			for (int c = 0; c < mCameraNames.size(); ++c)
+			{
+				bool is_selected = mSelectedCameraIndex == c;
+				if (ImGui::Selectable(std::string(mCameraNames[c]).append("##").append(std::to_string(c)).c_str(), is_selected))
+					mSelectedCameraIndex = c;
+
+				if (is_selected)
+					ImGui::SetItemDefaultFocus();
+			}
+			ImGui::EndCombo();
+		}
+		ImGui::Spacing();
+	}
+
 	if (ImGui::Button("Render"))
 	{
 		SDL_CHECK(SDL_PushEvent(&events.StartRaytrace));
@@ -130,6 +159,7 @@ void ImGUIState::Render(const VkCommandBuffer cmd_buff)
 
 	ImGui::EndDisabled();
 	ImGui::End();
+
 	ImGui::Render();
 
 	ImGui_ImplVulkan_RenderDrawData(ImGui::GetDrawData(), cmd_buff);
@@ -154,4 +184,9 @@ int& ImGUIState::GetMaxSamples()
 int* ImGUIState::GetRenderTargetExtent()
 {
 	return mRenderTargetExtent;
+}
+
+const int ImGUIState::GetSelectedCameraIndex() const
+{
+	return mSelectedCameraIndex;
 }

@@ -615,7 +615,6 @@ void Rasterizer::Render(const Scene* scene, ImGUIState* imgui_state)
 
 	const VkViewport viewports[] = {
 		{
-			//.y = 1080.f,
 			.width = 1920.f,//static_cast<float>(mExtent.width),
 			.height = 1080.f,//static_cast<float>(mExtent.height),
 			.minDepth = 0.f,
@@ -634,7 +633,7 @@ void Rasterizer::Render(const Scene* scene, ImGUIState* imgui_state)
 
 	vkCmdBindPipeline(cmd_buff, VK_PIPELINE_BIND_POINT_GRAPHICS, mPipelineData->GetPipeline());
 
-	scene->Render(device, cmd_buff, mPipelineData->GetPipelineLayout(), 0);
+	scene->Render(device, cmd_buff, mPipelineData->GetPipelineLayout(), imgui_state->GetSelectedCameraIndex());
 	imgui_state->Render(cmd_buff);
 
 	vkCmdEndRenderingKHR(cmd_buff);

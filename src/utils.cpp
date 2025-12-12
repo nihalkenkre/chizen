@@ -116,6 +116,9 @@ glm::mat4 Utils_GetTransformForGLTFNode(const cgltf_node* node)
 {
 	glm::mat4 xform = glm::mat4(1.f);
 
+	if (node == nullptr)
+		return xform;
+
 	if (node->has_matrix)
 	{
 		xform = glm::make_mat4(node->matrix);
@@ -138,6 +141,8 @@ glm::mat4 Utils_GetTransformForGLTFNode(const cgltf_node* node)
 			xform = glm::scale(xform, glm::make_vec3(node->scale));
 		}
 	}
+
+	xform *= Utils_GetTransformForGLTFNode(node->parent);
 
 	return xform;
 }

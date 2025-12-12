@@ -7,6 +7,7 @@ class Scene
 {
 public:
 	virtual void Render(const VkDevice device, const VkCommandBuffer cmd_buff, const VkPipelineLayout pipeline_layout, const uint32_t cam_index) const = 0;
+	//const virtual std::vector<const char*>& GetCameraNames() const = 0;
 	virtual ~Scene() noexcept {}
 };
 
@@ -14,6 +15,7 @@ class EmptyScene : public Scene
 {
 public:
 	void Render(const VkDevice device, const VkCommandBuffer cmd_buff, const VkPipelineLayout pipeline_layout, const uint32_t cam_index) const override {}
+	//const virtual std::vector<const char*>& GetCameraNames() const override { return {}; }
 };
 
 class WorldScene : public Scene
@@ -77,6 +79,7 @@ public:
 			BufferResource* GetIndicesBuffer() const;
 			VkIndexType GetIndexType() const;
 			uint32_t GetIndicesCount() const;
+			uint32_t GetVertexCount() const;
 			VkDescriptorSet GetDescriptorSet() const;
 			VkDescriptorPool GetDescriptorPool() const;
 
@@ -87,6 +90,7 @@ public:
 			std::unique_ptr<BufferResource> mIndicesBuffer = nullptr;
 			VkIndexType mIndexType = VK_INDEX_TYPE_UINT16;
 			uint32_t mIndicesCount = 0;
+			uint32_t mVertexCount = 0;
 			VkDescriptorPool mDescriptorPool = VK_NULL_HANDLE;
 			VkDescriptorSet mDescriptorSet = VK_NULL_HANDLE;
 		};
@@ -105,11 +109,15 @@ public:
 		CameraInstance(const cgltf_data* gltf, const cgltf_node* node);
 
 		uint32_t GetCameraIndex() const;
+		glm::mat4 GetTranformMatrix() const;
 		glm::mat4 GetViewMatrix() const;
+		const std::string& GetName() const;
 
 	private:
 		uint32_t mCameraIndex = -1;
 		glm::mat4 mTransformMatrix = glm::mat4(1.f);
+		glm::mat4 mViewMatrix = glm::mat4(1.f);
+		std::string mName;
 	};
 
 	class Camera
@@ -129,12 +137,14 @@ public:
 	};
 
 	void Render(const VkDevice device, const VkCommandBuffer cmd_buff, const VkPipelineLayout pipeline_layout, const uint32_t cam_index) const override;
+	const std::vector<const char*>& GetCameraNames() const;
 
 private:
 	std::vector<std::unique_ptr<WorldScene::CameraInstance>> mCameraInstances;
 	std::vector<std::unique_ptr<WorldScene::Camera>> mCameras;
 	std::vector<std::unique_ptr<WorldScene::MeshInstance>> mMeshInstances;
 	std::vector<std::unique_ptr<WorldScene::Mesh>> mMeshes;
+	std::vector<const char*> mCameraNames;
 	std::unique_ptr<BufferResource> mViewProjBuffer = nullptr;
 	VkDescriptorSet view_proj_desc_set = VK_NULL_HANDLE;
 	VkDescriptorPool mViewProjDescPool = VK_NULL_HANDLE;
