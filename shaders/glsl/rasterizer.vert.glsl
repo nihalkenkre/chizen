@@ -1,8 +1,8 @@
 #version 460
 
 layout(location=0) in vec3 in_pos;
-layout(location=1) in vec2 in_uv;
-layout(location=2) in vec3 in_nrm;
+layout(location=1) in vec3 in_nrm;
+layout(location=2) in vec2 in_uv;
 
 layout(set=0, binding=0) uniform ViewProj
 {
@@ -15,8 +15,8 @@ layout(set=1, binding=0) uniform Model
    mat4 model;
 } model;
 
-layout(location=0) out vec2 out_uv;
-layout(location=1) out vec3 out_nrm;
+layout(location=0) out vec3 out_nrm;
+layout(location=1) out vec2 out_uv;
 
 void main()
 {

@@ -3,10 +3,13 @@
 class VulkanInterface;
 class Rasterizer;
 class Display;
-class Raytracer;
+class VulkanRaytracer;
+class EmbreeRaytracer;
 class ImGUIState;
 class ImageResource;
-class Scene;
+class RasterizerScene;
+class VulkanRaytracerScene;
+class EmbreeRaytracerScene;
 
 class App
 {
@@ -23,7 +26,7 @@ public:
 	void Iterate();
 	void RunRasterizer();
 	void RunDisplay();
-	void StartRaytracing();
+	void StartRaytracing(const uint32_t raytracer_type);
 	void RecreateRenderTarget();
 	void StopRaytracing();
 
@@ -55,10 +58,13 @@ private:
 	std::unique_ptr<VulkanInterface> mVulkanInterface = nullptr;
 	std::unique_ptr<Rasterizer> mRasterizer = nullptr;
 	std::unique_ptr<Display> mDisplay = nullptr;
-	std::unique_ptr<Raytracer> mRaytracer = nullptr;
+	std::unique_ptr<VulkanRaytracer> mVulkanRaytracer = nullptr;
+	std::unique_ptr<EmbreeRaytracer> mEmbreeRaytracer = nullptr;
 	std::unique_ptr<ImageResource> mFinalRenderTarget = nullptr;
 	std::unique_ptr<ImGUIState> mImGUIState = nullptr;
-	std::unique_ptr<Scene> mScene = nullptr;
+	std::unique_ptr<RasterizerScene> mRasterizerScene = nullptr;
+	std::unique_ptr<VulkanRaytracerScene> mVulkanRaytracerScene = nullptr;
+	std::unique_ptr<EmbreeRaytracerScene> mEmbreeRaytacerScene = nullptr;
 	SDL_Window* mWindow = nullptr;
 	VkExtent2D mRenderTargetExtent = { 1280, 720 };
 	std::thread mRaytraceThread = {};

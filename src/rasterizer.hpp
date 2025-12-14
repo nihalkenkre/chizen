@@ -5,7 +5,7 @@ class Swapchain;
 class FrameObjects;
 class RasterizerPipelineData;
 class ImGUIState;
-class Scene;
+class RasterizerScene;
 class ImageResource;
 class Allocator;
 
@@ -21,7 +21,7 @@ public:
 
 	~Rasterizer() noexcept;
 
-	void Render(const Scene* scene, ImGUIState* imgui_state);
+	void Render(const RasterizerScene* scene, ImGUIState* imgui_state);
 	void UpdateSwapchain(Swapchain* swapchain);
 	void UpdateExtent(const VkExtent2D& extent);
 	void RecreateDepthTexture();

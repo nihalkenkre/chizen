@@ -80,7 +80,7 @@ void ImGUIState::ProcessEvent(SDL_Event* event)
 	}
 }
 
-void ImGUIState::SetCameraNames(const std::vector<const char*>& names)
+void ImGUIState::SetCameraNames(const std::vector<std::string>& names)
 {
 	mCameraNames.clear();
 
@@ -135,7 +135,7 @@ void ImGUIState::Render(const VkCommandBuffer cmd_buff)
 
 	if (mCameraNames.size() > 0)
 	{
-		const char* mSelectedCameraName = mCameraNames[mSelectedCameraIndex];
+		const char* mSelectedCameraName = mCameraNames[mSelectedCameraIndex].c_str();
 		if (ImGui::BeginCombo("Cameras", mSelectedCameraName))
 		{
 			for (int c = 0; c < mCameraNames.size(); ++c)
@@ -152,8 +152,26 @@ void ImGUIState::Render(const VkCommandBuffer cmd_buff)
 		ImGui::Spacing();
 	}
 
+	const char* renderer_names[] = { "Vulkan", "Embree" };
+	const char* selected_renderer_name = renderer_names[mSelectedRendererIndex];
+	if (ImGui::BeginCombo("Renderer", selected_renderer_name))
+	{
+		for (int r = 0; r < IM_ARRAYSIZE(renderer_names); ++r)
+		{
+			bool is_selected = mSelectedRendererIndex == r;
+			if (ImGui::Selectable(renderer_names[r], is_selected))
+				mSelectedRendererIndex = r;
+
+			if (is_selected)
+				ImGui::SetItemDefaultFocus();
+
+		}
+		ImGui::EndCombo();
+	}
+
 	if (ImGui::Button("Render"))
 	{
+		events.StartRaytrace.user.code = mSelectedRendererIndex;
 		SDL_CHECK(SDL_PushEvent(&events.StartRaytrace));
 	}
 
@@ -189,4 +207,9 @@ int* ImGUIState::GetRenderTargetExtent()
 const int ImGUIState::GetSelectedCameraIndex() const
 {
 	return mSelectedCameraIndex;
+}
+
+const int ImGUIState::GetSelectedRendererIndex() const
+{
+	return mSelectedRendererIndex;
 }

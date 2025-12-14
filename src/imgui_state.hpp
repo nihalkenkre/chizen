@@ -14,20 +14,22 @@ public:
 	~ImGUIState() noexcept;
 
 	void ProcessEvent(SDL_Event* event);
-	void SetCameraNames(const std::vector<const char*>& names);
+	void SetCameraNames(const std::vector<std::string>& names);
 	void Render(const VkCommandBuffer cmd_buff);
 
 	bool& GetShouldStartRaytracing();
 	int& GetMaxSamples();
 	int* GetRenderTargetExtent();
 	const int GetSelectedCameraIndex() const;
+	const int GetSelectedRendererIndex() const;
 
 private:
 	VkDescriptorPool mDescriptorPool = VK_NULL_HANDLE;
 	VkDevice mDevice = VK_NULL_HANDLE;
 
-	 std::vector<const char*> mCameraNames = {};
+	std::vector<std::string> mCameraNames = {};
 	int mSelectedCameraIndex = 0;
+	int mSelectedRendererIndex = 1;
 	bool mShouldStartRaytracing = false;
 	int mMaxSamples = 1024;
 	int mRenderTargetExtent[2] = { 1280, 720 };

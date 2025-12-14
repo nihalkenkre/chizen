@@ -19,11 +19,6 @@ public:
 
 	~RasterizerPipelineData() noexcept;
 
-	struct PushConstants
-	{
-
-	};
-
 	VkPipeline GetPipeline() const;
 	VkPipelineLayout GetPipelineLayout() const;
 	const std::vector<VkDescriptorSetLayout>& GetDescriptorSetLayouts() const;
@@ -204,14 +199,14 @@ RasterizerPipelineData::RasterizerPipelineData(const VulkanInterface* vulkan_int
 		},
 		{
 			.binding = 1,
-			.stride = sizeof(float) * 2,
+			.stride = sizeof(float) * 3,
 			.inputRate = VK_VERTEX_INPUT_RATE_VERTEX,
 		},
 		{
 			.binding = 2,
-			.stride = sizeof(float) * 3,
+			.stride = sizeof(float) * 2,
 			.inputRate = VK_VERTEX_INPUT_RATE_VERTEX,
-		}
+		},
 	};
 
 	const VkVertexInputAttributeDescription vads[] = {
@@ -223,12 +218,12 @@ RasterizerPipelineData::RasterizerPipelineData(const VulkanInterface* vulkan_int
 		{
 			.location = 1,
 			.binding = 1,
-			.format = VK_FORMAT_R32G32_SFLOAT,
+			.format = VK_FORMAT_R32G32B32_SFLOAT,
 		},
 		{
 			.location = 2,
 			.binding = 2,
-			.format = VK_FORMAT_R32G32B32_SFLOAT,
+			.format = VK_FORMAT_R32G32_SFLOAT,
 		},
 	};
 
@@ -523,7 +518,7 @@ void Rasterizer::InitializeResources(const VkCommandBuffer cmd_buff, const VkQue
 	VK_CHECK("wait for device", vkDeviceWaitIdle(mDevice));
 }
 
-void Rasterizer::Render(const Scene* scene, ImGUIState* imgui_state)
+void Rasterizer::Render(const RasterizerScene* scene, ImGUIState* imgui_state)
 {
 	VkDevice device = mDevice;
 	VkCommandBuffer cmd_buff = mFrameObjects->GetCommandBuffer();
@@ -633,7 +628,7 @@ void Rasterizer::Render(const Scene* scene, ImGUIState* imgui_state)
 
 	vkCmdBindPipeline(cmd_buff, VK_PIPELINE_BIND_POINT_GRAPHICS, mPipelineData->GetPipeline());
 
-	scene->Render(device, cmd_buff, mPipelineData->GetPipelineLayout(), imgui_state->GetSelectedCameraIndex());
+	scene->Render(cmd_buff, mPipelineData->GetPipelineLayout(), imgui_state->GetSelectedCameraIndex());
 	imgui_state->Render(cmd_buff);
 
 	vkCmdEndRenderingKHR(cmd_buff);

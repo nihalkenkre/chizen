@@ -128,18 +128,16 @@ VmaAllocationInfo2 ImageResource::GetAllocationInfo2() const
 	return mAllocationInfo;
 }
 
-BufferResource::BufferResource(const VkDevice device, const VmaAllocator allocator, const VkDeviceSize size, const VkBufferUsageFlags usage, const VmaAllocationCreateFlags vma_alloc_create_flags, const VmaMemoryUsage vma_mem_usage, const std::string& name)
+BufferResource::BufferResource(const VkDevice device, const VmaAllocator allocator, const std::vector<uint8_t>& data, const VkBufferUsageFlags usage, const VmaAllocationCreateFlags vma_alloc_create_flags, const VmaMemoryUsage vma_mem_usage, const std::string& name, const VkCommandBuffer cmd_buff, const VkQueue queue)
+	: mDevice(device), mAllocator(allocator), mSize(data.size())
 {
 	mDescriptorInfo = {
 		.range = VK_WHOLE_SIZE,
 	};
-	mAllocator = allocator;
-	mDevice = device;
-	mSize = size;
 
 	const VkBufferCreateInfo create_info = {
 		.sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO,
-		.size = size,
+		.size = data.size(),
 		.usage = usage,
 	};
 
@@ -150,7 +148,7 @@ BufferResource::BufferResource(const VkDevice device, const VmaAllocator allocat
 
 	VK_CHECK("create buffer", vmaCreateBuffer(allocator, &create_info, &alloc_ci, &mDescriptorInfo.buffer, &mAllocation, &mAllocationInfo.allocationInfo));
 
- if (usage & VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT_KHR)
+	if (usage & VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT_KHR)
 	{
 		const VkBufferDeviceAddressInfoKHR addr_info = {
 			.sType = VK_STRUCTURE_TYPE_BUFFER_DEVICE_ADDRESS_INFO_KHR,
@@ -160,6 +158,75 @@ BufferResource::BufferResource(const VkDevice device, const VmaAllocator allocat
 		mDeviceAddress = vkGetBufferDeviceAddressKHR(mDevice, &addr_info);
 		mDeviceOrHostAddress.deviceAddress = mDeviceAddress;
 		mDeviceOrHostAddressConst.deviceAddress = mDeviceAddress;
+	}
+
+	if (vma_alloc_create_flags & VMA_ALLOCATION_CREATE_MAPPED_BIT)
+	{
+		std::memcpy(mAllocationInfo.allocationInfo.pMappedData, data.data(), data.size());
+	}
+	else
+	{
+		const VkBufferCreateInfo create_info = {
+			.sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO,
+			.size = data.size(),
+			.usage = VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
+		};
+		const VmaAllocationCreateInfo alloc_ci = {
+			.flags = VMA_ALLOCATION_CREATE_HOST_ACCESS_SEQUENTIAL_WRITE_BIT | VMA_ALLOCATION_CREATE_MAPPED_BIT,
+			.usage = VMA_MEMORY_USAGE_AUTO,
+		};
+
+		VkBuffer staging_buffer = VK_NULL_HANDLE;
+		VmaAllocation staging_allocation = VK_NULL_HANDLE;
+		VmaAllocationInfo2 staging_allocation_info = {};
+
+		VK_CHECK("create staging buffer", vmaCreateBuffer(allocator, &create_info, &alloc_ci, &staging_buffer, &staging_allocation, &staging_allocation_info.allocationInfo));
+
+		std::memcpy(staging_allocation_info.allocationInfo.pMappedData, data.data(), data.size());
+
+		const VkCommandBufferBeginInfo begin_info = {
+			.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO,
+			.flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT,
+		};
+		VK_CHECK("begin xfer cmd buff", vkBeginCommandBuffer(cmd_buff, &begin_info));
+
+		const VkBufferCopy2 regions[] = {
+			{
+				.sType = VK_STRUCTURE_TYPE_BUFFER_COPY_2,
+				.size = data.size(),
+			},
+		};
+
+		const VkCopyBufferInfo2 copy_buff_info = {
+			.sType = VK_STRUCTURE_TYPE_COPY_BUFFER_INFO_2,
+			.srcBuffer = staging_buffer,
+			.dstBuffer = mDescriptorInfo.buffer,
+			.regionCount = std::size(regions),
+			.pRegions = regions,
+		};
+
+		vkCmdCopyBuffer2KHR(cmd_buff, &copy_buff_info);
+		VK_CHECK("end xfer cmd buff", vkEndCommandBuffer(cmd_buff));
+
+		const VkCommandBufferSubmitInfo cmd_buff_infos[] = {
+			{
+				.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_SUBMIT_INFO,
+				.commandBuffer = cmd_buff,
+			},
+		};
+
+		const VkSubmitInfo2 submit_infos[] = {
+			{
+				.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO_2,
+				.commandBufferInfoCount = std::size(cmd_buff_infos),
+				.pCommandBufferInfos = cmd_buff_infos,
+			},
+		};
+
+		VK_CHECK("submit geom buffer xfer cmd", vkQueueSubmit2KHR(queue, std::size(submit_infos), submit_infos, VK_NULL_HANDLE));
+		VK_CHECK("wait xfer cmd buff", vkQueueWaitIdle(queue));
+
+		vmaDestroyBuffer(mAllocator, staging_buffer, staging_allocation);
 	}
 
 #ifdef _DEBUG

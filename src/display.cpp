@@ -460,22 +460,24 @@ Display::Display(const VulkanInterface* vulkan_interface, ImageResource* final_r
 	};
 
 	size_t verts_size = std::size(verts) * sizeof(float);
+	std::vector <uint8_t> verts_data(verts_size);
+	std::memcpy(verts_data.data(), verts, verts_size);
 
-	mGeometryBuffer = std::make_unique<BufferResource>(vulkan_interface->GetDevice()->GetDevice(), vulkan_interface->GetAllocator()->GetAllocator(), verts_size,
+	mGeometryBuffer = std::make_unique<BufferResource>(vulkan_interface->GetDevice()->GetDevice(), vulkan_interface->GetAllocator()->GetAllocator(), verts_data,
 		VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_VERTEX_BUFFER_BIT, 0,
-		VMA_MEMORY_USAGE_AUTO_PREFER_DEVICE, "geometry buffer");
+		VMA_MEMORY_USAGE_AUTO_PREFER_DEVICE, "geometry buffer", vulkan_interface->GetTransferObjects()->GetCommandBuffer(), vulkan_interface->GetTransferObjects()->GetQueue());
 
-	std::unique_ptr<BufferResource> staging_buffer = std::make_unique<BufferResource>(vulkan_interface->GetDevice()->GetDevice(), vulkan_interface->GetAllocator()->GetAllocator(), verts_size,
-		VK_BUFFER_USAGE_TRANSFER_SRC_BIT, VMA_ALLOCATION_CREATE_HOST_ACCESS_SEQUENTIAL_WRITE_BIT | VMA_ALLOCATION_CREATE_MAPPED_BIT,
-		VMA_MEMORY_USAGE_AUTO_PREFER_HOST, "staging geometry buffer");
+	//std::unique_ptr<BufferResource> staging_buffer = std::make_unique<BufferResource>(vulkan_interface->GetDevice()->GetDevice(), vulkan_interface->GetAllocator()->GetAllocator(), verts_size,
+	//	VK_BUFFER_USAGE_TRANSFER_SRC_BIT, VMA_ALLOCATION_CREATE_HOST_ACCESS_SEQUENTIAL_WRITE_BIT | VMA_ALLOCATION_CREATE_MAPPED_BIT,
+	//	VMA_MEMORY_USAGE_AUTO_PREFER_HOST, "staging geometry buffer");
 
-	std::memcpy(staging_buffer->GetAllocationInfo2().allocationInfo.pMappedData, verts, verts_size);
+	//std::memcpy(staging_buffer->GetAllocationInfo2().allocationInfo.pMappedData, verts, verts_size);
 
-	staging_buffer->CopyToBuffer(
-		vulkan_interface->GetTransferObjects()->GetCommandBuffer(),
-		vulkan_interface->GetTransferObjects()->GetQueue(),
-		mGeometryBuffer->GetDescriptorInfo().buffer,
-		verts_size);
+	//staging_buffer->CopyToBuffer(
+	//	vulkan_interface->GetTransferObjects()->GetCommandBuffer(),
+	//	vulkan_interface->GetTransferObjects()->GetQueue(),
+	//	mGeometryBuffer->GetDescriptorInfo().buffer,
+	//	verts_size);
 }
 
 Display::~Display() noexcept

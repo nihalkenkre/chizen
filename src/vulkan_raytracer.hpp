@@ -6,16 +6,16 @@ class RaytracerPipelineData;
 class ImageResource;
 class BufferResource;
 
-class Raytracer
+class VulkanRaytracer
 {
 public:
-	Raytracer() = delete;
-	Raytracer(const VulkanInterface* const vulkan_interface, ImageResource* final_render_target, const VkExtent3D& extent, const std::string& current_path, const std::string& name);
+	VulkanRaytracer() = delete;
+	VulkanRaytracer(const VulkanInterface* const vulkan_interface, ImageResource* final_render_target, const VkExtent3D& extent, const std::string& current_path, const std::string& name);
 
-	Raytracer(const Raytracer& other) = delete;
-	Raytracer& operator=(const Raytracer& other) = delete;
+	VulkanRaytracer(const VulkanRaytracer& other) = delete;
+	VulkanRaytracer& operator=(const VulkanRaytracer& other) = delete;
 
-	~Raytracer() noexcept;
+	~VulkanRaytracer() noexcept;
 
 	void RecreateRenderResources(const VkExtent2D& extent);
 	void Start(const uint32_t max_samples);

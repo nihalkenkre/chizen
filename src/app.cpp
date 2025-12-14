@@ -2,7 +2,8 @@
 #include "vulkan_interface.hpp"
 #include "rasterizer.hpp"
 #include "display.hpp"
-#include "raytracer.hpp"
+#include "vulkan_raytracer.hpp"
+#include "embree_raytracer.hpp"
 #include "imgui_state.hpp"
 #include "utils.hpp"
 #include "vulkan_objects.hpp"
@@ -14,7 +15,7 @@ App::App(SDL_Window* window, const std::string& current_path) : mWindow(window)
 {
 	mVulkanInterface = std::make_unique<VulkanInterface>(window);
 	mImGUIState = std::make_unique<ImGUIState>(mVulkanInterface.get());
-	mScene = std::make_unique<EmptyScene>();
+	mRasterizerScene = std::make_unique<RasterizeEmptyScene>();
 
 	VkExtent3D extent = VkExtent3D{ mRenderTargetExtent.width, mRenderTargetExtent.height, 1 };
 	std::vector<uint32_t> queue_family_indices{ mVulkanInterface->GetPhysicalDeviceData()->GraphicsQueueFamilyIndex, mVulkanInterface->GetPhysicalDeviceData()->ComputeQueueFamilyIndex, mVulkanInterface->GetPhysicalDeviceData()->TransferQueueFamilyIndex };
@@ -28,7 +29,7 @@ App::App(SDL_Window* window, const std::string& current_path) : mWindow(window)
 
 	mRasterizer = std::make_unique<Rasterizer>(mVulkanInterface.get(), current_path, "rasterizer");
 	mDisplay = std::make_unique<Display>(mVulkanInterface.get(), mFinalRenderTarget.get(), current_path);
-	mRaytracer = std::make_unique<Raytracer>(mVulkanInterface.get(), mFinalRenderTarget.get(), extent, current_path, "raytrace");
+	mVulkanRaytracer = std::make_unique<VulkanRaytracer>(mVulkanInterface.get(), mFinalRenderTarget.get(), extent, current_path, "raytrace");
 }
 
 void App::ProcessEvent(SDL_Event* event)
@@ -86,15 +87,24 @@ void App::ProcessEvent(SDL_Event* event)
 	}
 	else if (event->type == events.FileOpen.type)
 	{
-		mScene = std::make_unique<WorldScene>(mVulkanInterface.get(),
-			mVulkanInterface->GetTransferObjects()->GetCommandBuffer(),
-			mRasterizer->GetDescriptorSetLayouts(),
-			mVulkanInterface->GetTransferObjects()->GetQueue(),
-			reinterpret_cast<const char*>(event->user.data1)
+		auto scene = Scene(
+			reinterpret_cast<const char*>(event->user.data1),
+			mVulkanInterface->GetPhysicalDeviceData()->Properties.properties.limits.minUniformBufferOffsetAlignment
 		);
 
-		auto world_scene = dynamic_cast<WorldScene*>(mScene.get());
-		mImGUIState->SetCameraNames(world_scene->GetCameraNames());
+		mImGUIState->SetCameraNames(scene.GetCameraNames());
+
+		mRasterizerScene = std::make_unique<RasterizerWorldScene>(
+			scene,
+			mVulkanInterface->GetDevice()->GetDevice(),
+			mVulkanInterface->GetAllocator()->GetAllocator(),
+			mRasterizer->GetDescriptorSetLayouts(),
+			mVulkanInterface->GetTransferObjects()->GetCommandBuffer(),
+			mVulkanInterface->GetTransferObjects()->GetQueue()
+		);
+		mVulkanRaytracerScene = std::make_unique<VulkanRaytracerScene>();
+		mEmbreeRaytacerScene = std::make_unique<EmbreeRaytracerScene>();
+
 		mDisplayRender = false;
 	}
 	else if (event->type == events.StartRaytrace.type)
@@ -117,7 +127,7 @@ void App::ProcessEvent(SDL_Event* event)
 			mMaxSamples = tmp_max_samples;
 		}
 
-		StartRaytracing();
+		StartRaytracing(events.StartRaytrace.user.code);
 	}
 	else if (event->type == events.StopRaytrace.type)
 	{
@@ -141,7 +151,7 @@ void App::Iterate()
 
 void App::RunRasterizer()
 {
-	mRasterizer->Render(mScene.get(), mImGUIState.get());
+	mRasterizer->Render(mRasterizerScene.get(), mImGUIState.get());
 }
 
 void App::RunDisplay()
@@ -149,9 +159,9 @@ void App::RunDisplay()
 	mDisplay->Render(mDeltaMousePosition, mZoomLevel, mImGUIState.get());
 }
 
-void App::StartRaytracing()
+void App::StartRaytracing(const uint32_t raytracer_type)
 {
-	mRaytraceThread = std::thread(&Raytracer::Start, mRaytracer.get(), mMaxSamples);
+	mRaytraceThread = std::thread(&VulkanRaytracer::Start, mVulkanRaytracer.get(), mMaxSamples);
 	mRaytraceThread.detach();
 }
 
@@ -169,13 +179,13 @@ void App::RecreateRenderTarget()
 	Utils_InitializeImages({ mFinalRenderTarget->GetImage() }, mVulkanInterface->GetTransferObjects()->GetCommandBuffer(), mVulkanInterface->GetTransferObjects()->GetQueue());
 
 	mDisplay->UpdateFinalRenderTarget(mFinalRenderTarget.get());
-	mRaytracer->RecreateRenderResources(mRenderTargetExtent);
-	mRaytracer->UpdateFinalRenderTarget(mFinalRenderTarget.get());
+	mVulkanRaytracer->RecreateRenderResources(mRenderTargetExtent);
+	mVulkanRaytracer->UpdateFinalRenderTarget(mFinalRenderTarget.get());
 }
 
 void App::StopRaytracing()
 {
-	mRaytracer->Stop();
+	mVulkanRaytracer->Stop();
 }
 
 void App::RecreateRasterSwapchain()
