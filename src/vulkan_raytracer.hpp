@@ -5,6 +5,7 @@ class FrameObjects;
 class RaytracerPipelineData;
 class ImageResource;
 class BufferResource;
+class VulkanRaytracerScene;
 
 class VulkanRaytracer
 {
@@ -18,7 +19,7 @@ public:
 	~VulkanRaytracer() noexcept;
 
 	void RecreateRenderResources(const VkExtent2D& extent);
-	void Start(const uint32_t max_samples);
+	void Start(const VulkanRaytracerScene* scene, const uint32_t max_samples);
 	void UpdateFinalRenderTarget(ImageResource* FinalRenderTarget);
 	void Stop();
 

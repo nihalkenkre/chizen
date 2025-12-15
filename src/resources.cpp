@@ -2,6 +2,7 @@
 #include "utils.hpp"
 
 ImageResource::ImageResource(const VkDevice device, const VkExtent3D& extent, const VkFormat format, const VkImageUsageFlags usage, const VmaAllocator allocator, const std::vector<uint32_t>& queue_family_indices, const std::string& name)
+	:mExtent(extent), mAllocator(allocator), mDevice(device)
 {
 	mDescriptorInfo = {
 		.imageLayout = VK_IMAGE_LAYOUT_GENERAL,
@@ -26,7 +27,7 @@ ImageResource::ImageResource(const VkDevice device, const VkExtent3D& extent, co
 	};
 
 	const VmaAllocationCreateInfo alloc_ci = {
-		.usage = VMA_MEMORY_USAGE_AUTO_PREFER_DEVICE,
+		.usage = VMA_MEMORY_USAGE_AUTO,
 	};
 
 	VK_CHECK("create image", vmaCreateImage(allocator, &create_info, &alloc_ci, &mImage, &mAllocation, &mAllocationInfo.allocationInfo));
@@ -42,6 +43,7 @@ ImageResource::ImageResource(const VkDevice device, const VkExtent3D& extent, co
 			.layerCount = 1,
 		},
 	};
+
 	if (format == VK_FORMAT_D32_SFLOAT || format == VK_FORMAT_D32_SFLOAT_S8_UINT ||
 		format == VK_FORMAT_D16_UNORM || format == VK_FORMAT_D16_UNORM_S8_UINT ||
 		format == VK_FORMAT_D16_UNORM || format == VK_FORMAT_D16_UNORM_S8_UINT)
@@ -74,35 +76,6 @@ ImageResource::~ImageResource() noexcept
 	}
 }
 
-//void ImageResource::ChangeImageLayout(const VkCommandBuffer cmd_buff, const VkPipelineStageFlags2 src_stage_mask, const VkAccessFlags2 src_access_mask, const VkPipelineStageFlags2 dst_stage_mask, const VkAccessFlags2 dst_access_mask, const VkImageLayout old_layout, const VkImageLayout new_layout, const uint32_t src_q_fly_idx, const uint32_t dst_q_fly_idx, const VkImageAspectFlags aspect_mask)
-//{
-//	const VkImageMemoryBarrier2 img_mem_barr = {
-//		.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER_2,
-//		.srcStageMask = src_stage_mask,
-//		.srcAccessMask = src_access_mask,
-//		.dstStageMask = dst_stage_mask,
-//		.dstAccessMask = dst_access_mask,
-//		.oldLayout = old_layout,
-//		.newLayout = new_layout,
-//		.srcQueueFamilyIndex = src_q_fly_idx,
-//		.dstQueueFamilyIndex = dst_q_fly_idx,
-//		.image = mImage,
-//		.subresourceRange = {
-//			.aspectMask = aspect_mask,
-//			.levelCount = 1,
-//			.layerCount = 1,
-//		},
-//	};
-//
-//	const VkDependencyInfo dep_info = {
-//		.sType = VK_STRUCTURE_TYPE_DEPENDENCY_INFO,
-//		.imageMemoryBarrierCount = 1,
-//		.pImageMemoryBarriers = &img_mem_barr,
-//	};
-//
-//	vkCmdPipelineBarrier2KHR(cmd_buff, &dep_info);
-//}
-
 VkImage ImageResource::GetImage() const
 {
 	return mImage;
@@ -128,7 +101,7 @@ VmaAllocationInfo2 ImageResource::GetAllocationInfo2() const
 	return mAllocationInfo;
 }
 
-BufferResource::BufferResource(const VkDevice device, const VmaAllocator allocator, const std::vector<uint8_t>& data, const VkBufferUsageFlags usage, const VmaAllocationCreateFlags vma_alloc_create_flags, const VmaMemoryUsage vma_mem_usage, const std::string& name, const VkCommandBuffer cmd_buff, const VkQueue queue)
+BufferResource::BufferResource(const VkDevice device, const VmaAllocator allocator, const std::vector<uint8_t>& data, const VkBufferUsageFlags usage, const VmaAllocationCreateFlags vma_alloc_create_flags, const std::string& name, const VkCommandBuffer cmd_buff, const VkQueue queue)
 	: mDevice(device), mAllocator(allocator), mSize(data.size())
 {
 	mDescriptorInfo = {
@@ -143,7 +116,7 @@ BufferResource::BufferResource(const VkDevice device, const VmaAllocator allocat
 
 	const VmaAllocationCreateInfo alloc_ci = {
 		.flags = vma_alloc_create_flags,
-		.usage = vma_mem_usage,
+		.usage = VMA_MEMORY_USAGE_AUTO,
 	};
 
 	VK_CHECK("create buffer", vmaCreateBuffer(allocator, &create_info, &alloc_ci, &mDescriptorInfo.buffer, &mAllocation, &mAllocationInfo.allocationInfo));
@@ -234,6 +207,43 @@ BufferResource::BufferResource(const VkDevice device, const VmaAllocator allocat
 #endif // _DEBUG
 }
 
+BufferResource::BufferResource(const VkDevice device, const VmaAllocator allocator, const VkDeviceSize size, const VkBufferUsageFlags usage, const VmaAllocationCreateFlags vma_alloc_create_flags, const std::string& name, const VkCommandBuffer cmd_buff, const VkQueue queue)
+	: mDevice(device), mAllocator(allocator), mSize(size)
+{
+	mDescriptorInfo = {
+			.range = VK_WHOLE_SIZE,
+	};
+
+	const VkBufferCreateInfo create_info = {
+		.sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO,
+		.size = size,
+		.usage = usage,
+	};
+
+	const VmaAllocationCreateInfo alloc_ci = {
+		.flags = vma_alloc_create_flags,
+		.usage = VMA_MEMORY_USAGE_AUTO,
+	};
+
+	VK_CHECK("create buffer", vmaCreateBuffer(allocator, &create_info, &alloc_ci, &mDescriptorInfo.buffer, &mAllocation, &mAllocationInfo.allocationInfo));
+
+	if (usage & VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT_KHR)
+	{
+		const VkBufferDeviceAddressInfoKHR addr_info = {
+			.sType = VK_STRUCTURE_TYPE_BUFFER_DEVICE_ADDRESS_INFO_KHR,
+			.buffer = mDescriptorInfo.buffer,
+		};
+
+		mDeviceAddress = vkGetBufferDeviceAddressKHR(mDevice, &addr_info);
+		mDeviceOrHostAddress.deviceAddress = mDeviceAddress;
+		mDeviceOrHostAddressConst.deviceAddress = mDeviceAddress;
+	}
+#ifdef _DEBUG
+	Utils_SetObjectName(mDevice, VK_OBJECT_TYPE_BUFFER, reinterpret_cast<uint64_t>(mDescriptorInfo.buffer), std::string(name).append(" buffer").c_str());
+#endif // _DEBUG
+
+}
+
 BufferResource::~BufferResource() noexcept
 {
 	if (mDevice != VK_NULL_HANDLE)
@@ -264,6 +274,60 @@ void BufferResource::CopyToBuffer(const VkCommandBuffer cmd_buff, const VkQueue 
 	};
 
 	vkCmdCopyBuffer2KHR(cmd_buff, &copy_buff_info);
+	VK_CHECK("end xfer cmd buff", vkEndCommandBuffer(cmd_buff));
+
+	const VkCommandBufferSubmitInfo cmd_buff_infos[] = {
+		{
+			.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_SUBMIT_INFO,
+			.commandBuffer = cmd_buff,
+		},
+	};
+
+	const VkSubmitInfo2 submit_infos[] = {
+		{
+			.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO_2,
+			.commandBufferInfoCount = std::size(cmd_buff_infos),
+			.pCommandBufferInfos = cmd_buff_infos,
+		},
+	};
+
+	VK_CHECK("submit geom buffer xfer cmd", vkQueueSubmit2KHR(queue, std::size(submit_infos), submit_infos, VK_NULL_HANDLE));
+	VK_CHECK("wait xfer cmd buff", vkQueueWaitIdle(queue));
+}
+
+void BufferResource::CopyToImage(const VkCommandBuffer cmd_buff, const VkQueue queue, const VkImage dst_image, const VkExtent2D dst_image_extent)
+{
+	const VkCommandBufferBeginInfo begin_info = {
+	.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO,
+	.flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT,
+	};
+	VK_CHECK("begin xfer cmd buff", vkBeginCommandBuffer(cmd_buff, &begin_info));
+
+	const VkBufferImageCopy2KHR regions[] = {
+		{
+			.sType = VK_STRUCTURE_TYPE_BUFFER_IMAGE_COPY_2_KHR,
+			.imageSubresource = {
+				.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT,
+				.layerCount =1,
+			},
+			.imageExtent = {
+				.width = dst_image_extent.width,
+				.height = dst_image_extent.height,
+				.depth = 1,
+			},
+		},
+	};
+
+	const VkCopyBufferToImageInfo2KHR copy_buff_info = {
+		.sType = VK_STRUCTURE_TYPE_COPY_BUFFER_TO_IMAGE_INFO_2_KHR,
+		.srcBuffer = mDescriptorInfo.buffer,
+		.dstImage = dst_image,
+		.dstImageLayout = VK_IMAGE_LAYOUT_GENERAL,
+		.regionCount = std::size(regions),
+		.pRegions = regions,
+	};
+
+	vkCmdCopyBufferToImage2KHR(cmd_buff, &copy_buff_info);
 	VK_CHECK("end xfer cmd buff", vkEndCommandBuffer(cmd_buff));
 
 	const VkCommandBufferSubmitInfo cmd_buff_infos[] = {

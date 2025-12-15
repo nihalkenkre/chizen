@@ -7,6 +7,7 @@ class VulkanRaytracer;
 class EmbreeRaytracer;
 class ImGUIState;
 class ImageResource;
+class BufferResource;
 class RasterizerScene;
 class VulkanRaytracerScene;
 class EmbreeRaytracerScene;
@@ -26,7 +27,7 @@ public:
 	void Iterate();
 	void RunRasterizer();
 	void RunDisplay();
-	void StartRaytracing(const uint32_t raytracer_type);
+	void StartRaytracing();
 	void RecreateRenderTarget();
 	void StopRaytracing();
 
@@ -60,14 +61,16 @@ private:
 	std::unique_ptr<Display> mDisplay = nullptr;
 	std::unique_ptr<VulkanRaytracer> mVulkanRaytracer = nullptr;
 	std::unique_ptr<EmbreeRaytracer> mEmbreeRaytracer = nullptr;
-	std::unique_ptr<ImageResource> mFinalRenderTarget = nullptr;
 	std::unique_ptr<ImGUIState> mImGUIState = nullptr;
 	std::unique_ptr<RasterizerScene> mRasterizerScene = nullptr;
 	std::unique_ptr<VulkanRaytracerScene> mVulkanRaytracerScene = nullptr;
 	std::unique_ptr<EmbreeRaytracerScene> mEmbreeRaytacerScene = nullptr;
+	std::unique_ptr<ImageResource> mFinalRenderTarget = nullptr;
+	std::unique_ptr<BufferResource> mEmbreeRenderTarget = nullptr;
 	SDL_Window* mWindow = nullptr;
 	VkExtent2D mRenderTargetExtent = { 1280, 720 };
 	std::thread mRaytraceThread = {};
 	bool mIsTrackingMouse = false;
 	bool mDisplayRender = false;
+	uint8_t mRaytracerType = 0;
 };

@@ -20,6 +20,7 @@ public:
 	~Display() noexcept;
 
 	void Render(const float position_offset[], const float zoom_level, ImGUIState* imgui_state);
+	void UpdateEmbreeOutput(BufferResource* embree_output);
 	void UpdateFinalRenderTarget(ImageResource* final_render_target);
 	void UpdateSwapchain(Swapchain* swapchain);
 	void UpdateExtent(VkExtent2D extent);

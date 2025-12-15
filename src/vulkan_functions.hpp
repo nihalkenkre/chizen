@@ -4,6 +4,7 @@ extern "C" PFN_vkSetDebugUtilsObjectNameEXT vk_SetDebugUtilsObjectNameEXT;
 extern "C" PFN_vkQueueSubmit2KHR vk_QueueSubmit2KHR;
 extern "C" PFN_vkSignalSemaphoreKHR vk_SignalSemaphoreKHR;
 extern "C" PFN_vkCmdCopyBuffer2KHR vk_CmdCopyBuffer2KHR;
+extern "C" PFN_vkCmdCopyBufferToImage2KHR vk_CmdCopyBufferToImage2KHR;
 extern "C" PFN_vkCmdPipelineBarrier2KHR vk_CmdPipelineBarrier2KHR;
 extern "C" PFN_vkWaitSemaphoresKHR vk_WaitSemaphoresKHR;
 extern "C" PFN_vkCmdBeginRenderingKHR vk_CmdBeginRenderingKHR;

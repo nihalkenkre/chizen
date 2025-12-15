@@ -1,0 +1,84 @@
+#pragma once
+
+#include "scene.hpp"
+
+class BufferResource;
+
+class RasterizerScene
+{
+public:
+	virtual void Render(const VkCommandBuffer cmd_buff, const VkPipelineLayout pipeline_layout, const uint32_t cam_index) const = 0;
+	virtual ~RasterizerScene() noexcept {}
+};
+
+class RasterizeEmptyScene : public RasterizerScene
+{
+public:
+	void Render(const VkCommandBuffer cmd_buff, const VkPipelineLayout pipeline_layout, const uint32_t cam_index) const override {}
+};
+
+class RasterizerWorldScene : public RasterizerScene
+{
+public:
+	RasterizerWorldScene(const Scene &scene, const VkDevice device, const VmaAllocator allocator, const std::vector<VkDescriptorSetLayout>& desc_set_layouts, const VkCommandBuffer cmd_buff, const VkQueue queue);
+
+	void Render(const VkCommandBuffer cmd_buff, const VkPipelineLayout pipeline_layout, const uint32_t cam_index) const override;
+
+	class MeshInstance : public Scene::MeshInstance
+	{
+	public:
+		MeshInstance(const Scene::MeshInstance& mesh_instance, const BufferResource* scene_data, const VkDevice device, const VkDescriptorPool desc_pool, const VkDescriptorSetLayout desc_set_layout);
+
+		~MeshInstance() noexcept;
+
+		VkDescriptorSet GetModelMatDescSet() const;
+
+	private:
+		VkDescriptorSet mModelMatDescSet = VK_NULL_HANDLE;
+	};
+
+	class Mesh : public Scene::Mesh
+	{
+	public:
+		Mesh(const Scene::Mesh& mesh, const BufferResource* scene_data);
+
+		class Primitive : public Scene::Mesh::Primitive
+		{
+		public:
+			Primitive(const Scene::Mesh::Primitive& primitive, const BufferResource* scene_data);
+		};
+	};
+
+	class CameraInstance : public Scene::CameraInstance
+	{
+	public:
+		CameraInstance(const Scene::CameraInstance& camera_instance, const BufferResource* scene_data, const VkDevice device, const VkDescriptorPool desc_pool, const VkDescriptorSetLayout desc_set_layout);
+
+		VkDescriptorSet GetViewProjDescSet() const;
+
+	private:
+		VkDescriptorSet mViewProjDescSet = VK_NULL_HANDLE;
+	};
+
+	class Camera : public Scene::Camera 
+	{
+	public:
+		Camera(const Scene::Camera& camera, const BufferResource* scene_data);
+	};
+
+	~RasterizerWorldScene() noexcept override;
+
+private:
+	std::vector<RasterizerWorldScene::MeshInstance> mMeshInstances;
+	std::vector<RasterizerWorldScene::Mesh> mMeshes;
+	std::vector<RasterizerWorldScene::CameraInstance> mCameraInstances;
+	std::vector<RasterizerWorldScene::Camera> mCameras;
+
+	std::unique_ptr<BufferResource> mVertexData = nullptr;
+	std::unique_ptr<BufferResource> mUniformData = nullptr;
+
+	// All the descs in the scene
+	VkDescriptorPool mDescriptorPool = VK_NULL_HANDLE;
+
+	VkDevice mDevice = VK_NULL_HANDLE;
+};

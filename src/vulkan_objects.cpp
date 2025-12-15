@@ -554,6 +554,7 @@ Device::Device(const PhysicalDeviceData* physical_device_data)
 	vk_CmdBeginRenderingKHR = reinterpret_cast<PFN_vkCmdBeginRenderingKHR>(vkGetDeviceProcAddr(mDevice, "vkCmdBeginRenderingKHR"));
 	vk_CmdBindDescriptorSets2KHR = reinterpret_cast<PFN_vkCmdBindDescriptorSets2KHR>(vkGetDeviceProcAddr(mDevice, "vkCmdBindDescriptorSets2KHR"));
 	vk_CmdBindVertexBuffers2EXT = reinterpret_cast<PFN_vkCmdBindVertexBuffers2EXT>(vkGetDeviceProcAddr(mDevice, "vkCmdBindVertexBuffers2EXT"));
+	vk_CmdCopyBufferToImage2KHR = reinterpret_cast<PFN_vkCmdCopyBufferToImage2KHR>(vkGetDeviceProcAddr(mDevice, "vkCmdCopyBufferToImage2KHR"));
 	vk_CmdBindIndexBuffer2KHR = reinterpret_cast<PFN_vkCmdBindIndexBuffer2KHR>(vkGetDeviceProcAddr(mDevice, "vkCmdBindIndexBuffer2KHR"));
 	vk_CmdPushConstants2KHR = reinterpret_cast<PFN_vkCmdPushConstants2KHR>(vkGetDeviceProcAddr(mDevice, "vkCmdPushConstants2KHR"));
 	vk_CmdEndRenderingKHR = reinterpret_cast<PFN_vkCmdEndRenderingKHR>(vkGetDeviceProcAddr(mDevice, "vkCmdEndRenderingKHR"));

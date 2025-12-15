@@ -5,6 +5,7 @@
 #include "imgui_state.hpp"
 #include "resources.hpp"
 #include "scene.hpp"
+#include "rasterizer_scene.hpp"
 
 #include "utils.hpp"
 

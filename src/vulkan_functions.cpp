@@ -5,6 +5,7 @@ PFN_vkQueueSubmit2KHR vk_QueueSubmit2KHR = nullptr;
 PFN_vkSignalSemaphoreKHR vk_SignalSemaphoreKHR = nullptr;
 PFN_vkCmdPipelineBarrier2KHR vk_CmdPipelineBarrier2KHR = nullptr;
 PFN_vkCmdCopyBuffer2KHR vk_CmdCopyBuffer2KHR = nullptr;
+PFN_vkCmdCopyBufferToImage2KHR vk_CmdCopyBufferToImage2KHR = nullptr;
 PFN_vkWaitSemaphoresKHR vk_WaitSemaphoresKHR = nullptr;
 PFN_vkCmdBeginRenderingKHR vk_CmdBeginRenderingKHR = nullptr;
 PFN_vkCmdBindDescriptorSets2KHR vk_CmdBindDescriptorSets2KHR = nullptr;
@@ -40,6 +41,11 @@ VKAPI_ATTR VkResult VKAPI_CALL vkSignalSemaphoreKHR(VkDevice device, const VkSem
 VKAPI_ATTR void VKAPI_CALL vkCmdCopyBuffer2KHR(VkCommandBuffer commandBuffer, const VkCopyBufferInfo2* pCopyBufferInfo)
 {
 	return vk_CmdCopyBuffer2KHR(commandBuffer, pCopyBufferInfo);
+}
+
+VKAPI_ATTR void VKAPI_CALL vkCmdCopyBufferToImage2KHR(VkCommandBuffer commandBuffer, const VkCopyBufferToImageInfo2* pCopyBufferToImageInfo)
+{
+	return vk_CmdCopyBufferToImage2KHR(commandBuffer, pCopyBufferToImageInfo);
 }
 
 VKAPI_ATTR VkResult VKAPI_CALL vkQueueSubmit2KHR(VkQueue queue, uint32_t submitCount, const VkSubmitInfo2* pSubmits, VkFence fence)

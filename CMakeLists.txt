@@ -45,13 +45,17 @@ target_precompile_headers(${PROJECT_NAME} PRIVATE
                                        <glm/ext/matrix_transform.hpp>
                                        <glm/gtc/type_ptr.hpp>
                                        <cgltf.h>
+                                       <tbb/parallel_for.h>
+                                       <tbb/blocked_range2d.h>
+                                       <tbb/task_arena.h>
+                                       <embree4/rtcore.h>
                            )
 set_property(TARGET ${PROJECT_NAME} PROPERTY CXX_STANDARD 23)
 
-target_include_directories(${PROJECT_NAME} PRIVATE SDL/include imgui imgui/backends ImGuiFileDialog glm cgltf $ENV{VULKAN_SDK}/Include)
+target_include_directories(${PROJECT_NAME} PRIVATE SDL/include imgui imgui/backends ImGuiFileDialog glm cgltf $ENV{VULKAN_SDK}/Include $ENV{EMBREE_SDK}/include $ENV{ONE_TBB_SDK}/include)
 
-target_link_directories(${PROJECT_NAME} PRIVATE $<IF:$<CONFIG:Debug>,${CMAKE_SOURCE_DIR}/SDL/build/Debug,> $<IF:$<CONFIG:MinSizeRel>,${CMAKE_SOURCE_DIR}/SDL/build/MinSizeRel,> $ENV{VULKAN_SDK}/Lib)
-target_link_libraries(${PROJECT_NAME} PRIVATE SDL3-static Vulkan::Vulkan slang winmm setupapi version)
+target_link_directories(${PROJECT_NAME} PRIVATE $<IF:$<CONFIG:Debug>,${CMAKE_SOURCE_DIR}/SDL/build/Debug,> $<IF:$<CONFIG:MinSizeRel>,${CMAKE_SOURCE_DIR}/SDL/build/MinSizeRel,> $ENV{VULKAN_SDK}/Lib $ENV{EMBREE_SDK}/lib/ $ENV{ONE_TBB_SDK}/lib/intel64/vc14)
+target_link_libraries(${PROJECT_NAME} PRIVATE SDL3-static Vulkan::Vulkan slang winmm setupapi version embree4 $<IF:$<CONFIG:Debug>,tbb12_debug,> $<IF:$<CONFIG:MinSizeRel>,tbb12,>)
 
 if (CMAKE_CXX_COMPILER_ID MATCHES "MSVC")
    add_custom_command(TARGET ${PROJECT_NAME} POST_BUILD COMMAND ${CMAKE_SOURCE_DIR}/build_shaders.bat ${CMAKE_SOURCE_DIR} $<CONFIG> $<TARGET_FILE_DIR:${PROJECT_NAME}>)

@@ -465,7 +465,7 @@ Display::Display(const VulkanInterface* vulkan_interface, ImageResource* final_r
 
 	mGeometryBuffer = std::make_unique<BufferResource>(vulkan_interface->GetDevice()->GetDevice(), vulkan_interface->GetAllocator()->GetAllocator(), verts_data,
 		VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_VERTEX_BUFFER_BIT, 0,
-		VMA_MEMORY_USAGE_AUTO_PREFER_DEVICE, "geometry buffer", vulkan_interface->GetTransferObjects()->GetCommandBuffer(), vulkan_interface->GetTransferObjects()->GetQueue());
+		"geometry buffer", vulkan_interface->GetTransferObjects()->GetCommandBuffer(), vulkan_interface->GetTransferObjects()->GetQueue());
 
 	//std::unique_ptr<BufferResource> staging_buffer = std::make_unique<BufferResource>(vulkan_interface->GetDevice()->GetDevice(), vulkan_interface->GetAllocator()->GetAllocator(), verts_size,
 	//	VK_BUFFER_USAGE_TRANSFER_SRC_BIT, VMA_ALLOCATION_CREATE_HOST_ACCESS_SEQUENTIAL_WRITE_BIT | VMA_ALLOCATION_CREATE_MAPPED_BIT,
@@ -716,6 +716,10 @@ void Display::Render(const float position_offset[], const float zoom_level, ImGU
 	VK_CHECK("gfx q wait idle", vkQueueWaitIdle(mQueue));
 
 	mFrameObjects->NextFrame();
+}
+
+void Display::UpdateEmbreeOutput(BufferResource* embree_output)
+{
 }
 
 void Display::UpdateFinalRenderTarget(ImageResource* final_render_target)

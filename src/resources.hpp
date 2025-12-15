@@ -13,13 +13,6 @@ public:
 
 	~ImageResource() noexcept;
 
-	//void ChangeImageLayout(const VkCommandBuffer cmd_buff,
-	//	const VkPipelineStageFlags2 src_stage_mask, const VkAccessFlags2 src_access_mask,
-	//	const VkPipelineStageFlags2 dst_stage_mask, const VkAccessFlags2 dst_access_mask,
-	//	const VkImageLayout old_layout, const VkImageLayout new_layout,
-	//	const uint32_t src_q_fly_idx, const uint32_t dst_q_fly_idx,
-	//	const VkImageAspectFlags aspect_mask);
-
 	VkImage GetImage() const;
 	VkDescriptorImageInfo GetDescriptorInfo() const;
 
@@ -44,7 +37,8 @@ class BufferResource
 {
 public:
 	BufferResource() = delete;
-	BufferResource(const VkDevice device, const VmaAllocator allocator, const std::vector<uint8_t>& data, const VkBufferUsageFlags usage, const VmaAllocationCreateFlags vma_alloc_create_flags, const VmaMemoryUsage vma_mem_usage, const std::string& name, const VkCommandBuffer cmd_buff = VK_NULL_HANDLE, const VkQueue queue = VK_NULL_HANDLE);
+	BufferResource(const VkDevice device, const VmaAllocator allocator, const std::vector<uint8_t>& data, const VkBufferUsageFlags usage, const VmaAllocationCreateFlags vma_alloc_create_flags, const std::string& name, const VkCommandBuffer cmd_buff = VK_NULL_HANDLE, const VkQueue queue = VK_NULL_HANDLE);
+	BufferResource(const VkDevice device, const VmaAllocator allocator, const VkDeviceSize size, const VkBufferUsageFlags usage, const VmaAllocationCreateFlags vma_alloc_create_flags, const std::string& name, const VkCommandBuffer cmd_buff = VK_NULL_HANDLE, const VkQueue queue = VK_NULL_HANDLE);
 
 	BufferResource(const BufferResource& other) = delete;
 	BufferResource& operator=(const BufferResource& other) = delete;
@@ -52,6 +46,7 @@ public:
 	~BufferResource() noexcept;
 
 	void CopyToBuffer(const VkCommandBuffer cmd_buff, const VkQueue queue, const VkBuffer dst_buffer, const VkDeviceSize size);
+	void CopyToImage(const VkCommandBuffer cmd_buff, const VkQueue queue, const VkImage dst_image, const VkExtent2D dst_image_extent);
 
 	VkDescriptorBufferInfo GetDescriptorInfo() const;
 
