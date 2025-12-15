@@ -38,13 +38,6 @@ void Utils_ChangeImageLayout(
 
 void Utils_InitializeImages(const std::vector<VkImage> images, const VkCommandBuffer cmd_buff, const VkQueue queue)
 {
-	const VkCommandBufferBeginInfo begin_info = {
-		.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO,
-		.flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT,
-	};
-
-	VK_CHECK("begin cmd buff", vkBeginCommandBuffer(cmd_buff, &begin_info));
-
 	for (const auto& image : images)
 	{
 		Utils_ChangeImageLayout(cmd_buff,
@@ -55,26 +48,6 @@ void Utils_InitializeImages(const std::vector<VkImage> images, const VkCommandBu
 			VK_IMAGE_ASPECT_COLOR_BIT,
 			image);
 	}
-
-	VK_CHECK("end cmd buff", vkEndCommandBuffer(cmd_buff));
-
-	const VkCommandBufferSubmitInfo cmd_buff_infos[] = {
-		{
-			.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_SUBMIT_INFO,
-			.commandBuffer = cmd_buff,
-		},
-	};
-
-	const VkSubmitInfo2 submit_infos[] = {
-		{
-			.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO_2,
-			.commandBufferInfoCount= std::size(cmd_buff_infos),
-			.pCommandBufferInfos = cmd_buff_infos,
-		},
-	};
-
-	VK_CHECK("submit tranfer commands", vkQueueSubmit2KHR(queue, std::size(submit_infos), submit_infos, VK_NULL_HANDLE));
-	VK_CHECK("queue wait idle", vkQueueWaitIdle(queue));
 }
 
 void Utils_InsertMemoryBarrier(

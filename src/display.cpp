@@ -402,6 +402,7 @@ Display::Display(const VulkanInterface* vulkan_interface, ImageResource* final_r
 	mFinalRenderTarget = final_render_target;
 	mMaxFramesInFlight = static_cast<uint8_t>(vulkan_interface->GetSwapchain()->GetImagesCount()) + 2;
 	mExtent = vulkan_interface->GetSurfaceKHR()->GetSurfaceCapabilities().surfaceCapabilities.currentExtent;
+	mTransferObjects = vulkan_interface->GetTransferObjects();
 	mSwapchain = vulkan_interface->GetSwapchain();
 	mQueue = vulkan_interface->GetDevice()->GetGraphicsQueue();
 	mDevice = vulkan_interface->GetDevice()->GetDevice();
@@ -463,13 +464,19 @@ Display::Display(const VulkanInterface* vulkan_interface, ImageResource* final_r
 	std::vector <uint8_t> verts_data(verts_size);
 	std::memcpy(verts_data.data(), verts, verts_size);
 
-	mGeometryBuffer = std::make_unique<BufferResource>(vulkan_interface->GetDevice()->GetDevice(), vulkan_interface->GetAllocator()->GetAllocator(), verts_data,
-		VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_VERTEX_BUFFER_BIT, 0,
-		"geometry buffer", vulkan_interface->GetTransferObjects()->GetCommandBuffer(), vulkan_interface->GetTransferObjects()->GetQueue());
+	mGeometryBuffer = std::make_unique<DeviceBufferResource>(
+		vulkan_interface->GetDevice()->GetDevice(), vulkan_interface->GetAllocator()->GetAllocator(), 
+		VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_VERTEX_BUFFER_BIT, verts_size,
+		"geometry buffer");
 
-	//std::unique_ptr<BufferResource> staging_buffer = std::make_unique<BufferResource>(vulkan_interface->GetDevice()->GetDevice(), vulkan_interface->GetAllocator()->GetAllocator(), verts_size,
-	//	VK_BUFFER_USAGE_TRANSFER_SRC_BIT, VMA_ALLOCATION_CREATE_HOST_ACCESS_SEQUENTIAL_WRITE_BIT | VMA_ALLOCATION_CREATE_MAPPED_BIT,
-	//	VMA_MEMORY_USAGE_AUTO_PREFER_HOST, "staging geometry buffer");
+	std::unique_ptr<HostBufferResource> staging_buffer = std::make_unique<HostBufferResource>(
+		vulkan_interface->GetDevice()->GetDevice(), vulkan_interface->GetAllocator()->GetAllocator(),
+		VK_BUFFER_USAGE_TRANSFER_SRC_BIT, VMA_ALLOCATION_CREATE_HOST_ACCESS_SEQUENTIAL_WRITE_BIT, verts_data,
+		"staging geometry buffer");
+
+	mTransferObjects->BeginBatch();
+	mTransferObjects->CopyBufferToBuffer(staging_buffer->GetVkBuffer(), mGeometryBuffer->GetVkBuffer(), verts_size);
+	mTransferObjects->EndBatch();
 
 	//std::memcpy(staging_buffer->GetAllocationInfo2().allocationInfo.pMappedData, verts, verts_size);
 
@@ -661,6 +668,12 @@ void Display::Render(const float position_offset[], const float zoom_level, ImGU
 			.semaphore = mAcquireSignalSemaphores[frame_in_flight],
 			.stageMask = VK_PIPELINE_STAGE_2_TOP_OF_PIPE_BIT,
 		},
+		{
+			.sType = VK_STRUCTURE_TYPE_SEMAPHORE_SUBMIT_INFO,
+			.semaphore = mTransferObjects->GetSemaphore(),
+			.value = mTransferObjects->GetSemaphoreValue(),
+			.stageMask = VK_PIPELINE_STAGE_2_FRAGMENT_SHADER_BIT,
+		}
 	};
 
 	const VkCommandBufferSubmitInfo cmd_buff_infos[] = {
@@ -716,10 +729,6 @@ void Display::Render(const float position_offset[], const float zoom_level, ImGU
 	VK_CHECK("gfx q wait idle", vkQueueWaitIdle(mQueue));
 
 	mFrameObjects->NextFrame();
-}
-
-void Display::UpdateEmbreeOutput(BufferResource* embree_output)
-{
 }
 
 void Display::UpdateFinalRenderTarget(ImageResource* final_render_target)

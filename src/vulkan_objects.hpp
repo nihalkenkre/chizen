@@ -133,15 +133,31 @@ public:
 
 	~TransferObjects() noexcept;
 
+	void BeginBatch();
+	void ChangeImageLayout(
+		const VkPipelineStageFlags2 src_stage_mask, const VkAccessFlags2 src_access_mask,
+		const VkPipelineStageFlags2 dst_stage_mask, const VkAccessFlags2 dst_access_mask,
+		const VkImageLayout old_layout, const VkImageLayout new_layout,
+		const uint32_t src_q_fly_idx, const uint32_t dst_q_fly_idx,
+		const VkImageAspectFlags aspect_mask,
+		const VkImage& image);
+	void CopyBufferToBuffer(const VkBuffer src_buffer, const VkBuffer dst_buffer, const VkDeviceSize size);
+	void CopyBufferToImage(const VkBuffer src_buffer, const VkImage dst_image, const VkExtent2D extent);
+	void EndBatch();
+
 	VkCommandPool GetCommandPool() const;
 	VkCommandBuffer GetCommandBuffer() const;
 	VkQueue GetQueue() const;
+	VkSemaphore GetSemaphore() const;
+	uint64_t& GetSemaphoreValue();
 	uint32_t GetQueueFamilyIndex() const;
 
 private:
 	VkCommandPool mCommandPool = VK_NULL_HANDLE;
 	VkCommandBuffer mCommandBuffer = VK_NULL_HANDLE;
 	VkQueue mQueue = VK_NULL_HANDLE;
+	VkSemaphore mSemaphore = VK_NULL_HANDLE;
+	uint64_t mSemaphoreValue = 0;
 	uint32_t mQueueFamilyIndex = 0;
 
 	VkDevice mDevice = VK_NULL_HANDLE;

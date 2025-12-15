@@ -5,8 +5,6 @@
 
 void EmbreeRaytracer::Start(const EmbreeRaytracerScene* scene, const uint32_t max_samples, float* pixels)
 {
-	SDL_CHECK(SDL_PushEvent(&events.RaytraceStopped));
-
 	tbb::blocked_range2d<float> render_range(0, static_cast<float>(mWidth), 0, static_cast<float>(mHeight));
 	tbb::parallel_for(render_range, [this, pixels](const tbb::blocked_range2d<float>& xy) {
 		for (float x = xy.rows().begin(); x < xy.rows().end(); ++x)
@@ -14,12 +12,14 @@ void EmbreeRaytracer::Start(const EmbreeRaytracerScene* scene, const uint32_t ma
 			for (float y = xy.cols().begin(); y < xy.cols().end(); ++y)
 			{
 				(pixels)[static_cast<uint32_t>((y * mWidth + x) * 4)] = x / mWidth;
-				(pixels)[static_cast<uint32_t>((y * mWidth + x) * 4 + 1)] = x/mWidth;
-				(pixels)[static_cast<uint32_t>((y * mWidth + x) * 4 + 2)] = x/mWidth;
+				(pixels)[static_cast<uint32_t>((y * mWidth + x) * 4 + 1)] = y/ mHeight;
+				(pixels)[static_cast<uint32_t>((y * mWidth + x) * 4 + 2)] = 0.f;
 				(pixels)[static_cast<uint32_t>((y * mWidth + x) * 4 + 3)] = 1.f;
 			}
 		}
 	});
+
+	SDL_PushEvent(&events.RaytraceStopped);
 }
 
 void EmbreeRaytracer::Stop()

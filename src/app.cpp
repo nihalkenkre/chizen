@@ -27,14 +27,15 @@ App::App(SDL_Window* window, const std::string& current_path) : mWindow(window)
 		std::vector<uint32_t>{ mVulkanInterface->GetPhysicalDeviceData()->GraphicsQueueFamilyIndex, mVulkanInterface->GetPhysicalDeviceData()->ComputeQueueFamilyIndex, mVulkanInterface->GetPhysicalDeviceData()->TransferQueueFamilyIndex },
 		"final render target");
 
-	mEmbreeRenderTarget = std::make_unique<BufferResource>(
+	mEmbreeRenderTarget = std::make_unique<HostBufferResource>(
 		mVulkanInterface->GetDevice()->GetDevice(), mVulkanInterface->GetAllocator()->GetAllocator(),
-		mRenderTargetExtent.width * mRenderTargetExtent.height * 4 * sizeof(float),
-		VK_BUFFER_USAGE_TRANSFER_SRC_BIT, VMA_ALLOCATION_CREATE_HOST_ACCESS_RANDOM_BIT | VMA_ALLOCATION_CREATE_MAPPED_BIT,
-		"embree render target"
+		VK_BUFFER_USAGE_TRANSFER_SRC_BIT, VMA_ALLOCATION_CREATE_HOST_ACCESS_RANDOM_BIT,
+		mRenderTargetExtent.width * mRenderTargetExtent.height * 4 * sizeof(float), "embree render target"
 	);
 
+	mVulkanInterface->GetTransferObjects()->BeginBatch();
 	Utils_InitializeImages({ mFinalRenderTarget->GetImage() }, mVulkanInterface->GetTransferObjects()->GetCommandBuffer(), mVulkanInterface->GetTransferObjects()->GetQueue());
+	mVulkanInterface->GetTransferObjects()->EndBatch();
 
 	mRasterizer = std::make_unique<Rasterizer>(mVulkanInterface.get(), current_path, "rasterizer");
 	mDisplay = std::make_unique<Display>(mVulkanInterface.get(), mFinalRenderTarget.get(), current_path);
@@ -109,8 +110,7 @@ void App::ProcessEvent(SDL_Event* event)
 			mVulkanInterface->GetDevice()->GetDevice(),
 			mVulkanInterface->GetAllocator()->GetAllocator(),
 			mRasterizer->GetDescriptorSetLayouts(),
-			mVulkanInterface->GetTransferObjects()->GetCommandBuffer(),
-			mVulkanInterface->GetTransferObjects()->GetQueue()
+			mVulkanInterface->GetTransferObjects()
 		);
 		mVulkanRaytracerScene = std::make_unique<VulkanRaytracerScene>();
 		mEmbreeRaytacerScene = std::make_unique<EmbreeRaytracerScene>();
@@ -152,7 +152,11 @@ void App::ProcessEvent(SDL_Event* event)
 	{
 		if (mRaytracerType == 1)
 		{
-			mEmbreeRenderTarget->CopyToImage(mVulkanInterface->GetTransferObjects()->GetCommandBuffer(), mVulkanInterface->GetTransferObjects()->GetQueue(), mFinalRenderTarget->GetImage(), mRenderTargetExtent);
+			mVulkanInterface->GetTransferObjects()->BeginBatch();
+			mVulkanInterface->GetTransferObjects()->CopyBufferToImage(
+				mEmbreeRenderTarget->GetVkBuffer(), mFinalRenderTarget->GetImage(), mRenderTargetExtent
+			);
+			mVulkanInterface->GetTransferObjects()->EndBatch();
 		}
 	}
 
@@ -203,10 +207,10 @@ void App::RecreateRenderTarget()
 		queue_family_indices,
 		"final render target");
 
-	mEmbreeRenderTarget = std::make_unique<BufferResource>(
+	mEmbreeRenderTarget = std::make_unique<HostBufferResource>(
 		mVulkanInterface->GetDevice()->GetDevice(), mVulkanInterface->GetAllocator()->GetAllocator(),
+		VK_BUFFER_USAGE_TRANSFER_SRC_BIT, VMA_ALLOCATION_CREATE_HOST_ACCESS_RANDOM_BIT,
 		mRenderTargetExtent.width * mRenderTargetExtent.height * 4 * sizeof(float),
-		VK_BUFFER_USAGE_TRANSFER_SRC_BIT, VMA_ALLOCATION_CREATE_HOST_ACCESS_RANDOM_BIT | VMA_ALLOCATION_CREATE_MAPPED_BIT,
 		"embree render target"
 	);
 

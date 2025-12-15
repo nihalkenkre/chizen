@@ -4,8 +4,9 @@ class VulkanInterface;
 class FrameObjects;
 class DisplayPipelineData;
 class ImGUIState;
-class BufferResource;
+class DeviceBufferResource;
 class ImageResource;
+class TransferObjects;
 class Swapchain;
 
 class Display
@@ -20,7 +21,6 @@ public:
 	~Display() noexcept;
 
 	void Render(const float position_offset[], const float zoom_level, ImGUIState* imgui_state);
-	void UpdateEmbreeOutput(BufferResource* embree_output);
 	void UpdateFinalRenderTarget(ImageResource* final_render_target);
 	void UpdateSwapchain(Swapchain* swapchain);
 	void UpdateExtent(VkExtent2D extent);
@@ -35,8 +35,9 @@ private:
 	VkDescriptorPool mDescriptorPool = VK_NULL_HANDLE;
 
 	std::unique_ptr<DisplayPipelineData> mPipelineData = {};
-	std::unique_ptr<BufferResource> mGeometryBuffer;
+	std::unique_ptr<DeviceBufferResource> mGeometryBuffer;
 
+	TransferObjects* mTransferObjects = {};
 	Swapchain* mSwapchain = {};
 	VkExtent2D mExtent = {};
 	VkQueue mQueue = VK_NULL_HANDLE;

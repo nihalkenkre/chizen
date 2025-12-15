@@ -434,6 +434,7 @@ Rasterizer::Rasterizer(const VulkanInterface* vulkan_interface, const std::strin
 	mSwapchain(vulkan_interface->GetSwapchain()),
 	mQueue(vulkan_interface->GetDevice()->GetGraphicsQueue()),
 	mAllocator(vulkan_interface->GetAllocator()),
+	mTransferObjects(vulkan_interface->GetTransferObjects()),
 	mQueueFamilyIndices({
 			vulkan_interface->GetPhysicalDeviceData()->GraphicsQueueFamilyIndex,
 			vulkan_interface->GetPhysicalDeviceData()->ComputeQueueFamilyIndex,
@@ -477,19 +478,13 @@ Rasterizer::Rasterizer(const VulkanInterface* vulkan_interface, const std::strin
 #endif // _DEBUG
 	}
 
-	InitializeResources(vulkan_interface->GetTransferObjects()->GetCommandBuffer(), vulkan_interface->GetTransferObjects()->GetQueue());
+	InitializeResources(vulkan_interface->GetTransferObjects());
 }
 
-void Rasterizer::InitializeResources(const VkCommandBuffer cmd_buff, const VkQueue queue)
+void Rasterizer::InitializeResources(TransferObjects* transfer_objects)
 {
-	const VkCommandBufferBeginInfo cmd_buff_bi = {
-		.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO,
-	};
-
-	VK_CHECK("begin xfer cmd buff", vkBeginCommandBuffer(cmd_buff, &cmd_buff_bi));
-
-	Utils_ChangeImageLayout(
-		cmd_buff,
+	transfer_objects->BeginBatch();
+	transfer_objects->ChangeImageLayout(
 		VK_PIPELINE_STAGE_2_TOP_OF_PIPE_BIT, 0,
 		VK_PIPELINE_STAGE_2_BOTTOM_OF_PIPE_BIT, 0,
 		VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_DEPTH_ATTACHMENT_OPTIMAL,
@@ -497,26 +492,7 @@ void Rasterizer::InitializeResources(const VkCommandBuffer cmd_buff, const VkQue
 		VK_IMAGE_ASPECT_DEPTH_BIT,
 		mDepthTexture->GetImage()
 	);
-
-	VK_CHECK("end xfer cmd buff", vkEndCommandBuffer(cmd_buff));
-
-	const VkCommandBufferSubmitInfo cmd_buff_infos[] = {
-		{
-			.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_SUBMIT_INFO,
-			.commandBuffer = cmd_buff,
-		}
-	};
-
-	const VkSubmitInfo2 submit_infos[] = {
-		{
-			.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO_2,
-			.commandBufferInfoCount = std::size(cmd_buff_infos),
-			.pCommandBufferInfos = cmd_buff_infos,
-		},
-	};
-
-	VK_CHECK("submit xfer cmd buff", vkQueueSubmit2KHR(queue, std::size(submit_infos), submit_infos, VK_NULL_HANDLE));
-	VK_CHECK("wait for device", vkDeviceWaitIdle(mDevice));
+	transfer_objects->EndBatch();
 }
 
 void Rasterizer::Render(const RasterizerScene* scene, ImGUIState* imgui_state)
@@ -649,6 +625,12 @@ void Rasterizer::Render(const RasterizerScene* scene, ImGUIState* imgui_state)
 		{
 			.sType = VK_STRUCTURE_TYPE_SEMAPHORE_SUBMIT_INFO,
 			.semaphore = mAcquireSignalSemaphores[frame_in_flight],
+			.stageMask = VK_PIPELINE_STAGE_2_TOP_OF_PIPE_BIT,
+		},
+		{
+			.sType = VK_STRUCTURE_TYPE_SEMAPHORE_SUBMIT_INFO,
+			.semaphore = mTransferObjects->GetSemaphore(),
+			.value = mTransferObjects->GetSemaphoreValue(),
 			.stageMask = VK_PIPELINE_STAGE_2_TOP_OF_PIPE_BIT,
 		},
 	};

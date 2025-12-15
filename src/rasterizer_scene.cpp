@@ -1,21 +1,39 @@
 #include "rasterizer_scene.hpp"
 #include "utils.hpp"
 #include "resources.hpp"
+#include "vulkan_objects.hpp"
 
-RasterizerWorldScene::RasterizerWorldScene(const Scene& scene, const VkDevice device, const VmaAllocator allocator, const std::vector<VkDescriptorSetLayout>& desc_set_layouts, const VkCommandBuffer cmd_buff, const VkQueue queue)
+RasterizerWorldScene::RasterizerWorldScene(const Scene& scene, const VkDevice device, const VmaAllocator allocator, const std::vector<VkDescriptorSetLayout>& desc_set_layouts, TransferObjects* transfer_objects)
 	: mDevice(device)
 {
 	auto vertex_data = scene.GetVertexData();
 
-	mVertexData = std::make_unique<BufferResource>(device, allocator, vertex_data,
+	mVertexData = std::make_unique<DeviceBufferResource>(
+		device, allocator,
 		VK_BUFFER_USAGE_VERTEX_BUFFER_BIT | VK_BUFFER_USAGE_INDEX_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT,
-		0, "scene vertex data", cmd_buff, queue);
+		 vertex_data.size(), "scene vertex data");
+	auto staging_vertex_data = std::make_unique<HostBufferResource>(
+		device, allocator,
+		VK_BUFFER_USAGE_TRANSFER_SRC_BIT, VMA_ALLOCATION_CREATE_HOST_ACCESS_SEQUENTIAL_WRITE_BIT,
+		vertex_data, "staging vertex data"
+	);
 
 	auto uniform_data = scene.GetUniformData();
 
-	mUniformData = std::make_unique<BufferResource>(device, allocator, uniform_data,
+	mUniformData = std::make_unique<DeviceBufferResource>(
+		device, allocator,
 		VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT,
-		0, "scene uniform data", cmd_buff, queue);
+		uniform_data.size(), "scene uniform data");
+	auto staging_uniform_data = std::make_unique<HostBufferResource>(
+		device, allocator,
+		VK_BUFFER_USAGE_TRANSFER_SRC_BIT, VMA_ALLOCATION_CREATE_HOST_ACCESS_SEQUENTIAL_WRITE_BIT,
+		uniform_data, "staging uniform data"
+	);
+
+	transfer_objects->BeginBatch();
+	transfer_objects->CopyBufferToBuffer(staging_vertex_data->GetVkBuffer(), mVertexData->GetVkBuffer(), vertex_data.size());
+	transfer_objects->CopyBufferToBuffer(staging_uniform_data->GetVkBuffer(), mUniformData->GetVkBuffer(), uniform_data.size());
+	transfer_objects->EndBatch();
 
 	VkDescriptorPoolSize view_proj_desc_size = {
 		.type = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER,
@@ -146,7 +164,7 @@ RasterizerWorldScene::~RasterizerWorldScene() noexcept
 		vkDestroyDescriptorPool(mDevice, mDescriptorPool, nullptr);
 }
 
-RasterizerWorldScene::MeshInstance::MeshInstance(const Scene::MeshInstance& mesh_instance, const BufferResource* scene_data, const VkDevice device, const VkDescriptorPool desc_pool, const VkDescriptorSetLayout desc_set_layout)
+RasterizerWorldScene::MeshInstance::MeshInstance(const Scene::MeshInstance& mesh_instance, const DeviceBufferResource* scene_data, const VkDevice device, const VkDescriptorPool desc_pool, const VkDescriptorSetLayout desc_set_layout)
 	: Scene::MeshInstance(mesh_instance)
 {
 	const VkDescriptorBufferInfo desc_info = {
@@ -188,17 +206,17 @@ VkDescriptorSet RasterizerWorldScene::MeshInstance::GetModelMatDescSet() const
 	return mModelMatDescSet;
 }
 
-RasterizerWorldScene::Mesh::Mesh(const Scene::Mesh& mesh, const BufferResource* scene_data)
+RasterizerWorldScene::Mesh::Mesh(const Scene::Mesh& mesh, const DeviceBufferResource* scene_data)
 	: Scene::Mesh(mesh)
 {
 }
 
-RasterizerWorldScene::Mesh::Primitive::Primitive(const Scene::Mesh::Primitive& primitive, const BufferResource* scene_data)
+RasterizerWorldScene::Mesh::Primitive::Primitive(const Scene::Mesh::Primitive& primitive, const DeviceBufferResource* scene_data)
 	: Scene::Mesh::Primitive(primitive)
 {
 }
 
-RasterizerWorldScene::CameraInstance::CameraInstance(const Scene::CameraInstance& camera_instance, const BufferResource* scene_data, const VkDevice device, const VkDescriptorPool desc_pool, const VkDescriptorSetLayout desc_set_layout)
+RasterizerWorldScene::CameraInstance::CameraInstance(const Scene::CameraInstance& camera_instance, const DeviceBufferResource* scene_data, const VkDevice device, const VkDescriptorPool desc_pool, const VkDescriptorSetLayout desc_set_layout)
 	: Scene::CameraInstance(camera_instance)
 {
 	const VkDescriptorSetAllocateInfo view_proj_ds_ai = {
@@ -232,7 +250,7 @@ VkDescriptorSet RasterizerWorldScene::CameraInstance::GetViewProjDescSet() const
 	return mViewProjDescSet;
 }
 
-RasterizerWorldScene::Camera::Camera(const Scene::Camera& camera, const BufferResource* scene_data)
+RasterizerWorldScene::Camera::Camera(const Scene::Camera& camera, const DeviceBufferResource* scene_data)
 	: Scene::Camera(camera)
 {
 }

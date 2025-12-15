@@ -7,7 +7,7 @@ class VulkanRaytracer;
 class EmbreeRaytracer;
 class ImGUIState;
 class ImageResource;
-class BufferResource;
+class HostBufferResource;
 class RasterizerScene;
 class VulkanRaytracerScene;
 class EmbreeRaytracerScene;
@@ -66,7 +66,7 @@ private:
 	std::unique_ptr<VulkanRaytracerScene> mVulkanRaytracerScene = nullptr;
 	std::unique_ptr<EmbreeRaytracerScene> mEmbreeRaytacerScene = nullptr;
 	std::unique_ptr<ImageResource> mFinalRenderTarget = nullptr;
-	std::unique_ptr<BufferResource> mEmbreeRenderTarget = nullptr;
+	std::unique_ptr<HostBufferResource> mEmbreeRenderTarget = nullptr;
 	SDL_Window* mWindow = nullptr;
 	VkExtent2D mRenderTargetExtent = { 1280, 720 };
 	std::thread mRaytraceThread = {};

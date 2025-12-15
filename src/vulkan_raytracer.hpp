@@ -4,8 +4,10 @@ class VulkanInterface;
 class FrameObjects;
 class RaytracerPipelineData;
 class ImageResource;
-class BufferResource;
+class HostBufferResource;
+class DeviceBufferResource;
 class VulkanRaytracerScene;
+class TransferObjects;
 
 class VulkanRaytracer
 {
@@ -28,23 +30,22 @@ private:
 
 	ImageResource* mFinalRenderTarget = {};
 	std::unique_ptr<ImageResource> mAccumRenderTarget = nullptr;
-	std::unique_ptr<BufferResource> mRandomStates = nullptr;
-	std::unique_ptr<BufferResource> mRaygenSBT = nullptr;
-	std::unique_ptr<BufferResource> mMissSBT = nullptr;
-	std::unique_ptr<BufferResource> mCHSBT = nullptr;
+	std::unique_ptr<DeviceBufferResource> mRandomStates = nullptr;
+	std::unique_ptr<HostBufferResource> mRaygenSBT = nullptr;
+	std::unique_ptr<HostBufferResource> mMissSBT = nullptr;
+	std::unique_ptr<HostBufferResource> mCHSBT = nullptr;
 
 	std::unique_ptr<FrameObjects> mFrameObjects = nullptr;
-	std::unique_ptr<BufferResource> mUniformBuffer = nullptr;
+	std::unique_ptr<HostBufferResource> mUniformBuffer = nullptr;
 	std::vector<VkDescriptorSet> mDescriptorSets;
 	VkDescriptorPool mDescriptorPool = VK_NULL_HANDLE;
 	VkPhysicalDeviceRayTracingPipelinePropertiesKHR mRayTracingProperties = {};
 
 	std::unique_ptr<RaytracerPipelineData> mPipelineData = nullptr;
 
+	TransferObjects* mTransferObjects = nullptr;
 	VkExtent3D mExtent = {};
 	VkQueue mComputeQueue = VK_NULL_HANDLE;
-	VkQueue mTransferQueue = VK_NULL_HANDLE;
-	VkCommandBuffer mTransferCommandBuffer = VK_NULL_HANDLE;
 	std::vector<uint32_t> mQueueFamilyIndices;
 	VmaAllocator mAllocator = nullptr;
 	VkDevice mDevice = VK_NULL_HANDLE;

@@ -352,11 +352,8 @@ uint32_t Swapchain::GetImagesCount() const
 }
 
 TransferObjects::TransferObjects(const VkDevice& device, const VkQueue& transfer_queue, const uint32_t transfer_queue_family_index, const std::string& name)
+	:mQueue(transfer_queue), mQueueFamilyIndex(transfer_queue_family_index), mDevice(device)
 {
-	mQueue = transfer_queue;
-	mQueueFamilyIndex = transfer_queue_family_index;
-	mDevice = device;
-
 	const VkCommandPoolCreateInfo cmd_pool_ci = {
 		.sType = VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO,
 		.flags = VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT,
@@ -373,9 +370,23 @@ TransferObjects::TransferObjects(const VkDevice& device, const VkQueue& transfer
 
 	VK_CHECK("allocate transfer cmd buff", vkAllocateCommandBuffers(device, &cmd_buff_ai, &mCommandBuffer));
 
+	const VkSemaphoreTypeCreateInfo sem_tl_ci = {
+		.sType = VK_STRUCTURE_TYPE_SEMAPHORE_TYPE_CREATE_INFO,
+		.semaphoreType = VK_SEMAPHORE_TYPE_TIMELINE_KHR,
+		.initialValue = 0,
+	};
+
+	const VkSemaphoreCreateInfo sem_ci = {
+		.sType = VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO,
+		.pNext = &sem_tl_ci,
+	};
+
+	VK_CHECK("create transfer sem", vkCreateSemaphore(device, &sem_ci, nullptr, &mSemaphore));
+
 #ifdef _DEBUG
 	Utils_SetObjectName(mDevice, VK_OBJECT_TYPE_COMMAND_POOL, reinterpret_cast<uint64_t>(mCommandPool), "tranfer objects command pool");
 	Utils_SetObjectName(mDevice, VK_OBJECT_TYPE_COMMAND_BUFFER, reinterpret_cast<uint64_t>(mCommandBuffer), "tranfer objects command buffer");
+	Utils_SetObjectName(mDevice, VK_OBJECT_TYPE_SEMAPHORE, reinterpret_cast<uint64_t>(mSemaphore), "transfer objects semaphore");
 #endif
 }
 
@@ -384,7 +395,140 @@ TransferObjects::~TransferObjects() noexcept
 	if (mDevice != VK_NULL_HANDLE)
 	{
 		vkDestroyCommandPool(mDevice, mCommandPool, nullptr);
+		vkDestroySemaphore(mDevice, mSemaphore, nullptr);
 	}
+}
+
+void TransferObjects::BeginBatch()
+{
+	const VkCommandBufferBeginInfo begin_info = {
+		.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO,
+		.flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT,
+	};
+	VK_CHECK("begin xfer cmd buff", vkBeginCommandBuffer(mCommandBuffer, &begin_info));
+}
+
+void TransferObjects::ChangeImageLayout(const VkPipelineStageFlags2 src_stage_mask, const VkAccessFlags2 src_access_mask, const VkPipelineStageFlags2 dst_stage_mask, const VkAccessFlags2 dst_access_mask, const VkImageLayout old_layout, const VkImageLayout new_layout, const uint32_t src_q_fly_idx, const uint32_t dst_q_fly_idx, const VkImageAspectFlags aspect_mask, const VkImage& image)
+{
+	const VkImageMemoryBarrier2 img_mem_barr = {
+		.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER_2,
+		.srcStageMask = src_stage_mask,
+		.srcAccessMask = src_access_mask,
+		.dstStageMask = dst_stage_mask,
+		.dstAccessMask = dst_access_mask,
+		.oldLayout = old_layout,
+		.newLayout = new_layout,
+		.srcQueueFamilyIndex = src_q_fly_idx,
+		.dstQueueFamilyIndex = dst_q_fly_idx,
+		.image = image,
+		.subresourceRange = {
+			.aspectMask = aspect_mask,
+			.levelCount = 1,
+			.layerCount = 1,
+		},
+	};
+
+	const VkDependencyInfo dep_info = {
+		.sType = VK_STRUCTURE_TYPE_DEPENDENCY_INFO,
+		.imageMemoryBarrierCount = 1,
+		.pImageMemoryBarriers = &img_mem_barr,
+	};
+
+	vkCmdPipelineBarrier2KHR(mCommandBuffer, &dep_info);
+}
+
+void TransferObjects::CopyBufferToBuffer(const VkBuffer src_buffer, const VkBuffer dst_buffer, const VkDeviceSize size)
+{
+	const VkBufferCopy2 regions[] = {
+		{
+			.sType = VK_STRUCTURE_TYPE_BUFFER_COPY_2,
+			.size = size,
+		},
+	};
+
+	const VkCopyBufferInfo2 copy_buff_info = {
+		.sType = VK_STRUCTURE_TYPE_COPY_BUFFER_INFO_2,
+		.srcBuffer = src_buffer,
+		.dstBuffer = dst_buffer,
+		.regionCount = std::size(regions),
+		.pRegions = regions,
+	};
+
+	vkCmdCopyBuffer2KHR(mCommandBuffer, &copy_buff_info);
+}
+
+void TransferObjects::CopyBufferToImage(const VkBuffer src_buffer, const VkImage dst_image, const VkExtent2D extent)
+{
+	const VkBufferImageCopy2KHR regions[] = {
+		{
+			.sType = VK_STRUCTURE_TYPE_BUFFER_IMAGE_COPY_2_KHR,
+			.imageSubresource = {
+				.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT,
+				.layerCount = 1,
+			},
+			.imageExtent = {
+				.width = extent.width,
+				.height = extent.height,
+				.depth = 1,
+			},
+		},
+	};
+
+	const VkCopyBufferToImageInfo2KHR copy_buff_info = {
+		.sType = VK_STRUCTURE_TYPE_COPY_BUFFER_TO_IMAGE_INFO_2_KHR,
+		.srcBuffer = src_buffer,
+		.dstImage = dst_image,
+		.dstImageLayout = VK_IMAGE_LAYOUT_GENERAL,
+		.regionCount = std::size(regions),
+		.pRegions = regions,
+	};
+
+	vkCmdCopyBufferToImage2KHR(mCommandBuffer, &copy_buff_info);
+}
+
+void TransferObjects::EndBatch()
+{
+	VK_CHECK("end xfer cmd buff", vkEndCommandBuffer(mCommandBuffer));
+
+	const VkSemaphoreSubmitInfo wait_sem_infos[] = {
+		{
+			.sType = VK_STRUCTURE_TYPE_SEMAPHORE_SUBMIT_INFO,
+			.semaphore = mSemaphore,
+			.value = mSemaphoreValue,
+			.stageMask = VK_PIPELINE_STAGE_2_TOP_OF_PIPE_BIT,
+		}
+	};
+
+	const VkCommandBufferSubmitInfo cmd_buff_infos[] = {
+		{
+			.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_SUBMIT_INFO,
+			.commandBuffer = mCommandBuffer,
+		},
+	};
+
+	const VkSemaphoreSubmitInfo sig_sem_infos[] = {
+		{
+			.sType = VK_STRUCTURE_TYPE_SEMAPHORE_SUBMIT_INFO,
+			.semaphore = mSemaphore,
+			.value = ++mSemaphoreValue,
+			.stageMask = VK_PIPELINE_STAGE_2_BOTTOM_OF_PIPE_BIT,
+		},
+	};
+
+	const VkSubmitInfo2 submit_infos[] = {
+		{
+			.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO_2,
+			.waitSemaphoreInfoCount = std::size(wait_sem_infos),
+			.pWaitSemaphoreInfos = wait_sem_infos,
+			.commandBufferInfoCount = std::size(cmd_buff_infos),
+			.pCommandBufferInfos = cmd_buff_infos,
+			.signalSemaphoreInfoCount = std::size(sig_sem_infos),
+			.pSignalSemaphoreInfos = sig_sem_infos,
+		},
+	};
+
+	VK_CHECK("submit geom buffer xfer cmd", vkQueueSubmit2KHR(mQueue, std::size(submit_infos), submit_infos, VK_NULL_HANDLE));
+	VK_CHECK("wait xfer cmd buff", vkQueueWaitIdle(mQueue));
 }
 
 VkCommandPool TransferObjects::GetCommandPool() const
@@ -400,6 +544,16 @@ VkCommandBuffer TransferObjects::GetCommandBuffer() const
 VkQueue TransferObjects::GetQueue() const
 {
 	return mQueue;
+}
+
+VkSemaphore TransferObjects::GetSemaphore() const
+{
+	return mSemaphore;
+}
+
+uint64_t& TransferObjects::GetSemaphoreValue()
+{
+	return mSemaphoreValue;
 }
 
 uint32_t TransferObjects::GetQueueFamilyIndex() const
