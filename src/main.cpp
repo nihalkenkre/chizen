@@ -13,6 +13,9 @@
 #define CGLTF_IMPLEMENTATION
 #include <cgltf.h>
 
+#define STB_IMAGE_WRITE_IMPLEMENTATION
+#include <stb_image_write.h>
+
 
 SDL_AppResult SDL_AppInit(void** appstate, int argc, char** argv)
 {

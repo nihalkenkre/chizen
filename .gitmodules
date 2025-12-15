@@ -13,3 +13,6 @@
 [submodule "cgltf"]
 	path = cgltf
 	url = git@github.com:jkuhlmann/cgltf.git
+[submodule "stb"]
+	path = stb
+	url = git@github.com:nothings/stb.git

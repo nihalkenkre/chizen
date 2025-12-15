@@ -528,7 +528,7 @@ void TransferObjects::EndBatch()
 	};
 
 	VK_CHECK("submit geom buffer xfer cmd", vkQueueSubmit2KHR(mQueue, std::size(submit_infos), submit_infos, VK_NULL_HANDLE));
-	VK_CHECK("wait xfer cmd buff", vkQueueWaitIdle(mQueue));
+	VK_CHECK("wait xfer cmd buff", vkQueueWaitIdle(mQueue)); // want to get rid of this.
 }
 
 VkCommandPool TransferObjects::GetCommandPool() const

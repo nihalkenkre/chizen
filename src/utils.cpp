@@ -36,20 +36,6 @@ void Utils_ChangeImageLayout(
 	vkCmdPipelineBarrier2KHR(cmd_buff, &dep_info);
 }
 
-void Utils_InitializeImages(const std::vector<VkImage> images, const VkCommandBuffer cmd_buff, const VkQueue queue)
-{
-	for (const auto& image : images)
-	{
-		Utils_ChangeImageLayout(cmd_buff,
-			VK_PIPELINE_STAGE_2_TOP_OF_PIPE_BIT, 0,
-			VK_PIPELINE_STAGE_2_BOTTOM_OF_PIPE_BIT, 0,
-			VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_GENERAL,
-			VK_QUEUE_FAMILY_IGNORED, VK_QUEUE_FAMILY_IGNORED,
-			VK_IMAGE_ASPECT_COLOR_BIT,
-			image);
-	}
-}
-
 void Utils_InsertMemoryBarrier(
 	const VkCommandBuffer cmd_buff,
 	const VkPipelineStageFlags2 src_stage_mask, const VkAccessFlags2 src_access_mask,

@@ -33,9 +33,15 @@ App::App(SDL_Window* window, const std::string& current_path) : mWindow(window)
 		mRenderTargetExtent.width * mRenderTargetExtent.height * 4 * sizeof(float), "embree render target"
 	);
 
-	mVulkanInterface->GetTransferObjects()->BeginBatch();
-	Utils_InitializeImages({ mFinalRenderTarget->GetImage() }, mVulkanInterface->GetTransferObjects()->GetCommandBuffer(), mVulkanInterface->GetTransferObjects()->GetQueue());
-	mVulkanInterface->GetTransferObjects()->EndBatch();
+	auto transfer_objects = mVulkanInterface->GetTransferObjects();
+	transfer_objects->BeginBatch();
+	transfer_objects->ChangeImageLayout(
+		VK_PIPELINE_STAGE_2_TOP_OF_PIPE_BIT, 0,
+		VK_PIPELINE_STAGE_2_BOTTOM_OF_PIPE_BIT,0,
+		VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_GENERAL,
+		VK_QUEUE_FAMILY_IGNORED, VK_QUEUE_FAMILY_IGNORED, VK_IMAGE_ASPECT_COLOR_BIT,
+		mFinalRenderTarget->GetImage());
+	transfer_objects->EndBatch();
 
 	mRasterizer = std::make_unique<Rasterizer>(mVulkanInterface.get(), current_path, "rasterizer");
 	mDisplay = std::make_unique<Display>(mVulkanInterface.get(), mFinalRenderTarget.get(), current_path);
@@ -214,7 +220,15 @@ void App::RecreateRenderTarget()
 		"embree render target"
 	);
 
-	Utils_InitializeImages({ mFinalRenderTarget->GetImage() }, mVulkanInterface->GetTransferObjects()->GetCommandBuffer(), mVulkanInterface->GetTransferObjects()->GetQueue());
+	auto transfer_objects = mVulkanInterface->GetTransferObjects();
+	transfer_objects->BeginBatch();
+	transfer_objects->ChangeImageLayout(
+		VK_PIPELINE_STAGE_2_TOP_OF_PIPE_BIT, 0,
+		VK_PIPELINE_STAGE_2_BOTTOM_OF_PIPE_BIT,0,
+		VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_GENERAL,
+		VK_QUEUE_FAMILY_IGNORED, VK_QUEUE_FAMILY_IGNORED, VK_IMAGE_ASPECT_COLOR_BIT,
+		mFinalRenderTarget->GetImage());
+	transfer_objects->EndBatch();
 
 	mDisplay->UpdateFinalRenderTarget(mFinalRenderTarget.get());
 

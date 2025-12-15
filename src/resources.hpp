@@ -48,8 +48,6 @@ public:
 
 protected:
 	BufferResource() {}
-	//BufferResource(const VkDevice device, const VmaAllocator allocator, const std::vector<uint8_t>& data, const VkBufferUsageFlags usage, const VmaAllocationCreateFlags vma_alloc_create_flags, const std::string& name);
-	//BufferResource(const VkDevice device, const VmaAllocator allocator, const VkDeviceSize size, const VkBufferUsageFlags usage, const VmaAllocationCreateFlags vma_alloc_create_flags, const std::string& name);
 
 	BufferResource(const BufferResource& other) = delete;
 	BufferResource& operator=(const BufferResource& other) = delete;

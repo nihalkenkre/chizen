@@ -31,12 +31,6 @@ void Utils_ChangeImageLayout(
 	const VkImageAspectFlags aspect_mask,
 	const VkImage& image);
 
-void Utils_InitializeImages(
-	const std::vector<VkImage> images,
-	const VkCommandBuffer cmd_buff,
-	const VkQueue queue
-);
-
 void Utils_InsertMemoryBarrier(
 	const VkCommandBuffer cmd_buff,
 	const VkPipelineStageFlags2 src_stage_mask, const VkAccessFlags2 src_access_mask,
