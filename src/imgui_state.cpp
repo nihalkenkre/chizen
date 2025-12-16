@@ -4,7 +4,7 @@
 #include "vulkan_objects.hpp"
 #include "events.hpp"
 
-ImGUIState::ImGUIState(const VulkanInterface* vulkan_interface) : mDevice(vulkan_interface->GetDevice()->GetDevice())
+ImGUIState::ImGUIState(const VulkanInterface* vulkan_interface) : mDevice(vulkan_interface->GetVkDevice())
 {
 	const VkDescriptorPoolSize pool_sizes[] =
 	{
@@ -29,7 +29,7 @@ ImGUIState::ImGUIState(const VulkanInterface* vulkan_interface) : mDevice(vulkan
 		.pPoolSizes = pool_sizes,
 	};
 
-	VK_CHECK("create imgui desc pool", vkCreateDescriptorPool(vulkan_interface->GetDevice()->GetDevice(), &pool_info, nullptr, &mDescriptorPool));
+	VK_CHECK("create imgui desc pool", vkCreateDescriptorPool(vulkan_interface->GetVkDevice(), &pool_info, nullptr, &mDescriptorPool));
 
 	ImGui::CreateContext();
 	ImGui::GetIO().ConfigFlags |= ImGuiConfigFlags_DockingEnable;
@@ -40,11 +40,11 @@ ImGUIState::ImGUIState(const VulkanInterface* vulkan_interface) : mDevice(vulkan
 	ImGui_ImplVulkan_InitInfo imgui_init_info = {
 		.Instance = vulkan_interface->GetInstance()->GetInstance(),
 		.PhysicalDevice = vulkan_interface->GetPhysicalDeviceData()->PhysicalDevice,
-		.Device = vulkan_interface->GetDevice()->GetDevice(),
+		.Device = vulkan_interface->GetVkDevice(),
 		.Queue = vulkan_interface->GetDevice()->GetGraphicsQueue(),
 		.DescriptorPool = mDescriptorPool,
 		.MinImageCount = vulkan_interface->GetSwapchain()->GetImagesCount(),
-		.ImageCount = vulkan_interface->GetSwapchain()->GetImagesCount() + 2,
+		.ImageCount = vulkan_interface->GetSwapchain()->GetImagesCount(),
 		.PipelineInfoMain = {
 			.PipelineRenderingCreateInfo = {
 				.sType = VK_STRUCTURE_TYPE_PIPELINE_RENDERING_CREATE_INFO,

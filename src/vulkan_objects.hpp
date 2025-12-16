@@ -126,7 +126,7 @@ class TransferObjects
 {
 public:
 	TransferObjects() = delete;
-	TransferObjects(const VkDevice& device, const VkQueue& transfer_queue, const uint32_t transfer_queue_family_index, const std::string& name);
+	TransferObjects(const VkDevice device, const VkQueue transfer_queue, const uint32_t transfer_queue_family_index, const std::string& name);
 
 	TransferObjects(const TransferObjects& other) = delete;
 	TransferObjects& operator=(const TransferObjects& other) = delete;
@@ -144,6 +144,35 @@ public:
 	void CopyBufferToBuffer(const VkBuffer src_buffer, const VkBuffer dst_buffer, const VkDeviceSize size);
 	void CopyBufferToImage(const VkBuffer src_buffer, const VkImage dst_image, const VkExtent2D extent);
 	void EndBatch();
+
+	VkCommandPool GetCommandPool() const;
+	VkCommandBuffer GetCommandBuffer() const;
+	VkQueue GetQueue() const;
+	VkSemaphore GetSemaphore() const;
+	uint64_t& GetSemaphoreValue();
+	uint32_t GetQueueFamilyIndex() const;
+
+private:
+	VkCommandPool mCommandPool = VK_NULL_HANDLE;
+	VkCommandBuffer mCommandBuffer = VK_NULL_HANDLE;
+	VkQueue mQueue = VK_NULL_HANDLE;
+	VkSemaphore mSemaphore = VK_NULL_HANDLE;
+	uint64_t mSemaphoreValue = 0;
+	uint32_t mQueueFamilyIndex = 0;
+
+	VkDevice mDevice = VK_NULL_HANDLE;
+};
+
+class ComputeHelpers
+{
+public:
+	ComputeHelpers() = delete;
+	ComputeHelpers(const VkDevice device, const VkQueue compute_queue, const uint32_t transfer_queue_family_index, const std::string& name);
+
+	ComputeHelpers(const ComputeHelpers& other) = delete;
+	ComputeHelpers& operator=(const ComputeHelpers& other) = delete;
+
+	~ComputeHelpers() noexcept;
 
 	VkCommandPool GetCommandPool() const;
 	VkCommandBuffer GetCommandBuffer() const;

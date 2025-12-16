@@ -7,9 +7,6 @@ ImageResource::ImageResource(const VkDevice device, const VkExtent3D& extent, co
 	mDescriptorInfo = {
 		.imageLayout = VK_IMAGE_LAYOUT_GENERAL,
 	};
-	mExtent = extent;
-	mAllocator = allocator;
-	mDevice = device;
 
 	const VkImageCreateInfo create_info = {
 		.sType = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO,

@@ -45,6 +45,7 @@ target_precompile_headers(${PROJECT_NAME} PRIVATE
                                        <glm/ext/matrix_transform.hpp>
                                        <glm/gtc/type_ptr.hpp>
                                        <cgltf.h>
+                                       <tbb/tbb.h>
                                        <tbb/parallel_for.h>
                                        <tbb/blocked_range2d.h>
                                        <tbb/task_arena.h>

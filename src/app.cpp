@@ -21,14 +21,14 @@ App::App(SDL_Window* window, const std::string& current_path) : mWindow(window)
 	mRasterizerScene = std::make_unique<RasterizeEmptyScene>();
 
 	VkExtent3D extent = VkExtent3D{ mRenderTargetExtent.width, mRenderTargetExtent.height, 1 };
-	mFinalRenderTarget = std::make_unique<ImageResource>(mVulkanInterface->GetDevice()->GetDevice(),
+	mFinalRenderTarget = std::make_unique<ImageResource>(mVulkanInterface->GetVkDevice(),
 		extent, VK_FORMAT_R32G32B32A32_SFLOAT, VK_IMAGE_USAGE_STORAGE_BIT | VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT,
-		mVulkanInterface->GetAllocator()->GetAllocator(),
+		mVulkanInterface->GetVmaAllocator(),
 		std::vector<uint32_t>{ mVulkanInterface->GetPhysicalDeviceData()->GraphicsQueueFamilyIndex, mVulkanInterface->GetPhysicalDeviceData()->ComputeQueueFamilyIndex, mVulkanInterface->GetPhysicalDeviceData()->TransferQueueFamilyIndex },
 		"final render target");
 
 	mEmbreeRenderTarget = std::make_unique<HostBufferResource>(
-		mVulkanInterface->GetDevice()->GetDevice(), mVulkanInterface->GetAllocator()->GetAllocator(),
+		mVulkanInterface->GetVkDevice(), mVulkanInterface->GetVmaAllocator(),
 		VK_BUFFER_USAGE_TRANSFER_SRC_BIT, VMA_ALLOCATION_CREATE_HOST_ACCESS_RANDOM_BIT,
 		mRenderTargetExtent.width * mRenderTargetExtent.height * 4 * sizeof(float), "embree render target"
 	);
@@ -37,7 +37,7 @@ App::App(SDL_Window* window, const std::string& current_path) : mWindow(window)
 	transfer_objects->BeginBatch();
 	transfer_objects->ChangeImageLayout(
 		VK_PIPELINE_STAGE_2_TOP_OF_PIPE_BIT, 0,
-		VK_PIPELINE_STAGE_2_BOTTOM_OF_PIPE_BIT,0,
+		VK_PIPELINE_STAGE_2_BOTTOM_OF_PIPE_BIT, 0,
 		VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_GENERAL,
 		VK_QUEUE_FAMILY_IGNORED, VK_QUEUE_FAMILY_IGNORED, VK_IMAGE_ASPECT_COLOR_BIT,
 		mFinalRenderTarget->GetImage());
@@ -113,38 +113,71 @@ void App::ProcessEvent(SDL_Event* event)
 
 		mRasterizerScene = std::make_unique<RasterizerWorldScene>(
 			scene,
-			mVulkanInterface->GetDevice()->GetDevice(),
-			mVulkanInterface->GetAllocator()->GetAllocator(),
+			mVulkanInterface->GetVkDevice(),
+			mVulkanInterface->GetVmaAllocator(),
 			mRasterizer->GetDescriptorSetLayouts(),
 			mVulkanInterface->GetTransferObjects()
 		);
-		mVulkanRaytracerScene = std::make_unique<VulkanRaytracerScene>();
-		mEmbreeRaytacerScene = std::make_unique<EmbreeRaytracerScene>();
+
+		mVulkanRaytracerScene = std::make_unique<VulkanRaytracerScene>(scene, mVulkanInterface->GetComputeHelpers()->GetCommandBuffer(), mVulkanInterface->GetComputeHelpers()->GetQueue());
+		//mEmbreeRaytacerScene = std::make_unique<EmbreeRaytracerScene>(scene);
 
 		mDisplayRender = false;
 	}
 	else if (event->type == events.StartRaytrace.type)
 	{
-		SDL_CHECK(SDL_PushEvent(&events.RaytraceStarted));
-
-		int* tmp_render_target_extent = mImGUIState->GetRenderTargetExtent();
-
-		if (mRenderTargetExtent.width != tmp_render_target_extent[0] ||
-			mRenderTargetExtent.height != tmp_render_target_extent[1])
-		{
-			mRenderTargetExtent.width = tmp_render_target_extent[0];
-			mRenderTargetExtent.height = tmp_render_target_extent[1];
-			RecreateRenderTarget();
-		}
-
-		int& tmp_max_samples = mImGUIState->GetMaxSamples();
-		if (mMaxSamples != tmp_max_samples)
-		{
-			mMaxSamples = tmp_max_samples;
-		}
-
 		mRaytracerType = events.StartRaytrace.user.code;
-		StartRaytracing();
+
+		if (mRaytracerType == 0)
+		{
+			if (mVulkanRaytracerScene != nullptr)
+			{
+				int* tmp_render_target_extent = mImGUIState->GetRenderTargetExtent();
+
+				if (mRenderTargetExtent.width != tmp_render_target_extent[0] ||
+					mRenderTargetExtent.height != tmp_render_target_extent[1])
+				{
+					mRenderTargetExtent.width = tmp_render_target_extent[0];
+					mRenderTargetExtent.height = tmp_render_target_extent[1];
+					RecreateRenderTarget();
+				}
+
+				int& tmp_max_samples = mImGUIState->GetMaxSamples();
+				if (mMaxSamples != tmp_max_samples)
+				{
+					mMaxSamples = tmp_max_samples;
+				}
+
+				mRaytraceThread = std::thread(&VulkanRaytracer::Start, mVulkanRaytracer.get(), mVulkanRaytracerScene.get(), mMaxSamples);
+				mRaytraceThread.detach();
+				SDL_CHECK(SDL_PushEvent(&events.RaytraceStarted));
+			}
+		}
+		else if (mRaytracerType == 1)
+		{
+			if (mEmbreeRaytacerScene != nullptr)
+			{
+				int* tmp_render_target_extent = mImGUIState->GetRenderTargetExtent();
+
+				if (mRenderTargetExtent.width != tmp_render_target_extent[0] ||
+					mRenderTargetExtent.height != tmp_render_target_extent[1])
+				{
+					mRenderTargetExtent.width = tmp_render_target_extent[0];
+					mRenderTargetExtent.height = tmp_render_target_extent[1];
+					RecreateRenderTarget();
+				}
+
+				int& tmp_max_samples = mImGUIState->GetMaxSamples();
+				if (mMaxSamples != tmp_max_samples)
+				{
+					mMaxSamples = tmp_max_samples;
+				}
+
+				mRaytraceThread = std::thread(&EmbreeRaytracer::Start, mEmbreeRaytracer.get(), mEmbreeRaytacerScene.get(), mMaxSamples, reinterpret_cast<float*>(mEmbreeRenderTarget->GetAllocationInfo2().allocationInfo.pMappedData));
+				mRaytraceThread.detach();
+				SDL_CHECK(SDL_PushEvent(&events.RaytraceStarted));
+			}
+		}
 	}
 	else if (event->type == events.StopRaytrace.type)
 	{
@@ -155,6 +188,17 @@ void App::ProcessEvent(SDL_Event* event)
 		mDisplayRender = true;
 	}
 	else if (event->type == events.RaytraceStopped.type)
+	{
+		if (mRaytracerType == 1)
+		{
+			mVulkanInterface->GetTransferObjects()->BeginBatch();
+			mVulkanInterface->GetTransferObjects()->CopyBufferToImage(
+				mEmbreeRenderTarget->GetVkBuffer(), mFinalRenderTarget->GetImage(), mRenderTargetExtent
+			);
+			mVulkanInterface->GetTransferObjects()->EndBatch();
+		}
+	}
+	else if (event->type == events.RaytraceSampleDone.type)
 	{
 		if (mRaytracerType == 1)
 		{
@@ -187,34 +231,20 @@ void App::RunDisplay()
 	mDisplay->Render(mDeltaMousePosition, mZoomLevel, mImGUIState.get());
 }
 
-void App::StartRaytracing()
-{
-	if (mRaytracerType == 0)
-	{
-		mRaytraceThread = std::thread(&VulkanRaytracer::Start, mVulkanRaytracer.get(), mVulkanRaytracerScene.get(), mMaxSamples);
-		mRaytraceThread.detach();
-	}
-	else if (mRaytracerType == 1)
-	{
-		mRaytraceThread = std::thread(&EmbreeRaytracer::Start, mEmbreeRaytracer.get(), mEmbreeRaytacerScene.get(), mMaxSamples, reinterpret_cast<float*>(mEmbreeRenderTarget->GetAllocationInfo2().allocationInfo.pMappedData));
-		mRaytraceThread.detach();
-	}
-}
-
 void App::RecreateRenderTarget()
 {
-	VK_CHECK("device wait idle", vkDeviceWaitIdle(mVulkanInterface->GetDevice()->GetDevice()));
+	VK_CHECK("device wait idle", vkDeviceWaitIdle(mVulkanInterface->GetVkDevice()));
 
 	VkExtent3D extent = { mRenderTargetExtent.width, mRenderTargetExtent.height, 1 };
 	std::vector<uint32_t> queue_family_indices{ mVulkanInterface->GetPhysicalDeviceData()->GraphicsQueueFamilyIndex, mVulkanInterface->GetPhysicalDeviceData()->ComputeQueueFamilyIndex,  mVulkanInterface->GetPhysicalDeviceData()->TransferQueueFamilyIndex };
-	mFinalRenderTarget = std::make_unique<ImageResource>(mVulkanInterface->GetDevice()->GetDevice(),
+	mFinalRenderTarget = std::make_unique<ImageResource>(mVulkanInterface->GetVkDevice(),
 		extent, VK_FORMAT_R32G32B32A32_SFLOAT, VK_IMAGE_USAGE_STORAGE_BIT | VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT,
-		mVulkanInterface->GetAllocator()->GetAllocator(),
+		mVulkanInterface->GetVmaAllocator(),
 		queue_family_indices,
 		"final render target");
 
 	mEmbreeRenderTarget = std::make_unique<HostBufferResource>(
-		mVulkanInterface->GetDevice()->GetDevice(), mVulkanInterface->GetAllocator()->GetAllocator(),
+		mVulkanInterface->GetVkDevice(), mVulkanInterface->GetVmaAllocator(),
 		VK_BUFFER_USAGE_TRANSFER_SRC_BIT, VMA_ALLOCATION_CREATE_HOST_ACCESS_RANDOM_BIT,
 		mRenderTargetExtent.width * mRenderTargetExtent.height * 4 * sizeof(float),
 		"embree render target"
@@ -224,7 +254,7 @@ void App::RecreateRenderTarget()
 	transfer_objects->BeginBatch();
 	transfer_objects->ChangeImageLayout(
 		VK_PIPELINE_STAGE_2_TOP_OF_PIPE_BIT, 0,
-		VK_PIPELINE_STAGE_2_BOTTOM_OF_PIPE_BIT,0,
+		VK_PIPELINE_STAGE_2_BOTTOM_OF_PIPE_BIT, 0,
 		VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_GENERAL,
 		VK_QUEUE_FAMILY_IGNORED, VK_QUEUE_FAMILY_IGNORED, VK_IMAGE_ASPECT_COLOR_BIT,
 		mFinalRenderTarget->GetImage());
@@ -330,5 +360,5 @@ App::~App() noexcept
 {
 	StopRaytracing();
 
-	VK_CHECK("device wait idle", vkDeviceWaitIdle(mVulkanInterface->GetDevice()->GetDevice()));
+	VK_CHECK("device wait idle", vkDeviceWaitIdle(mVulkanInterface->GetVkDevice()));
 }

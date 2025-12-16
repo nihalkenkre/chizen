@@ -30,6 +30,7 @@ public:
 		class Primitive
 		{
 		public:
+			Primitive() {}
 			Primitive(const size_t positions_size, const size_t positions_offset, const size_t normals_size, const size_t normals_offset, const size_t texcoords_size, const size_t texcoords_offset, const size_t vertex_count, const size_t indices_size, const size_t indices_offset, const size_t index_count, const VkIndexType index_type);
 
 			size_t GetPositionsSize() const;

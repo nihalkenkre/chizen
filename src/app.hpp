@@ -27,7 +27,6 @@ public:
 	void Iterate();
 	void RunRasterizer();
 	void RunDisplay();
-	void StartRaytracing();
 	void RecreateRenderTarget();
 	void StopRaytracing();
 

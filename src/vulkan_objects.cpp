@@ -351,7 +351,7 @@ uint32_t Swapchain::GetImagesCount() const
 	return mImagesCount;
 }
 
-TransferObjects::TransferObjects(const VkDevice& device, const VkQueue& transfer_queue, const uint32_t transfer_queue_family_index, const std::string& name)
+TransferObjects::TransferObjects(const VkDevice device, const VkQueue transfer_queue, const uint32_t transfer_queue_family_index, const std::string& name)
 	:mQueue(transfer_queue), mQueueFamilyIndex(transfer_queue_family_index), mDevice(device)
 {
 	const VkCommandPoolCreateInfo cmd_pool_ci = {
@@ -401,6 +401,14 @@ TransferObjects::~TransferObjects() noexcept
 
 void TransferObjects::BeginBatch()
 {
+	const VkSemaphoreWaitInfo  wait_info = {
+		.sType = VK_STRUCTURE_TYPE_SEMAPHORE_WAIT_INFO,
+		.semaphoreCount = 1,
+		.pSemaphores = &mSemaphore,
+		.pValues = &mSemaphoreValue,
+	};
+	VK_CHECK("wait xfer sem", vkWaitSemaphoresKHR(mDevice, &wait_info, UINT64_MAX));
+
 	const VkCommandBufferBeginInfo begin_info = {
 		.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO,
 		.flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT,
@@ -795,3 +803,48 @@ AccelerationStructure::~AccelerationStructure() noexcept
 	if (mDevice != VK_NULL_HANDLE)
 		vkDestroyAccelerationStructureKHR(mDevice, mAccelerationStructure, nullptr);
 }
+
+ComputeHelpers::ComputeHelpers(const VkDevice device, const VkQueue compute_queue, const uint32_t transfer_queue_family_index, const std::string& name)
+	:mDevice(device), mQueue(compute_queue)
+{
+}
+
+ComputeHelpers::~ComputeHelpers() noexcept
+{
+	if (mDevice != VK_NULL_HANDLE)
+	{
+		vkDestroyCommandPool(mDevice, mCommandPool, nullptr);
+		vkDestroySemaphore(mDevice, mSemaphore, nullptr);
+	}
+}
+
+VkCommandPool ComputeHelpers::GetCommandPool() const
+{
+	return mCommandPool;
+}
+
+VkCommandBuffer ComputeHelpers::GetCommandBuffer() const
+{
+	return mCommandBuffer;
+}
+
+VkQueue ComputeHelpers::GetQueue() const
+{
+	return mQueue;
+}
+
+VkSemaphore ComputeHelpers::GetSemaphore() const
+{
+	return mSemaphore;
+}
+
+uint64_t& ComputeHelpers::GetSemaphoreValue()
+{
+	return mSemaphoreValue;
+}
+
+uint32_t ComputeHelpers::GetQueueFamilyIndex() const
+{
+	return mQueueFamilyIndex;
+}
+

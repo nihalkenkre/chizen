@@ -7,6 +7,7 @@ class Device;
 class Swapchain;
 class Allocator;
 class TransferObjects;
+class ComputeHelpers;
 
 class VulkanInterface
 {
@@ -24,6 +25,10 @@ public:
 	Swapchain* GetSwapchain() const;
 	Allocator* GetAllocator() const;
 	TransferObjects* GetTransferObjects() const;
+	ComputeHelpers* GetComputeHelpers() const;
+
+	VkDevice GetVkDevice() const;
+	VmaAllocator GetVmaAllocator() const;
 
 	void RecreateRasterSwapchain();
 
@@ -35,4 +40,5 @@ private:
 	std::unique_ptr<Swapchain> mSwapchain;
 	std::unique_ptr<Allocator> mAllocator;
 	std::unique_ptr<TransferObjects> mTransferObjects;
+	std::unique_ptr<ComputeHelpers> mComputeHelpers;
 };

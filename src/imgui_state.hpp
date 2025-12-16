@@ -29,7 +29,7 @@ private:
 
 	std::vector<std::string> mCameraNames = {};
 	int mSelectedCameraIndex = 0;
-	int mSelectedRendererIndex = 1;
+	int mSelectedRendererIndex = 0;
 	bool mShouldStartRaytracing = false;
 	int mMaxSamples = 1024;
 	int mRenderTargetExtent[2] = { 1280, 720 };

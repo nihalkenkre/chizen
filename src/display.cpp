@@ -38,7 +38,7 @@ private:
 
 DisplayPipelineData::DisplayPipelineData(const VulkanInterface* vulkan_interface, const std::string& current_path, const std::string& name)
 {
-	mDevice = vulkan_interface->GetDevice()->GetDevice();
+	mDevice = vulkan_interface->GetVkDevice();
 
 	mDescriptorSetLayouts.resize(1);
 
@@ -114,7 +114,7 @@ DisplayPipelineData::DisplayPipelineData(const VulkanInterface* vulkan_interface
 	//	};
 	//
 	//	VkShaderModule vert_mod = VK_NULL_HANDLE;
-	//	VK_CHECK("create vert shader module", vkCreateShaderModule(vulkan_interface->GetDevice()->GetDevice(), &vert_mod_ci, nullptr, &vert_mod));
+	//	VK_CHECK("create vert shader module", vkCreateShaderModule(vulkan_interface->GetVkDevice(), &vert_mod_ci, nullptr, &vert_mod));
 	//
 	//	Slang::ComPtr<slang::IEntryPoint> frag_entry_point;
 	//	slang_module->findEntryPointByName("fragment_main", frag_entry_point.writeRef());
@@ -139,7 +139,7 @@ DisplayPipelineData::DisplayPipelineData(const VulkanInterface* vulkan_interface
 	//	};
 	//
 	//	VkShaderModule frag_mod = VK_NULL_HANDLE;
-	//	VK_CHECK("create frag shader module", vkCreateShaderModule(vulkan_interface->GetDevice()->GetDevice(), &frag_mod_ci, nullptr, &frag_mod));
+	//	VK_CHECK("create frag shader module", vkCreateShaderModule(vulkan_interface->GetVkDevice(), &frag_mod_ci, nullptr, &frag_mod));
 
 	std::filesystem::path vert_path = std::string(current_path).append("/shaders/glsl/display.vert.glsl.spv");
 	VkShaderModule vert_mod = VK_NULL_HANDLE;
@@ -308,7 +308,7 @@ DisplayPipelineData::DisplayPipelineData(const VulkanInterface* vulkan_interface
 		.pBindings = dsl_binds,
 	};
 
-	VK_CHECK("create dsl", vkCreateDescriptorSetLayout(vulkan_interface->GetDevice()->GetDevice(), &dsl_ci, nullptr, &mDescriptorSetLayouts[0]));
+	VK_CHECK("create dsl", vkCreateDescriptorSetLayout(vulkan_interface->GetVkDevice(), &dsl_ci, nullptr, &mDescriptorSetLayouts[0]));
 
 	const VkPushConstantRange pc_rngs[] = {
 		{
@@ -325,7 +325,7 @@ DisplayPipelineData::DisplayPipelineData(const VulkanInterface* vulkan_interface
 		.pPushConstantRanges = pc_rngs,
 	};
 
-	VK_CHECK("create graphics pipeline layout", vkCreatePipelineLayout(vulkan_interface->GetDevice()->GetDevice(), &lyt_ci, nullptr, &mPipelineLayout));
+	VK_CHECK("create graphics pipeline layout", vkCreatePipelineLayout(vulkan_interface->GetVkDevice(), &lyt_ci, nullptr, &mPipelineLayout));
 
 	const VkFormat col_attach_forms[] = {
 		VK_FORMAT_R8G8B8A8_UNORM,
@@ -354,10 +354,10 @@ DisplayPipelineData::DisplayPipelineData(const VulkanInterface* vulkan_interface
 		},
 	};
 
-	VK_CHECK("create graphics pipeline", vkCreateGraphicsPipelines(vulkan_interface->GetDevice()->GetDevice(), VK_NULL_HANDLE, std::size(cis), cis, nullptr, &mPipeline));
+	VK_CHECK("create graphics pipeline", vkCreateGraphicsPipelines(vulkan_interface->GetVkDevice(), VK_NULL_HANDLE, std::size(cis), cis, nullptr, &mPipeline));
 
-	vkDestroyShaderModule(vulkan_interface->GetDevice()->GetDevice(), vert_mod, nullptr);
-	vkDestroyShaderModule(vulkan_interface->GetDevice()->GetDevice(), frag_mod, nullptr);
+	vkDestroyShaderModule(vulkan_interface->GetVkDevice(), vert_mod, nullptr);
+	vkDestroyShaderModule(vulkan_interface->GetVkDevice(), frag_mod, nullptr);
 
 #ifdef _DEBUG
 	Utils_SetObjectName(mDevice, VK_OBJECT_TYPE_PIPELINE, reinterpret_cast<uint64_t>(mPipeline), std::string(name).append(" pipeline").c_str());
@@ -400,12 +400,12 @@ const std::vector<VkDescriptorSetLayout>& DisplayPipelineData::GetDescriptorSetL
 Display::Display(const VulkanInterface* vulkan_interface, ImageResource* final_render_target, const std::string& current_path)
 {
 	mFinalRenderTarget = final_render_target;
-	mMaxFramesInFlight = static_cast<uint8_t>(vulkan_interface->GetSwapchain()->GetImagesCount()) + 2;
+	mMaxFramesInFlight = static_cast<uint8_t>(vulkan_interface->GetSwapchain()->GetImagesCount());
 	mExtent = vulkan_interface->GetSurfaceKHR()->GetSurfaceCapabilities().surfaceCapabilities.currentExtent;
 	mTransferObjects = vulkan_interface->GetTransferObjects();
 	mSwapchain = vulkan_interface->GetSwapchain();
 	mQueue = vulkan_interface->GetDevice()->GetGraphicsQueue();
-	mDevice = vulkan_interface->GetDevice()->GetDevice();
+	mDevice = vulkan_interface->GetVkDevice();
 	mFrameObjects = std::make_unique<FrameObjects>(mDevice, vulkan_interface->GetPhysicalDeviceData()->GraphicsQueueFamilyIndex, mMaxFramesInFlight, "display frame objects");
 	mPipelineData = std::make_unique<DisplayPipelineData>(vulkan_interface, current_path, "display pipeline");
 
@@ -431,7 +431,7 @@ Display::Display(const VulkanInterface* vulkan_interface, ImageResource* final_r
 		.pPoolSizes = pool_sizes,
 	};
 
-	VK_CHECK("create dsp", vkCreateDescriptorPool(vulkan_interface->GetDevice()->GetDevice(), &dp_ci, nullptr, &mDescriptorPool));
+	VK_CHECK("create dsp", vkCreateDescriptorPool(vulkan_interface->GetVkDevice(), &dp_ci, nullptr, &mDescriptorPool));
 
 	auto dsls = mPipelineData->GetDescriptorSetLayouts();
 
@@ -465,26 +465,18 @@ Display::Display(const VulkanInterface* vulkan_interface, ImageResource* final_r
 	std::memcpy(verts_data.data(), verts, verts_size);
 
 	mGeometryBuffer = std::make_unique<DeviceBufferResource>(
-		vulkan_interface->GetDevice()->GetDevice(), vulkan_interface->GetAllocator()->GetAllocator(), 
+		vulkan_interface->GetVkDevice(), vulkan_interface->GetVmaAllocator(), 
 		VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_VERTEX_BUFFER_BIT, verts_size,
 		"geometry buffer");
 
 	std::unique_ptr<HostBufferResource> staging_buffer = std::make_unique<HostBufferResource>(
-		vulkan_interface->GetDevice()->GetDevice(), vulkan_interface->GetAllocator()->GetAllocator(),
+		vulkan_interface->GetVkDevice(), vulkan_interface->GetVmaAllocator(),
 		VK_BUFFER_USAGE_TRANSFER_SRC_BIT, VMA_ALLOCATION_CREATE_HOST_ACCESS_SEQUENTIAL_WRITE_BIT, verts_data,
 		"staging geometry buffer");
 
 	mTransferObjects->BeginBatch();
 	mTransferObjects->CopyBufferToBuffer(staging_buffer->GetVkBuffer(), mGeometryBuffer->GetVkBuffer(), verts_size);
 	mTransferObjects->EndBatch();
-
-	//std::memcpy(staging_buffer->GetAllocationInfo2().allocationInfo.pMappedData, verts, verts_size);
-
-	//staging_buffer->CopyToBuffer(
-	//	vulkan_interface->GetTransferObjects()->GetCommandBuffer(),
-	//	vulkan_interface->GetTransferObjects()->GetQueue(),
-	//	mGeometryBuffer->GetDescriptorInfo().buffer,
-	//	verts_size);
 }
 
 Display::~Display() noexcept

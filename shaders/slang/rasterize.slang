@@ -38,7 +38,6 @@ VSOutput vertex_main(VSInput in)
 {
     VSOutput out = {
         mul(view_proj.proj, mul(view_proj.view, mul(model.model, float4(in.pos, 1)))),
-        // mul(view_proj.proj * view_proj.view * model.model, float4(in.pos, 1)),
         in.uv,
         in.nrm,
     };

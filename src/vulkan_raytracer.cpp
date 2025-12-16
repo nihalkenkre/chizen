@@ -39,7 +39,7 @@ private:
 
 RaytracerPipelineData::RaytracerPipelineData(const VulkanInterface* const vulkan_interface, const std::string& current_path, const std::string& name)
 {
-	mDevice = vulkan_interface->GetDevice()->GetDevice();
+	mDevice = vulkan_interface->GetVkDevice();
 
 	mDescriptorSetLayouts.resize(1);
 
@@ -118,7 +118,7 @@ RaytracerPipelineData::RaytracerPipelineData(const VulkanInterface* const vulkan
 	//	};
 	//
 	//	VkShaderModule rg_mod = VK_NULL_HANDLE;
-	//	VK_CHECK("create shader module", vkCreateShaderModule(vulkan_interface->GetDevice()->GetDevice(), &rg_mod_ci, nullptr, &rg_mod));
+	//	VK_CHECK("create shader module", vkCreateShaderModule(vulkan_interface->GetVkDevice(), &rg_mod_ci, nullptr, &rg_mod));
 	//
 	//	Slang::ComPtr<slang::IEntryPoint> ms_entry_point;
 	//	slang_module->findEntryPointByName("miss", ms_entry_point.writeRef());
@@ -146,7 +146,7 @@ RaytracerPipelineData::RaytracerPipelineData(const VulkanInterface* const vulkan
 	//	};
 	//
 	//	VkShaderModule ms_mod = VK_NULL_HANDLE;
-	//	VK_CHECK("create shader module", vkCreateShaderModule(vulkan_interface->GetDevice()->GetDevice(), &ms_mod_ci, nullptr, &ms_mod));
+	//	VK_CHECK("create shader module", vkCreateShaderModule(vulkan_interface->GetVkDevice(), &ms_mod_ci, nullptr, &ms_mod));
 	//
 	//	Slang::ComPtr<slang::IEntryPoint> ch_entry_point;
 	//	slang_module->findEntryPointByName("closesthit", ch_entry_point.writeRef());
@@ -174,7 +174,7 @@ RaytracerPipelineData::RaytracerPipelineData(const VulkanInterface* const vulkan
 	//	};
 	//
 	//	VkShaderModule ch_mod = VK_NULL_HANDLE;
-	//	VK_CHECK("create shader module", vkCreateShaderModule(vulkan_interface->GetDevice()->GetDevice(), &ch_mod_ci, nullptr, &ch_mod));
+	//	VK_CHECK("create shader module", vkCreateShaderModule(vulkan_interface->GetVkDevice(), &ch_mod_ci, nullptr, &ch_mod));
 
 	std::filesystem::path rg_path = std::string(current_path).append("/shaders/glsl/raytrace.rgen.glsl.spv");
 	VkShaderModule rg_mod = VK_NULL_HANDLE;
@@ -259,7 +259,7 @@ RaytracerPipelineData::RaytracerPipelineData(const VulkanInterface* const vulkan
 			.binding = 2,
 			.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,
 			.descriptorCount = 1,
-			.stageFlags = VK_SHADER_STAGE_RAYGEN_BIT_KHR,
+			.stageFlags = VK_SHADER_STAGE_RAYGEN_BIT_KHR | VK_SHADER_STAGE_MISS_BIT_KHR,
 		},
 		{
 			.binding = 3,
@@ -281,7 +281,7 @@ RaytracerPipelineData::RaytracerPipelineData(const VulkanInterface* const vulkan
 		.pBindings = bindings,
 	};
 
-	VK_CHECK("create desc set layout", vkCreateDescriptorSetLayout(vulkan_interface->GetDevice()->GetDevice(), &dsl_ci, nullptr, &mDescriptorSetLayouts[0]));
+	VK_CHECK("create desc set layout", vkCreateDescriptorSetLayout(vulkan_interface->GetVkDevice(), &dsl_ci, nullptr, &mDescriptorSetLayouts[0]));
 
 	const VkPushConstantRange pc_ranges[] = {
 		{
@@ -298,7 +298,7 @@ RaytracerPipelineData::RaytracerPipelineData(const VulkanInterface* const vulkan
 		.pPushConstantRanges = pc_ranges,
 	};
 
-	VK_CHECK("create pipeline layout", vkCreatePipelineLayout(vulkan_interface->GetDevice()->GetDevice(), &pl_ci, nullptr, &mPipelineLayout));
+	VK_CHECK("create pipeline layout", vkCreatePipelineLayout(vulkan_interface->GetVkDevice(), &pl_ci, nullptr, &mPipelineLayout));
 
 	const VkPipelineShaderStageCreateInfo stage_cis[] = {
 		{
@@ -360,11 +360,11 @@ RaytracerPipelineData::RaytracerPipelineData(const VulkanInterface* const vulkan
 		},
 	};
 
-	VK_CHECK("create rt pipeline", vkCreateRayTracingPipelinesKHR(vulkan_interface->GetDevice()->GetDevice(), VK_NULL_HANDLE, VK_NULL_HANDLE, std::size(create_infos), create_infos, nullptr, &mPipeline));
+	VK_CHECK("create rt pipeline", vkCreateRayTracingPipelinesKHR(vulkan_interface->GetVkDevice(), VK_NULL_HANDLE, VK_NULL_HANDLE, std::size(create_infos), create_infos, nullptr, &mPipeline));
 
-	vkDestroyShaderModule(vulkan_interface->GetDevice()->GetDevice(), rg_mod, nullptr);
-	vkDestroyShaderModule(vulkan_interface->GetDevice()->GetDevice(), ch_mod, nullptr);
-	vkDestroyShaderModule(vulkan_interface->GetDevice()->GetDevice(), ms_mod, nullptr);
+	vkDestroyShaderModule(vulkan_interface->GetVkDevice(), rg_mod, nullptr);
+	vkDestroyShaderModule(vulkan_interface->GetVkDevice(), ch_mod, nullptr);
+	vkDestroyShaderModule(vulkan_interface->GetVkDevice(), ms_mod, nullptr);
 
 #ifdef _DEBUG
 	Utils_SetObjectName(mDevice, VK_OBJECT_TYPE_PIPELINE, reinterpret_cast<uint64_t>(mPipeline), std::string(name).append(" pipeline").c_str());
@@ -412,8 +412,8 @@ std::vector<VkRayTracingShaderGroupCreateInfoKHR> RaytracerPipelineData::GetShad
 
 VulkanRaytracer::VulkanRaytracer(const VulkanInterface* const vulkan_interface, ImageResource* final_render_target, const VkExtent3D& extent, const std::string& current_path, const std::string& name)
 {
-	mDevice = vulkan_interface->GetDevice()->GetDevice();
-	mAllocator = vulkan_interface->GetAllocator()->GetAllocator();
+	mDevice = vulkan_interface->GetVkDevice();
+	mAllocator = vulkan_interface->GetVmaAllocator();
 	mRayTracingProperties = vulkan_interface->GetPhysicalDeviceData()->RayTracingProperties;
 	mFinalRenderTarget = final_render_target;
 	mQueueFamilyIndices = {
@@ -423,7 +423,7 @@ VulkanRaytracer::VulkanRaytracer(const VulkanInterface* const vulkan_interface, 
 	};
 	mAccumRenderTarget = std::make_unique<ImageResource>(
 		mDevice, extent, VK_FORMAT_R32G32B32A32_SFLOAT,
-		VK_IMAGE_USAGE_STORAGE_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT, vulkan_interface->GetAllocator()->GetAllocator(), mQueueFamilyIndices, "accum render target");
+		VK_IMAGE_USAGE_STORAGE_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT, vulkan_interface->GetVmaAllocator(), mQueueFamilyIndices, "accum render target");
 	mMaxFramesInFlight = static_cast<uint8_t>(vulkan_interface->GetSwapchain()->GetImagesCount());
 	mExtent = extent;
 	mComputeQueue = vulkan_interface->GetDevice()->GetComputeQueue();

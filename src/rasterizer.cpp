@@ -32,7 +32,7 @@ private:
 	VkDevice mDevice = VK_NULL_HANDLE;
 };
 
-RasterizerPipelineData::RasterizerPipelineData(const VulkanInterface* vulkan_interface, const std::string& current_path, const std::string& name) : mDevice(vulkan_interface->GetDevice()->GetDevice())
+RasterizerPipelineData::RasterizerPipelineData(const VulkanInterface* vulkan_interface, const std::string& current_path, const std::string& name) : mDevice(vulkan_interface->GetVkDevice())
 {
 	//	Slang::ComPtr<slang::IGlobalSession> slang_global_session;
 	//	SLANG_CHECK("create global session", slang::createGlobalSession(slang_global_session.writeRef()));
@@ -106,7 +106,7 @@ RasterizerPipelineData::RasterizerPipelineData(const VulkanInterface* vulkan_int
 	//	};
 	//
 	//	VkShaderModule vert_mod = VK_NULL_HANDLE;
-	//	VK_CHECK("create vert shader module", vkCreateShaderModule(vulkan_interface->GetDevice()->GetDevice(), &vert_mod_ci, nullptr, &vert_mod));
+	//	VK_CHECK("create vert shader module", vkCreateShaderModule(vulkan_interface->GetVkDevice(), &vert_mod_ci, nullptr, &vert_mod));
 	//
 	//	Slang::ComPtr<slang::IEntryPoint> frag_entry_point;
 	//	slang_module->findEntryPointByName("fragment_main", frag_entry_point.writeRef());
@@ -131,7 +131,7 @@ RasterizerPipelineData::RasterizerPipelineData(const VulkanInterface* vulkan_int
 	//	};
 	//
 	//	VkShaderModule frag_mod = VK_NULL_HANDLE;
-	//	VK_CHECK("create frag shader module", vkCreateShaderModule(vulkan_interface->GetDevice()->GetDevice(), &frag_mod_ci, nullptr, &frag_mod));
+	//	VK_CHECK("create frag shader module", vkCreateShaderModule(vulkan_interface->GetVkDevice(), &frag_mod_ci, nullptr, &frag_mod));
 
 	std::filesystem::path vert_path = std::string(current_path).append("/shaders/glsl/rasterizer.vert.glsl.spv");
 	VkShaderModule vert_mod = VK_NULL_HANDLE;
@@ -355,7 +355,7 @@ RasterizerPipelineData::RasterizerPipelineData(const VulkanInterface* vulkan_int
 		.pSetLayouts = mDescriptorSetLayouts.data(),
 	};
 
-	VK_CHECK("create graphics pipeline layout", vkCreatePipelineLayout(vulkan_interface->GetDevice()->GetDevice(), &lyt_ci, nullptr, &mPipelineLayout));
+	VK_CHECK("create graphics pipeline layout", vkCreatePipelineLayout(vulkan_interface->GetVkDevice(), &lyt_ci, nullptr, &mPipelineLayout));
 
 	const VkFormat col_attach_forms[] = {
 		VK_FORMAT_R8G8B8A8_UNORM,
@@ -430,7 +430,7 @@ const std::vector<VkDescriptorSetLayout>& RasterizerPipelineData::GetDescriptorS
 }
 
 Rasterizer::Rasterizer(const VulkanInterface* vulkan_interface, const std::string& current_path, const std::string& name) :
-	mDevice(vulkan_interface->GetDevice()->GetDevice()),
+	mDevice(vulkan_interface->GetVkDevice()),
 	mSwapchain(vulkan_interface->GetSwapchain()),
 	mQueue(vulkan_interface->GetDevice()->GetGraphicsQueue()),
 	mAllocator(vulkan_interface->GetAllocator()),
@@ -446,16 +446,16 @@ Rasterizer::Rasterizer(const VulkanInterface* vulkan_interface, const std::strin
 			})
 {
 	mMaxFramesInFlight = static_cast<uint8_t>(vulkan_interface->GetSwapchain()->GetImagesCount()) + 2;
-	mFrameObjects = std::make_unique<FrameObjects>(vulkan_interface->GetDevice()->GetDevice(), vulkan_interface->GetPhysicalDeviceData()->GraphicsQueueFamilyIndex, mMaxFramesInFlight, "rasterizer frame objects");
+	mFrameObjects = std::make_unique<FrameObjects>(vulkan_interface->GetVkDevice(), vulkan_interface->GetPhysicalDeviceData()->GraphicsQueueFamilyIndex, mMaxFramesInFlight, "rasterizer frame objects");
 	mPipelineData = std::make_unique<RasterizerPipelineData>(vulkan_interface, current_path, "rasterizer pipeline data");
 	mDepthTexture = std::make_unique<ImageResource>(
-		vulkan_interface->GetDevice()->GetDevice(),
+		vulkan_interface->GetVkDevice(),
 		VkExtent3D{
 			mExtent.width,
 			mExtent.height,
 			1,
 		},
-		VK_FORMAT_D32_SFLOAT, VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT, vulkan_interface->GetAllocator()->GetAllocator(),
+		VK_FORMAT_D32_SFLOAT, VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT, vulkan_interface->GetVmaAllocator(),
 		mQueueFamilyIndices,
 		"raster depth texture"
 		);

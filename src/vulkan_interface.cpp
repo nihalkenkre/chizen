@@ -15,6 +15,7 @@ VulkanInterface::VulkanInterface(SDL_Window* window)
 	mSwapchain = std::make_unique<Swapchain>(mDevice->GetDevice(), mSurface.get(), mPhysicalDeviceData->GraphicsQueueFamilyIndex, "swapchain");
 	mAllocator = std::make_unique<Allocator>(mInstance->GetInstance(), mPhysicalDeviceData->PhysicalDevice, mDevice->GetDevice());
 	mTransferObjects = std::make_unique<TransferObjects>(mDevice->GetDevice(), mDevice->GetTransferQueue(), mPhysicalDeviceData->TransferQueueFamilyIndex, "transfer objects");
+	mComputeHelpers = std::make_unique<ComputeHelpers>(mDevice->GetDevice(), mDevice->GetComputeQueue(), mPhysicalDeviceData->ComputeQueueFamilyIndex, "compute helpers");
 
 #ifdef _DEBUG
 	Utils_SetObjectName(mDevice->GetDevice(), VK_OBJECT_TYPE_INSTANCE, reinterpret_cast<uint64_t>(mInstance->GetInstance()), "instance");
@@ -55,6 +56,21 @@ Allocator* VulkanInterface::GetAllocator() const
 TransferObjects* VulkanInterface::GetTransferObjects() const
 {
 	return mTransferObjects.get();
+}
+
+ComputeHelpers* VulkanInterface::GetComputeHelpers() const
+{
+	return mComputeHelpers.get();
+}
+
+VkDevice VulkanInterface::GetVkDevice() const
+{
+	return mDevice->GetDevice();
+}
+
+VmaAllocator VulkanInterface::GetVmaAllocator() const
+{
+	return mAllocator->GetAllocator();
 }
 
 void VulkanInterface::RecreateRasterSwapchain()
