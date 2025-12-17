@@ -324,30 +324,47 @@ RasterizerPipelineData::RasterizerPipelineData(const VulkanInterface* vulkan_int
 			.descriptorCount = 1,
 			.stageFlags = VK_SHADER_STAGE_VERTEX_BIT,
 		},
-		//{
-		//	.binding = 1,
-		//	.descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
-		//	.descriptorCount = 1,
-		//	.stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT,
-		//},
 	};
 
-	const VkDescriptorSetLayoutCreateInfo dsl_0_ci = {
-		.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO,
-		.bindingCount = std::size(dsl_0_binds),
-		.pBindings = dsl_0_binds,
+	const VkDescriptorSetLayoutBinding dsl_2_binds[] = {
+		{
+			.binding = 0,
+			.descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
+			.descriptorCount = 1,
+			.stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT,
+		},
+		{
+			.binding = 1,
+			.descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
+			.descriptorCount = 1,
+			.stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT,
+		}, 
 	};
 
-	const VkDescriptorSetLayoutCreateInfo dsl_1_ci = {
-		.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO,
-		.bindingCount = std::size(dsl_1_binds),
-		.pBindings = dsl_1_binds,
+	const VkDescriptorSetLayoutCreateInfo dsl_cis[] = {
+		{
+			.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO,
+			.bindingCount = std::size(dsl_0_binds),
+			.pBindings = dsl_0_binds,
+		},
+		{
+			.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO,
+			.bindingCount = std::size(dsl_1_binds),
+			.pBindings = dsl_1_binds,
+		},
+		{
+			.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO,
+			.bindingCount = std::size(dsl_2_binds),
+			.pBindings = dsl_2_binds,
+		}
 	};
 
-	mDescriptorSetLayouts.resize(2);
+	mDescriptorSetLayouts.resize(std::size(dsl_cis));
 
-	VK_CHECK("create 0 dsl", vkCreateDescriptorSetLayout(mDevice, &dsl_0_ci, nullptr, &mDescriptorSetLayouts[0]));
-	VK_CHECK("create 1 dsl", vkCreateDescriptorSetLayout(mDevice, &dsl_1_ci, nullptr, &mDescriptorSetLayouts[1]));
+	for (size_t dsl_ci = 0; dsl_ci < std::size(dsl_cis); ++dsl_ci)
+	{
+		VK_CHECK("create dsl", vkCreateDescriptorSetLayout(mDevice, &dsl_cis[dsl_ci], nullptr, &mDescriptorSetLayouts[dsl_ci]));
+	}
 
 	const VkPipelineLayoutCreateInfo lyt_ci = {
 		.sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO,
@@ -562,7 +579,7 @@ void Rasterizer::Render(const RasterizerScene* scene, ImGUIState* imgui_state)
 	VkRenderingAttachmentInfo depth_attachment_info = {
 		.sType = VK_STRUCTURE_TYPE_RENDERING_ATTACHMENT_INFO,
 		.imageView = mDepthTexture->GetDescriptorInfo().imageView,
-		.imageLayout = VK_IMAGE_LAYOUT_GENERAL,
+		.imageLayout = VK_IMAGE_LAYOUT_DEPTH_ATTACHMENT_OPTIMAL,
 		.loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR,
 		.storeOp = VK_ATTACHMENT_STORE_OP_STORE,
 		.clearValue = {

@@ -18,25 +18,21 @@ Scene::Scene(const std::string& path, const VkDeviceSize uniform_buffer_alignmen
 		std::println("Could not load GLTF from {}", path);
 	}
 
-	mCameras.reserve(gltf->cameras_count);
+	mMeshes.resize(gltf->meshes_count);
+	mCameras.resize(gltf->cameras_count);
 	for (size_t n = 0; n < gltf->nodes_count; ++n)
 	{
 		cgltf_node* curr_node = gltf->nodes + n;
 		if (curr_node->mesh != nullptr)
 		{
 			AddMeshInstance(gltf, curr_node, uniform_buffer_alignment);
+			AddMesh(gltf, curr_node->mesh, cgltf_mesh_index(gltf, curr_node->mesh));
 		}
 		else if (curr_node->camera != nullptr)
 		{
 			AddCameraInstance(gltf, curr_node, uniform_buffer_alignment);
-			AddCamera(gltf->cameras + cgltf_camera_index(gltf, curr_node->camera), uniform_buffer_alignment);
+			AddCamera(curr_node->camera, cgltf_camera_index(gltf, curr_node->camera), uniform_buffer_alignment);
 		}
-	}
-
-	mMeshes.reserve(gltf->meshes_count);
-	for (size_t m = 0; m < gltf->meshes_count; ++m)
-	{
-		AddMesh(gltf->meshes + m);
 	}
 
 	if (mCameraInstances.size() == 0)
@@ -63,6 +59,12 @@ Scene::Scene(const std::string& path, const VkDeviceSize uniform_buffer_alignmen
 	std::vector<float> uniform_debug(mUniformData.size() / sizeof(float));
 	std::memcpy(uniform_debug.data(), mUniformData.data(), mUniformData.size());
 
+	mImages.reserve(gltf->images_count);
+	for (size_t i = 0; i < gltf->images_count; ++i)
+	{
+		AddImage(gltf->images + i);
+	}
+
 	cgltf_free(gltf);
 }
 
@@ -86,6 +88,11 @@ const std::vector<Scene::Camera> Scene::GetCameras() const
 	return mCameras;
 }
 
+const std::vector<Scene::Image> Scene::GetImages() const
+{
+	return mImages;
+}
+
 const std::vector<std::string> Scene::GetCameraNames() const
 {
 	return mCameraNames;
@@ -99,6 +106,26 @@ const std::vector<uint8_t> Scene::GetVertexData() const
 const std::vector<uint8_t> Scene::GetUniformData() const
 {
 	return mUniformData;
+}
+
+const std::vector<uint8_t> Scene::GetImagesData() const
+{
+	return mImagesData;
+}
+
+Scene::Image::Image(const size_t offset, const size_t size)
+	: mDataOffset(offset), mDataSize(size)
+{
+}
+
+size_t Scene::Image::GetDataOffset() const
+{
+	return mDataOffset;
+}
+
+size_t Scene::Image::GetDataSize() const
+{
+	return mDataSize;
 }
 
 void Scene::AddMeshInstance(const cgltf_data* gltf, const cgltf_node* node, const VkDeviceSize uniform_buffer_alignment)
@@ -129,7 +156,7 @@ void Scene::AddCameraInstance(const cgltf_data* gltf, const cgltf_node* node, co
 	mCameraNames.push_back(node->name == nullptr ? "scene cam" : node->name);
 }
 
-void Scene::AddMesh(const cgltf_mesh* mesh)
+void Scene::AddMesh(const cgltf_data* gltf, const cgltf_mesh* mesh, const size_t mesh_index)
 {
 	std::vector<Scene::Mesh::Primitive> primitives;
 	primitives.reserve(mesh->primitives_count);
@@ -202,13 +229,31 @@ void Scene::AddMesh(const cgltf_mesh* mesh)
 		);
 		mVertexData.append_range(index_data);
 
-		primitives.push_back(Scene::Mesh::Primitive(positions_size, positions_offset, normals_size, normals_offset, texcoords_size, texcoords_offset, vertex_count, indices_size, indices_offset, index_count, index_type));
+		int32_t base_tex_index = -1;
+		int32_t normal_tex_index = -1;
+
+		if (curr_prim->material->has_pbr_metallic_roughness)
+		{
+			if (curr_prim->material->pbr_metallic_roughness.base_color_texture.texture != nullptr)
+				base_tex_index = static_cast<int32_t>(cgltf_image_index(gltf, curr_prim->material->pbr_metallic_roughness.base_color_texture.texture->image));
+
+			if (curr_prim->material->normal_texture.texture != nullptr)
+				normal_tex_index = static_cast<int32_t>(cgltf_image_index(gltf, curr_prim->material->normal_texture.texture->image));
+		}
+		primitives.push_back(Scene::Mesh::Primitive(
+			positions_size, positions_offset, 
+			normals_size, normals_offset, 
+			texcoords_size, texcoords_offset, 
+			vertex_count, 
+			indices_size, indices_offset, index_count, index_type,
+			base_tex_index, normal_tex_index
+		));
 	}
 
-	mMeshes.push_back(Mesh(primitives));
+	mMeshes[mesh_index] = Mesh(primitives);
 }
 
-void Scene::AddCamera(const cgltf_camera* camera, const VkDeviceSize uniform_buffer_alignment)
+void Scene::AddCamera(const cgltf_camera* camera, const size_t camera_index, const VkDeviceSize uniform_buffer_alignment)
 {
 	if (camera->type == cgltf_camera_type_perspective)
 	{
@@ -220,7 +265,7 @@ void Scene::AddCamera(const cgltf_camera* camera, const VkDeviceSize uniform_buf
 			persp_data.zfar
 		);
 		proj_mat[1][1] *= -1;
-		mCameras.push_back(Camera(mUniformData.size()));
+		mCameras[camera_index] = Camera(mUniformData.size());
 
 		std::vector<uint8_t> mat_data(ALIGNED_SIZE(sizeof(glm::mat4), uniform_buffer_alignment));
 		std::memcpy(mat_data.data(), &proj_mat, sizeof(glm::mat4));
@@ -235,13 +280,26 @@ void Scene::AddCamera(const cgltf_camera* camera, const VkDeviceSize uniform_buf
 			-ortho_data.ymag / 2.f, ortho_data.ymag / 2.f,
 			ortho_data.znear, ortho_data.zfar);
 		proj_mat[1][1] *= -1;
-		mCameras.push_back(Camera(mUniformData.size()));
+		mCameras[camera_index] = Camera(mUniformData.size());
 
 		std::vector<uint8_t> mat_data(ALIGNED_SIZE(sizeof(glm::mat4), uniform_buffer_alignment));
 		std::memcpy(mat_data.data(), &proj_mat, sizeof(glm::mat4));
 
 		mUniformData.append_range(mat_data);
 	}
+}
+
+void Scene::AddImage(const cgltf_image* image)
+{
+	mImages.push_back(Scene::Image(mImagesData.size(), image->buffer_view->size));
+
+	std::vector<uint8_t> image_data(image->buffer_view->size);
+	std::memcpy(image_data.data(),
+		reinterpret_cast<uint8_t*>(image->buffer_view->buffer->data) + image->buffer_view->offset,
+		image_data.size()
+	);
+
+	mImagesData.append_range(image_data);
 }
 
 Scene::MeshInstance::MeshInstance(const size_t mesh_index, const size_t model_matrix_offset)
@@ -302,7 +360,15 @@ const std::vector<Scene::Mesh::Primitive>& Scene::Mesh::GetPrimitives() const
 	return mPrimitives;
 }
 
-Scene::Mesh::Primitive::Primitive(const size_t positions_size, const size_t positions_offset, const size_t normals_size, const size_t normals_offset, const size_t texcoords_size, const size_t texcoords_offset, const size_t vertex_count, const size_t indices_size, const size_t indices_offset, const size_t index_count, const VkIndexType index_type)
+Scene::Mesh::Primitive::Primitive(
+	const size_t positions_size, 	const size_t positions_offset, 
+	const size_t normals_size, const size_t normals_offset, 
+	const size_t texcoords_size, const size_t texcoords_offset, 
+	const size_t vertex_count, 
+	const size_t indices_size, const size_t indices_offset, const size_t index_count, const VkIndexType index_type,
+	const int32_t base_img_index, const int32_t normal_img_index
+
+)
 	: mPositionsSize(positions_size),
 	mPositionsOffset(positions_offset),
 	mNormalsSize(normals_size),
@@ -313,7 +379,9 @@ Scene::Mesh::Primitive::Primitive(const size_t positions_size, const size_t posi
 	mIndicesSize(indices_size),
 	mIndicesOffset(indices_offset),
 	mIndexCount(index_count),
-	mIndexType(index_type)
+	mIndexType(index_type),
+	mBaseImageIndex(base_img_index),
+	mNormalImageIndex(normal_img_index)
 {
 }
 
@@ -372,4 +440,12 @@ size_t Scene::Mesh::Primitive::GetIndexCount() const
 	return mIndexCount;
 }
 
+int32_t Scene::Mesh::Primitive::GetBaseImageIndex() const
+{
+	return mBaseImageIndex;
+}
 
+int32_t Scene::Mesh::Primitive::GetNormalImageIndex() const
+{
+	return mNormalImageIndex;
+}

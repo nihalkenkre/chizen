@@ -26,12 +26,20 @@ public:
 	class Mesh
 	{
 	public:
+		Mesh() {}
 
 		class Primitive
 		{
 		public:
 			Primitive() {}
-			Primitive(const size_t positions_size, const size_t positions_offset, const size_t normals_size, const size_t normals_offset, const size_t texcoords_size, const size_t texcoords_offset, const size_t vertex_count, const size_t indices_size, const size_t indices_offset, const size_t index_count, const VkIndexType index_type);
+			Primitive(
+				const size_t positions_size, const size_t positions_offset, 
+				const size_t normals_size, const size_t normals_offset, 
+				const size_t texcoords_size, const size_t texcoords_offset, 
+				const size_t vertex_count, 
+				const size_t indices_size, const size_t indices_offset, const size_t index_count, const VkIndexType index_type,
+				const int32_t base_img_index, const int32_t normal_img_index
+			);
 
 			size_t GetPositionsSize() const;
 			size_t GetPositionsOffset() const;
@@ -46,6 +54,9 @@ public:
 			size_t GetVertexCount() const;
 			size_t GetIndexCount() const;
 
+			int32_t GetBaseImageIndex() const;
+			int32_t GetNormalImageIndex() const;
+
 		private:
 			size_t mPositionsSize = 0;
 			size_t mPositionsOffset = 0;
@@ -59,6 +70,9 @@ public:
 			VkIndexType mIndexType = VK_INDEX_TYPE_UINT16;
 			size_t mVertexCount = 0;
 			size_t mIndexCount = 0;
+
+			int32_t mBaseImageIndex = -1;
+			int32_t mNormalImageIndex = -1;
 		};
 
 		Mesh(std::vector<Scene::Mesh::Primitive> primitives);
@@ -87,6 +101,7 @@ public:
 	class Camera
 	{
 	public:
+		Camera() {}
 		Camera(const size_t proj_mat_offset);
 
 		size_t GetProjMatOffset() const;
@@ -95,29 +110,48 @@ public:
 		size_t mProjMatrixOffset = 0;
 	};
 
+	class Image
+	{
+	public:
+		Image() {}
+		Image(const size_t offset, const size_t size);
+
+		size_t GetDataOffset() const;
+		size_t GetDataSize() const;
+
+	private:
+		size_t mDataOffset = 0;
+		size_t mDataSize = 0;
+	};
+
 	const std::vector<MeshInstance>& GetMeshInstances() const;
 	const std::vector<Mesh> GetMeshes() const;
 	const std::vector<CameraInstance> GetCameraInstances() const;
 	const std::vector<Camera> GetCameras() const;
+	const std::vector<Image> GetImages() const;
 
 	const std::vector<std::string> GetCameraNames() const;
 
 	const std::vector<uint8_t> GetVertexData() const;
 	const std::vector<uint8_t> GetUniformData() const;
+	const std::vector<uint8_t> GetImagesData() const;
 
 private:
 	void AddMeshInstance(const cgltf_data* gltf, const cgltf_node* node, const VkDeviceSize uniform_buffer_alignment);
 	void AddCameraInstance(const cgltf_data* gltf, const cgltf_node* node, const VkDeviceSize uniform_buffer_alignment);
-	void AddMesh(const cgltf_mesh* mesh);
-	void AddCamera(const cgltf_camera* camera, const VkDeviceSize uniform_buffer_alignment);
+	void AddMesh(const cgltf_data* gltf, const cgltf_mesh* mesh, const size_t mesh_index);
+	void AddCamera(const cgltf_camera* camera, const size_t camera_index, const VkDeviceSize uniform_buffer_alignment);
+	void AddImage(const cgltf_image* image);
 
 	std::vector<MeshInstance> mMeshInstances;
 	std::vector<Mesh> mMeshes;
 	std::vector<CameraInstance> mCameraInstances;
 	std::vector<Camera> mCameras;
+	std::vector<Image> mImages;
 
 	std::vector<std::string> mCameraNames;
 
 	std::vector<uint8_t> mVertexData;
 	std::vector<uint8_t> mUniformData;
+	std::vector<uint8_t> mImagesData;
 };

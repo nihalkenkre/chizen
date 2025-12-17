@@ -553,6 +553,7 @@ void VulkanRaytracer::InitializeResources()
 		VMA_ALLOCATION_CREATE_HOST_ACCESS_SEQUENTIAL_WRITE_BIT,
 		rand_states_data, "random states staging"), wait_and_delete
 	);
+
 	mTransferHelpers->CopyBufferToBuffer(rand_states_staging->GetVkBuffer(), mRandomStates->GetVkBuffer(), rand_states_data.size());
 	mTransferHelpers->EndBatch();
 

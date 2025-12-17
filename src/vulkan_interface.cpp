@@ -2,6 +2,8 @@
 #include "utils.hpp"
 #include "vulkan_objects.hpp"
 
+#include "common.hpp"
+
 VulkanInterface::VulkanInterface(SDL_Window* window)
 {
 	Uint32 vk_extensions_count = 0;
@@ -16,6 +18,12 @@ VulkanInterface::VulkanInterface(SDL_Window* window)
 	mAllocator = std::make_unique<Allocator>(mInstance->GetInstance(), mPhysicalDeviceData->PhysicalDevice, mDevice->GetDevice());
 	mTransferHelpers = std::make_unique<TransferHelpers>(mDevice->GetDevice(), mDevice->GetTransferQueue(), mPhysicalDeviceData->TransferQueueFamilyIndex, "transfer objects");
 	mComputeHelpers = std::make_unique<ComputeHelpers>(mDevice->GetDevice(), mDevice->GetComputeQueue(), mPhysicalDeviceData->ComputeQueueFamilyIndex, "compute helpers");
+
+	g_device = mDevice->GetDevice();
+	g_allocator = mAllocator->GetAllocator();
+	g_graphics_queue_family_index = mPhysicalDeviceData->GraphicsQueueFamilyIndex;
+	g_compute_queue_family_index = mPhysicalDeviceData->ComputeQueueFamilyIndex;
+	g_transfer_queue_family_index = mPhysicalDeviceData->TransferQueueFamilyIndex;
 
 #ifdef _DEBUG
 	Utils_SetObjectName(mDevice->GetDevice(), VK_OBJECT_TYPE_INSTANCE, reinterpret_cast<uint64_t>(mInstance->GetInstance()), "instance");

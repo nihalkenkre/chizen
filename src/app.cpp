@@ -45,7 +45,7 @@ App::App(SDL_Window* window, const std::string& current_path) : mWindow(window)
 
 	mRasterizer = std::make_unique<Rasterizer>(mVulkanInterface.get(), current_path, "rasterizer");
 	mDisplay = std::make_unique<Display>(mVulkanInterface.get(), mFinalRenderTarget.get(), current_path);
-	mVulkanRaytracer = std::make_unique<VulkanRaytracer>(mVulkanInterface.get(), mFinalRenderTarget.get(), extent, current_path, "raytrace");
+	mVulkanRaytracer = std::make_unique<VulkanRaytracer>(mVulkanInterface.get(), mFinalRenderTarget.get(), extent, current_path, "vulkan raytracer");
 	mEmbreeRaytracer = std::make_unique<EmbreeRaytracer>();
 }
 
