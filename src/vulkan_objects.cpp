@@ -535,8 +535,7 @@ void TransferHelpers::EndBatch()
 		},
 	};
 
-	VK_CHECK("submit geom buffer xfer cmd", vkQueueSubmit2KHR(mQueue, std::size(submit_infos), submit_infos, VK_NULL_HANDLE));
-	VK_CHECK("wait xfer cmd buff", vkQueueWaitIdle(mQueue)); //TODO: want to get rid of this, need to work around RAII. Hmmmm
+	VK_CHECK("submit xfer batch", vkQueueSubmit2KHR(mQueue, std::size(submit_infos), submit_infos, VK_NULL_HANDLE));
 }
 
 VkCommandPool TransferHelpers::GetCommandPool() const
@@ -560,6 +559,11 @@ VkSemaphore TransferHelpers::GetSemaphore() const
 }
 
 uint64_t& TransferHelpers::GetSemaphoreValue()
+{
+	return mSemaphoreValue;
+}
+
+const uint64_t TransferHelpers::GetSemaphoreValueConst() const
 {
 	return mSemaphoreValue;
 }
@@ -804,9 +808,43 @@ AccelerationStructure::~AccelerationStructure() noexcept
 		vkDestroyAccelerationStructureKHR(mDevice, mAccelerationStructure, nullptr);
 }
 
-ComputeHelpers::ComputeHelpers(const VkDevice device, const VkQueue compute_queue, const uint32_t transfer_queue_family_index, const std::string& name)
+ComputeHelpers::ComputeHelpers(const VkDevice device, const VkQueue compute_queue, const uint32_t compute_queue_family_index, const std::string& name)
 	:mDevice(device), mQueue(compute_queue)
 {
+	const VkCommandPoolCreateInfo cmd_pool_ci = {
+		.sType = VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO,
+		.flags = VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT,
+		.queueFamilyIndex = compute_queue_family_index,
+	};
+
+	VK_CHECK("create compute cmd pool", vkCreateCommandPool(device, &cmd_pool_ci, nullptr, &mCommandPool));
+
+	const VkCommandBufferAllocateInfo cmd_buff_ai = {
+		.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO,
+		.commandPool = mCommandPool,
+		.commandBufferCount = 1
+	};
+
+	VK_CHECK("allocate compute cmd buff", vkAllocateCommandBuffers(device, &cmd_buff_ai, &mCommandBuffer));
+
+	const VkSemaphoreTypeCreateInfo sem_tl_ci = {
+		.sType = VK_STRUCTURE_TYPE_SEMAPHORE_TYPE_CREATE_INFO,
+		.semaphoreType = VK_SEMAPHORE_TYPE_TIMELINE_KHR,
+		.initialValue = 0,
+	};
+
+	const VkSemaphoreCreateInfo sem_ci = {
+		.sType = VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO,
+		.pNext = &sem_tl_ci,
+	};
+
+	VK_CHECK("create compute sem", vkCreateSemaphore(device, &sem_ci, nullptr, &mSemaphore));
+
+#ifdef _DEBUG
+	Utils_SetObjectName(mDevice, VK_OBJECT_TYPE_COMMAND_POOL, reinterpret_cast<uint64_t>(mCommandPool), "compute helpers command pool");
+	Utils_SetObjectName(mDevice, VK_OBJECT_TYPE_COMMAND_BUFFER, reinterpret_cast<uint64_t>(mCommandBuffer), "compute helpers command buffer");
+	Utils_SetObjectName(mDevice, VK_OBJECT_TYPE_SEMAPHORE, reinterpret_cast<uint64_t>(mSemaphore), "compute helpers semaphore");
+#endif
 }
 
 ComputeHelpers::~ComputeHelpers() noexcept

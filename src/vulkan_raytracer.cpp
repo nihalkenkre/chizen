@@ -503,6 +503,21 @@ VulkanRaytracer::~VulkanRaytracer()
 
 void VulkanRaytracer::InitializeResources()
 {
+	auto wait_and_delete = [this](HostBufferResource* hbr) {
+		VkSemaphore sem = mTransferHelpers->GetSemaphore();
+		const uint64_t sem_value = mTransferHelpers->GetSemaphoreValueConst();
+
+		const VkSemaphoreWaitInfo wait_info = {
+			.sType = VK_STRUCTURE_TYPE_SEMAPHORE_WAIT_INFO,
+			.semaphoreCount = 1,
+			.pSemaphores = &sem,
+			.pValues = &sem_value,
+		};
+		VK_CHECK("wait for sem", vkWaitSemaphoresKHR(mDevice, &wait_info, UINT64_MAX));
+
+		hbr->~HostBufferResource();
+	};
+
 	mTransferHelpers->BeginBatch();
 	mTransferHelpers->ChangeImageLayout(
 		VK_PIPELINE_STAGE_2_TOP_OF_PIPE_BIT, 0,
@@ -533,10 +548,10 @@ void VulkanRaytracer::InitializeResources()
 		rand_states_data.size(), "rand states"
 	);
 
-	auto rand_states_staging = std::make_unique<HostBufferResource>(
+	std::unique_ptr<HostBufferResource, decltype(wait_and_delete)> rand_states_staging (new HostBufferResource(
 		mDevice, mAllocator, VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
 		VMA_ALLOCATION_CREATE_HOST_ACCESS_SEQUENTIAL_WRITE_BIT,
-		rand_states_data, "random states staging"
+		rand_states_data, "random states staging"), wait_and_delete
 	);
 	mTransferHelpers->CopyBufferToBuffer(rand_states_staging->GetVkBuffer(), mRandomStates->GetVkBuffer(), rand_states_data.size());
 	mTransferHelpers->EndBatch();

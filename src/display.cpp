@@ -469,10 +469,25 @@ Display::Display(const VulkanInterface* vulkan_interface, ImageResource* final_r
 		VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_VERTEX_BUFFER_BIT, verts_size,
 		"geometry");
 
-	std::unique_ptr<HostBufferResource> staging_buffer = std::make_unique<HostBufferResource>(
+	auto wait_and_delete = [this](HostBufferResource* hbr) {
+		VkSemaphore sem = mTransferHelpers->GetSemaphore();
+		const uint64_t sem_value = mTransferHelpers->GetSemaphoreValueConst();
+
+		const VkSemaphoreWaitInfo wait_info = {
+			.sType = VK_STRUCTURE_TYPE_SEMAPHORE_WAIT_INFO,
+			.semaphoreCount = 1,
+			.pSemaphores = &sem,
+			.pValues = &sem_value,
+		};
+		VK_CHECK("wait for sem", vkWaitSemaphoresKHR(mDevice, &wait_info, UINT64_MAX));
+
+		hbr->~HostBufferResource();
+	};
+
+	std::unique_ptr<HostBufferResource, decltype(wait_and_delete)> staging_buffer (new HostBufferResource(
 		vulkan_interface->GetVkDevice(), vulkan_interface->GetVmaAllocator(),
 		VK_BUFFER_USAGE_TRANSFER_SRC_BIT, VMA_ALLOCATION_CREATE_HOST_ACCESS_SEQUENTIAL_WRITE_BIT, verts_data,
-		"staging geometry");
+		"staging geometry"), wait_and_delete);
 
 	mTransferHelpers->BeginBatch();
 	mTransferHelpers->CopyBufferToBuffer(staging_buffer->GetVkBuffer(), mGeometryBuffer->GetVkBuffer(), verts_size);

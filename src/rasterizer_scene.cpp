@@ -6,16 +6,32 @@
 RasterizerWorldScene::RasterizerWorldScene(const Scene& scene, const VkDevice device, const VmaAllocator allocator, const std::vector<VkDescriptorSetLayout>& desc_set_layouts, TransferHelpers* transfer_objects)
 	: mDevice(device)
 {
+	auto wait_and_delete = [device, transfer_objects](HostBufferResource* hbr) {
+		VkSemaphore sem = transfer_objects->GetSemaphore();
+		const uint64_t sem_value = transfer_objects->GetSemaphoreValueConst();
+
+		const VkSemaphoreWaitInfo wait_info = {
+			.sType = VK_STRUCTURE_TYPE_SEMAPHORE_WAIT_INFO,
+			.semaphoreCount = 1,
+			.pSemaphores = &sem,
+			.pValues = &sem_value,
+		};
+		VK_CHECK("wait for sem", vkWaitSemaphoresKHR(device, &wait_info, UINT64_MAX));
+
+		hbr->~HostBufferResource();
+	};
+
 	auto vertex_data = scene.GetVertexData();
 
 	mVertexData = std::make_unique<DeviceBufferResource>(
 		device, allocator,
 		VK_BUFFER_USAGE_VERTEX_BUFFER_BIT | VK_BUFFER_USAGE_INDEX_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT,
 		 vertex_data.size(), "scene vertex data");
-	auto staging_vertex_data = std::make_unique<HostBufferResource>(
+	
+	std::unique_ptr<HostBufferResource, decltype(wait_and_delete)> staging_vertex_data(new HostBufferResource(
 		device, allocator,
 		VK_BUFFER_USAGE_TRANSFER_SRC_BIT, VMA_ALLOCATION_CREATE_HOST_ACCESS_SEQUENTIAL_WRITE_BIT,
-		vertex_data, "staging vertex data"
+		vertex_data, "staging vertex data"), wait_and_delete
 	);
 
 	auto uniform_data = scene.GetUniformData();
@@ -24,10 +40,11 @@ RasterizerWorldScene::RasterizerWorldScene(const Scene& scene, const VkDevice de
 		device, allocator,
 		VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT,
 		uniform_data.size(), "scene uniform data");
-	auto staging_uniform_data = std::make_unique<HostBufferResource>(
+
+	std::unique_ptr<HostBufferResource, decltype(wait_and_delete)> staging_uniform_data(new HostBufferResource(
 		device, allocator,
 		VK_BUFFER_USAGE_TRANSFER_SRC_BIT, VMA_ALLOCATION_CREATE_HOST_ACCESS_SEQUENTIAL_WRITE_BIT,
-		uniform_data, "staging uniform data"
+		uniform_data, "staging uniform data"), wait_and_delete
 	);
 
 	transfer_objects->BeginBatch();

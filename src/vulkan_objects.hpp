@@ -150,6 +150,7 @@ public:
 	VkQueue GetQueue() const;
 	VkSemaphore GetSemaphore() const;
 	uint64_t& GetSemaphoreValue();
+	const uint64_t GetSemaphoreValueConst() const;
 	uint32_t GetQueueFamilyIndex() const;
 
 private:
@@ -167,7 +168,7 @@ class ComputeHelpers
 {
 public:
 	ComputeHelpers() = delete;
-	ComputeHelpers(const VkDevice device, const VkQueue compute_queue, const uint32_t transfer_queue_family_index, const std::string& name);
+	ComputeHelpers(const VkDevice device, const VkQueue compute_queue, const uint32_t compute_queue_family_index, const std::string& name);
 
 	ComputeHelpers(const ComputeHelpers& other) = delete;
 	ComputeHelpers& operator=(const ComputeHelpers& other) = delete;
