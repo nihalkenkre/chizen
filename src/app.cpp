@@ -33,7 +33,7 @@ App::App(SDL_Window* window, const std::string& current_path) : mWindow(window)
 		mRenderTargetExtent.width * mRenderTargetExtent.height * 4 * sizeof(float), "embree render target"
 	);
 
-	auto transfer_objects = mVulkanInterface->GetTransferObjects();
+	auto transfer_objects = mVulkanInterface->GetTransferHelpers();
 	transfer_objects->BeginBatch();
 	transfer_objects->ChangeImageLayout(
 		VK_PIPELINE_STAGE_2_TOP_OF_PIPE_BIT, 0,
@@ -116,7 +116,7 @@ void App::ProcessEvent(SDL_Event* event)
 			mVulkanInterface->GetVkDevice(),
 			mVulkanInterface->GetVmaAllocator(),
 			mRasterizer->GetDescriptorSetLayouts(),
-			mVulkanInterface->GetTransferObjects()
+			mVulkanInterface->GetTransferHelpers()
 		);
 
 		mVulkanRaytracerScene = std::make_unique<VulkanRaytracerScene>(scene, mVulkanInterface->GetComputeHelpers()->GetCommandBuffer(), mVulkanInterface->GetComputeHelpers()->GetQueue());
@@ -191,22 +191,22 @@ void App::ProcessEvent(SDL_Event* event)
 	{
 		if (mRaytracerType == 1)
 		{
-			mVulkanInterface->GetTransferObjects()->BeginBatch();
-			mVulkanInterface->GetTransferObjects()->CopyBufferToImage(
+			mVulkanInterface->GetTransferHelpers()->BeginBatch();
+			mVulkanInterface->GetTransferHelpers()->CopyBufferToImage(
 				mEmbreeRenderTarget->GetVkBuffer(), mFinalRenderTarget->GetImage(), mRenderTargetExtent
 			);
-			mVulkanInterface->GetTransferObjects()->EndBatch();
+			mVulkanInterface->GetTransferHelpers()->EndBatch();
 		}
 	}
 	else if (event->type == events.RaytraceSampleDone.type)
 	{
 		if (mRaytracerType == 1)
 		{
-			mVulkanInterface->GetTransferObjects()->BeginBatch();
-			mVulkanInterface->GetTransferObjects()->CopyBufferToImage(
+			mVulkanInterface->GetTransferHelpers()->BeginBatch();
+			mVulkanInterface->GetTransferHelpers()->CopyBufferToImage(
 				mEmbreeRenderTarget->GetVkBuffer(), mFinalRenderTarget->GetImage(), mRenderTargetExtent
 			);
-			mVulkanInterface->GetTransferObjects()->EndBatch();
+			mVulkanInterface->GetTransferHelpers()->EndBatch();
 		}
 	}
 
@@ -250,7 +250,7 @@ void App::RecreateRenderTarget()
 		"embree render target"
 	);
 
-	auto transfer_objects = mVulkanInterface->GetTransferObjects();
+	auto transfer_objects = mVulkanInterface->GetTransferHelpers();
 	transfer_objects->BeginBatch();
 	transfer_objects->ChangeImageLayout(
 		VK_PIPELINE_STAGE_2_TOP_OF_PIPE_BIT, 0,

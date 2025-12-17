@@ -122,16 +122,16 @@ private:
 	VkDevice mDevice = VK_NULL_HANDLE;
 };
 
-class TransferObjects
+class TransferHelpers
 {
 public:
-	TransferObjects() = delete;
-	TransferObjects(const VkDevice device, const VkQueue transfer_queue, const uint32_t transfer_queue_family_index, const std::string& name);
+	TransferHelpers() = delete;
+	TransferHelpers(const VkDevice device, const VkQueue transfer_queue, const uint32_t transfer_queue_family_index, const std::string& name);
 
-	TransferObjects(const TransferObjects& other) = delete;
-	TransferObjects& operator=(const TransferObjects& other) = delete;
+	TransferHelpers(const TransferHelpers& other) = delete;
+	TransferHelpers& operator=(const TransferHelpers& other) = delete;
 
-	~TransferObjects() noexcept;
+	~TransferHelpers() noexcept;
 
 	void BeginBatch();
 	void ChangeImageLayout(

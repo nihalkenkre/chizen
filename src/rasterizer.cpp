@@ -434,7 +434,7 @@ Rasterizer::Rasterizer(const VulkanInterface* vulkan_interface, const std::strin
 	mSwapchain(vulkan_interface->GetSwapchain()),
 	mQueue(vulkan_interface->GetDevice()->GetGraphicsQueue()),
 	mAllocator(vulkan_interface->GetAllocator()),
-	mTransferObjects(vulkan_interface->GetTransferObjects()),
+	mTransferHelpers(vulkan_interface->GetTransferHelpers()),
 	mQueueFamilyIndices({
 			vulkan_interface->GetPhysicalDeviceData()->GraphicsQueueFamilyIndex,
 			vulkan_interface->GetPhysicalDeviceData()->ComputeQueueFamilyIndex,
@@ -478,10 +478,10 @@ Rasterizer::Rasterizer(const VulkanInterface* vulkan_interface, const std::strin
 #endif // _DEBUG
 	}
 
-	InitializeResources(vulkan_interface->GetTransferObjects());
+	InitializeResources(vulkan_interface->GetTransferHelpers());
 }
 
-void Rasterizer::InitializeResources(TransferObjects* transfer_objects)
+void Rasterizer::InitializeResources(TransferHelpers* transfer_objects)
 {
 	transfer_objects->BeginBatch();
 	transfer_objects->ChangeImageLayout(
@@ -629,8 +629,8 @@ void Rasterizer::Render(const RasterizerScene* scene, ImGUIState* imgui_state)
 		},
 		{
 			.sType = VK_STRUCTURE_TYPE_SEMAPHORE_SUBMIT_INFO,
-			.semaphore = mTransferObjects->GetSemaphore(),
-			.value = mTransferObjects->GetSemaphoreValue(),
+			.semaphore = mTransferHelpers->GetSemaphore(),
+			.value = mTransferHelpers->GetSemaphoreValue(),
 			.stageMask = VK_PIPELINE_STAGE_2_TOP_OF_PIPE_BIT,
 		},
 	};

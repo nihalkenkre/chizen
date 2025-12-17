@@ -7,7 +7,7 @@ class ImageResource;
 class HostBufferResource;
 class DeviceBufferResource;
 class VulkanRaytracerScene;
-class TransferObjects;
+class TransferHelpers;
 
 class VulkanRaytracer
 {
@@ -24,6 +24,8 @@ public:
 	void Start(const VulkanRaytracerScene* scene, const uint32_t max_samples);
 	void UpdateFinalRenderTarget(ImageResource* FinalRenderTarget);
 	void Stop();
+
+	FrameObjects* GetFrameObjects() const;
 
 private:
 	void InitializeResources();
@@ -43,7 +45,7 @@ private:
 
 	std::unique_ptr<RaytracerPipelineData> mPipelineData = nullptr;
 
-	TransferObjects* mTransferObjects = nullptr;
+	TransferHelpers* mTransferHelpers = nullptr;
 	VkExtent3D mExtent = {};
 	VkQueue mComputeQueue = VK_NULL_HANDLE;
 	std::vector<uint32_t> mQueueFamilyIndices;

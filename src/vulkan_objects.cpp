@@ -351,7 +351,7 @@ uint32_t Swapchain::GetImagesCount() const
 	return mImagesCount;
 }
 
-TransferObjects::TransferObjects(const VkDevice device, const VkQueue transfer_queue, const uint32_t transfer_queue_family_index, const std::string& name)
+TransferHelpers::TransferHelpers(const VkDevice device, const VkQueue transfer_queue, const uint32_t transfer_queue_family_index, const std::string& name)
 	:mQueue(transfer_queue), mQueueFamilyIndex(transfer_queue_family_index), mDevice(device)
 {
 	const VkCommandPoolCreateInfo cmd_pool_ci = {
@@ -390,7 +390,7 @@ TransferObjects::TransferObjects(const VkDevice device, const VkQueue transfer_q
 #endif
 }
 
-TransferObjects::~TransferObjects() noexcept
+TransferHelpers::~TransferHelpers() noexcept
 {
 	if (mDevice != VK_NULL_HANDLE)
 	{
@@ -399,7 +399,7 @@ TransferObjects::~TransferObjects() noexcept
 	}
 }
 
-void TransferObjects::BeginBatch()
+void TransferHelpers::BeginBatch()
 {
 	const VkSemaphoreWaitInfo  wait_info = {
 		.sType = VK_STRUCTURE_TYPE_SEMAPHORE_WAIT_INFO,
@@ -416,7 +416,7 @@ void TransferObjects::BeginBatch()
 	VK_CHECK("begin xfer cmd buff", vkBeginCommandBuffer(mCommandBuffer, &begin_info));
 }
 
-void TransferObjects::ChangeImageLayout(const VkPipelineStageFlags2 src_stage_mask, const VkAccessFlags2 src_access_mask, const VkPipelineStageFlags2 dst_stage_mask, const VkAccessFlags2 dst_access_mask, const VkImageLayout old_layout, const VkImageLayout new_layout, const uint32_t src_q_fly_idx, const uint32_t dst_q_fly_idx, const VkImageAspectFlags aspect_mask, const VkImage& image)
+void TransferHelpers::ChangeImageLayout(const VkPipelineStageFlags2 src_stage_mask, const VkAccessFlags2 src_access_mask, const VkPipelineStageFlags2 dst_stage_mask, const VkAccessFlags2 dst_access_mask, const VkImageLayout old_layout, const VkImageLayout new_layout, const uint32_t src_q_fly_idx, const uint32_t dst_q_fly_idx, const VkImageAspectFlags aspect_mask, const VkImage& image)
 {
 	const VkImageMemoryBarrier2 img_mem_barr = {
 		.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER_2,
@@ -445,7 +445,7 @@ void TransferObjects::ChangeImageLayout(const VkPipelineStageFlags2 src_stage_ma
 	vkCmdPipelineBarrier2KHR(mCommandBuffer, &dep_info);
 }
 
-void TransferObjects::CopyBufferToBuffer(const VkBuffer src_buffer, const VkBuffer dst_buffer, const VkDeviceSize size)
+void TransferHelpers::CopyBufferToBuffer(const VkBuffer src_buffer, const VkBuffer dst_buffer, const VkDeviceSize size)
 {
 	const VkBufferCopy2 regions[] = {
 		{
@@ -465,7 +465,7 @@ void TransferObjects::CopyBufferToBuffer(const VkBuffer src_buffer, const VkBuff
 	vkCmdCopyBuffer2KHR(mCommandBuffer, &copy_buff_info);
 }
 
-void TransferObjects::CopyBufferToImage(const VkBuffer src_buffer, const VkImage dst_image, const VkExtent2D extent)
+void TransferHelpers::CopyBufferToImage(const VkBuffer src_buffer, const VkImage dst_image, const VkExtent2D extent)
 {
 	const VkBufferImageCopy2KHR regions[] = {
 		{
@@ -494,7 +494,7 @@ void TransferObjects::CopyBufferToImage(const VkBuffer src_buffer, const VkImage
 	vkCmdCopyBufferToImage2KHR(mCommandBuffer, &copy_buff_info);
 }
 
-void TransferObjects::EndBatch()
+void TransferHelpers::EndBatch()
 {
 	VK_CHECK("end xfer cmd buff", vkEndCommandBuffer(mCommandBuffer));
 
@@ -536,35 +536,35 @@ void TransferObjects::EndBatch()
 	};
 
 	VK_CHECK("submit geom buffer xfer cmd", vkQueueSubmit2KHR(mQueue, std::size(submit_infos), submit_infos, VK_NULL_HANDLE));
-	VK_CHECK("wait xfer cmd buff", vkQueueWaitIdle(mQueue)); // want to get rid of this.
+	VK_CHECK("wait xfer cmd buff", vkQueueWaitIdle(mQueue)); //TODO: want to get rid of this, need to work around RAII. Hmmmm
 }
 
-VkCommandPool TransferObjects::GetCommandPool() const
+VkCommandPool TransferHelpers::GetCommandPool() const
 {
 	return mCommandPool;
 }
 
-VkCommandBuffer TransferObjects::GetCommandBuffer() const
+VkCommandBuffer TransferHelpers::GetCommandBuffer() const
 {
 	return mCommandBuffer;
 }
 
-VkQueue TransferObjects::GetQueue() const
+VkQueue TransferHelpers::GetQueue() const
 {
 	return mQueue;
 }
 
-VkSemaphore TransferObjects::GetSemaphore() const
+VkSemaphore TransferHelpers::GetSemaphore() const
 {
 	return mSemaphore;
 }
 
-uint64_t& TransferObjects::GetSemaphoreValue()
+uint64_t& TransferHelpers::GetSemaphoreValue()
 {
 	return mSemaphoreValue;
 }
 
-uint32_t TransferObjects::GetQueueFamilyIndex() const
+uint32_t TransferHelpers::GetQueueFamilyIndex() const
 {
 	return mQueueFamilyIndex;
 }

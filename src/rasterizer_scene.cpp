@@ -3,7 +3,7 @@
 #include "resources.hpp"
 #include "vulkan_objects.hpp"
 
-RasterizerWorldScene::RasterizerWorldScene(const Scene& scene, const VkDevice device, const VmaAllocator allocator, const std::vector<VkDescriptorSetLayout>& desc_set_layouts, TransferObjects* transfer_objects)
+RasterizerWorldScene::RasterizerWorldScene(const Scene& scene, const VkDevice device, const VmaAllocator allocator, const std::vector<VkDescriptorSetLayout>& desc_set_layouts, TransferHelpers* transfer_objects)
 	: mDevice(device)
 {
 	auto vertex_data = scene.GetVertexData();

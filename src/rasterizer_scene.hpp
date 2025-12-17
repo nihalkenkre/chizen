@@ -3,7 +3,7 @@
 #include "scene.hpp"
 
 class DeviceBufferResource;
-class TransferObjects;
+class TransferHelpers;
 
 class RasterizerScene
 {
@@ -21,7 +21,7 @@ public:
 class RasterizerWorldScene : public RasterizerScene
 {
 public:
-	RasterizerWorldScene(const Scene &scene, const VkDevice device, const VmaAllocator allocator, const std::vector<VkDescriptorSetLayout>& desc_set_layouts, TransferObjects* transfer_objects);
+	RasterizerWorldScene(const Scene &scene, const VkDevice device, const VmaAllocator allocator, const std::vector<VkDescriptorSetLayout>& desc_set_layouts, TransferHelpers* transfer_objects);
 
 	void Render(const VkCommandBuffer cmd_buff, const VkPipelineLayout pipeline_layout, const uint32_t cam_index) const override;
 

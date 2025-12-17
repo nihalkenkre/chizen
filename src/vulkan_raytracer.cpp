@@ -427,7 +427,7 @@ VulkanRaytracer::VulkanRaytracer(const VulkanInterface* const vulkan_interface, 
 	mMaxFramesInFlight = static_cast<uint8_t>(vulkan_interface->GetSwapchain()->GetImagesCount());
 	mExtent = extent;
 	mComputeQueue = vulkan_interface->GetDevice()->GetComputeQueue();
-	mTransferObjects = vulkan_interface->GetTransferObjects();
+	mTransferHelpers = vulkan_interface->GetTransferHelpers();
 	mFrameObjects = std::make_unique<FrameObjects>(mDevice, vulkan_interface->GetPhysicalDeviceData()->ComputeQueueFamilyIndex, mMaxFramesInFlight, "raytrace frame objects");
 	std::vector<uint8_t> uniform_buffer_data(sizeof(glm::mat4) * 2);
 	mUniformBuffer = std::make_unique<HostBufferResource>(mDevice, mAllocator,
@@ -503,8 +503,8 @@ VulkanRaytracer::~VulkanRaytracer()
 
 void VulkanRaytracer::InitializeResources()
 {
-	mTransferObjects->BeginBatch();
-	mTransferObjects->ChangeImageLayout(
+	mTransferHelpers->BeginBatch();
+	mTransferHelpers->ChangeImageLayout(
 		VK_PIPELINE_STAGE_2_TOP_OF_PIPE_BIT, 0,
 		VK_PIPELINE_STAGE_2_BOTTOM_OF_PIPE_BIT, 0,
 		VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_GENERAL,
@@ -538,8 +538,8 @@ void VulkanRaytracer::InitializeResources()
 		VMA_ALLOCATION_CREATE_HOST_ACCESS_SEQUENTIAL_WRITE_BIT,
 		rand_states_data, "random states staging"
 	);
-	mTransferObjects->CopyBufferToBuffer(rand_states_staging->GetVkBuffer(), mRandomStates->GetVkBuffer(), rand_states_data.size());
-	mTransferObjects->EndBatch();
+	mTransferHelpers->CopyBufferToBuffer(rand_states_staging->GetVkBuffer(), mRandomStates->GetVkBuffer(), rand_states_data.size());
+	mTransferHelpers->EndBatch();
 
 	const uint32_t aligned_handle_size = static_cast<uint32_t>(ALIGNED_SIZE(mRayTracingProperties.shaderGroupHandleSize, mRayTracingProperties.shaderGroupHandleAlignment));
 	const uint32_t sbt_size = aligned_handle_size * static_cast<uint32_t>(std::size(mPipelineData->GetShaderGroups()));
@@ -661,7 +661,7 @@ void VulkanRaytracer::Start(const VulkanRaytracerScene* scene, const uint32_t ma
 
 	std::vector<uint8_t> blas_buffer_data(blas_size_info.accelerationStructureSize);
 
-	mTransferObjects->BeginBatch();
+	mTransferHelpers->BeginBatch();
 	auto blas_buffer = std::make_unique<DeviceBufferResource>(
 		mDevice, mAllocator,
 		VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT_KHR | VK_BUFFER_USAGE_ACCELERATION_STRUCTURE_STORAGE_BIT_KHR,
@@ -672,7 +672,7 @@ void VulkanRaytracer::Start(const VulkanRaytracerScene* scene, const uint32_t ma
 		mDevice, mAllocator,
 		VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT_KHR | VK_BUFFER_USAGE_STORAGE_BUFFER_BIT,
 		blas_size_info.buildScratchSize, "blas scratch buffer");
-	mTransferObjects->EndBatch();
+	mTransferHelpers->EndBatch();
 
 	VkAccelerationStructureKHR blas = VK_NULL_HANDLE;
 	const VkAccelerationStructureCreateInfoKHR blas_create_info = {
@@ -1065,5 +1065,10 @@ void VulkanRaytracer::UpdateFinalRenderTarget(ImageResource* FinalRenderTarget)
 void VulkanRaytracer::Stop()
 {
 	mStopRendering = true;
+}
+
+FrameObjects* VulkanRaytracer::GetFrameObjects() const
+{
+	return mFrameObjects.get();
 }
 

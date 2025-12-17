@@ -14,7 +14,7 @@ VulkanInterface::VulkanInterface(SDL_Window* window)
 	mDevice = std::make_unique<Device>(mPhysicalDeviceData.get());
 	mSwapchain = std::make_unique<Swapchain>(mDevice->GetDevice(), mSurface.get(), mPhysicalDeviceData->GraphicsQueueFamilyIndex, "swapchain");
 	mAllocator = std::make_unique<Allocator>(mInstance->GetInstance(), mPhysicalDeviceData->PhysicalDevice, mDevice->GetDevice());
-	mTransferObjects = std::make_unique<TransferObjects>(mDevice->GetDevice(), mDevice->GetTransferQueue(), mPhysicalDeviceData->TransferQueueFamilyIndex, "transfer objects");
+	mTransferHelpers = std::make_unique<TransferHelpers>(mDevice->GetDevice(), mDevice->GetTransferQueue(), mPhysicalDeviceData->TransferQueueFamilyIndex, "transfer objects");
 	mComputeHelpers = std::make_unique<ComputeHelpers>(mDevice->GetDevice(), mDevice->GetComputeQueue(), mPhysicalDeviceData->ComputeQueueFamilyIndex, "compute helpers");
 
 #ifdef _DEBUG
@@ -53,9 +53,9 @@ Allocator* VulkanInterface::GetAllocator() const
 	return mAllocator.get();
 }
 
-TransferObjects* VulkanInterface::GetTransferObjects() const
+TransferHelpers* VulkanInterface::GetTransferHelpers() const
 {
-	return mTransferObjects.get();
+	return mTransferHelpers.get();
 }
 
 ComputeHelpers* VulkanInterface::GetComputeHelpers() const

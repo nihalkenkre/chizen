@@ -402,7 +402,7 @@ Display::Display(const VulkanInterface* vulkan_interface, ImageResource* final_r
 	mFinalRenderTarget = final_render_target;
 	mMaxFramesInFlight = static_cast<uint8_t>(vulkan_interface->GetSwapchain()->GetImagesCount());
 	mExtent = vulkan_interface->GetSurfaceKHR()->GetSurfaceCapabilities().surfaceCapabilities.currentExtent;
-	mTransferObjects = vulkan_interface->GetTransferObjects();
+	mTransferHelpers = vulkan_interface->GetTransferHelpers();
 	mSwapchain = vulkan_interface->GetSwapchain();
 	mQueue = vulkan_interface->GetDevice()->GetGraphicsQueue();
 	mDevice = vulkan_interface->GetVkDevice();
@@ -467,16 +467,16 @@ Display::Display(const VulkanInterface* vulkan_interface, ImageResource* final_r
 	mGeometryBuffer = std::make_unique<DeviceBufferResource>(
 		vulkan_interface->GetVkDevice(), vulkan_interface->GetVmaAllocator(), 
 		VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_VERTEX_BUFFER_BIT, verts_size,
-		"geometry buffer");
+		"geometry");
 
 	std::unique_ptr<HostBufferResource> staging_buffer = std::make_unique<HostBufferResource>(
 		vulkan_interface->GetVkDevice(), vulkan_interface->GetVmaAllocator(),
 		VK_BUFFER_USAGE_TRANSFER_SRC_BIT, VMA_ALLOCATION_CREATE_HOST_ACCESS_SEQUENTIAL_WRITE_BIT, verts_data,
-		"staging geometry buffer");
+		"staging geometry");
 
-	mTransferObjects->BeginBatch();
-	mTransferObjects->CopyBufferToBuffer(staging_buffer->GetVkBuffer(), mGeometryBuffer->GetVkBuffer(), verts_size);
-	mTransferObjects->EndBatch();
+	mTransferHelpers->BeginBatch();
+	mTransferHelpers->CopyBufferToBuffer(staging_buffer->GetVkBuffer(), mGeometryBuffer->GetVkBuffer(), verts_size);
+	mTransferHelpers->EndBatch();
 }
 
 Display::~Display() noexcept
@@ -662,8 +662,8 @@ void Display::Render(const float position_offset[], const float zoom_level, ImGU
 		},
 		{
 			.sType = VK_STRUCTURE_TYPE_SEMAPHORE_SUBMIT_INFO,
-			.semaphore = mTransferObjects->GetSemaphore(),
-			.value = mTransferObjects->GetSemaphoreValue(),
+			.semaphore = mTransferHelpers->GetSemaphore(),
+			.value = mTransferHelpers->GetSemaphoreValue(),
 			.stageMask = VK_PIPELINE_STAGE_2_FRAGMENT_SHADER_BIT,
 		}
 	};

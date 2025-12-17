@@ -8,7 +8,7 @@ class ImGUIState;
 class RasterizerScene;
 class ImageResource;
 class Allocator;
-class TransferObjects;
+class TransferHelpers;
 
 class Rasterizer
 {
@@ -26,7 +26,7 @@ public:
 	void UpdateSwapchain(Swapchain* swapchain);
 	void UpdateExtent(const VkExtent2D& extent);
 	void RecreateDepthTexture();
-	void InitializeResources(TransferObjects* transfer_objects);
+	void InitializeResources(TransferHelpers* transfer_objects);
 
 	const std::vector<VkDescriptorSetLayout>& GetDescriptorSetLayouts() const;
 
@@ -41,7 +41,7 @@ private:
 
 	VkDescriptorPool mDescriptorPool = VK_NULL_HANDLE;
 
-	TransferObjects* mTransferObjects = nullptr;
+	TransferHelpers* mTransferHelpers = nullptr;
 	Allocator* mAllocator = nullptr;
 	Swapchain* mSwapchain = nullptr;
 	VkDevice mDevice = VK_NULL_HANDLE;

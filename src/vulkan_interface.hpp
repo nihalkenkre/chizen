@@ -6,7 +6,7 @@ class Surface;
 class Device;
 class Swapchain;
 class Allocator;
-class TransferObjects;
+class TransferHelpers;
 class ComputeHelpers;
 
 class VulkanInterface
@@ -24,7 +24,7 @@ public:
 	Device* GetDevice() const;
 	Swapchain* GetSwapchain() const;
 	Allocator* GetAllocator() const;
-	TransferObjects* GetTransferObjects() const;
+	TransferHelpers* GetTransferHelpers() const;
 	ComputeHelpers* GetComputeHelpers() const;
 
 	VkDevice GetVkDevice() const;
@@ -39,6 +39,6 @@ private:
 	std::unique_ptr<Device> mDevice;
 	std::unique_ptr<Swapchain> mSwapchain;
 	std::unique_ptr<Allocator> mAllocator;
-	std::unique_ptr<TransferObjects> mTransferObjects;
+	std::unique_ptr<TransferHelpers> mTransferHelpers;
 	std::unique_ptr<ComputeHelpers> mComputeHelpers;
 };

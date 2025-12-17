@@ -6,7 +6,7 @@ class DisplayPipelineData;
 class ImGUIState;
 class DeviceBufferResource;
 class ImageResource;
-class TransferObjects;
+class TransferHelpers;
 class Swapchain;
 
 class Display
@@ -37,7 +37,7 @@ private:
 	std::unique_ptr<DisplayPipelineData> mPipelineData = {};
 	std::unique_ptr<DeviceBufferResource> mGeometryBuffer;
 
-	TransferObjects* mTransferObjects = {};
+	TransferHelpers* mTransferHelpers = {};
 	Swapchain* mSwapchain = {};
 	VkExtent2D mExtent = {};
 	VkQueue mQueue = VK_NULL_HANDLE;
