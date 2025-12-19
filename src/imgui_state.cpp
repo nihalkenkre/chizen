@@ -88,6 +88,8 @@ void ImGUIState::SetCameraNames(const std::vector<std::string>& names)
 	{
 		mCameraNames.push_back(name);
 	}
+
+	mSelectedCameraIndex = 0;
 }
 
 void ImGUIState::Render(const VkCommandBuffer cmd_buff)

@@ -22,7 +22,7 @@ public:
 class RasterizerWorldScene : public RasterizerScene
 {
 public:
-	RasterizerWorldScene(const Scene& scene, const VkDevice device, const VmaAllocator allocator, const std::vector<VkDescriptorSetLayout>& desc_set_layouts, TransferHelpers* transfer_objects);
+	RasterizerWorldScene(const Scene& scene, const VkDevice device, const VmaAllocator allocator, const std::vector<VkDescriptorSetLayout>& desc_set_layouts, const std::vector<uint32_t>& queue_family_indices, TransferHelpers* transfer_objects);
 
 	void Render(const VkCommandBuffer cmd_buff, const VkPipelineLayout pipeline_layout, const uint32_t cam_index) const override;
 
@@ -42,7 +42,7 @@ public:
 	class Image : public Scene::Image
 	{
 	public:
-		Image(const Scene::Image& image, const std::vector<uint8_t>& images_data, const VkDevice device, const VmaAllocator allocator, TransferHelpers* transfer_helpers);
+		Image(const Scene::Image& image, const std::vector<uint8_t>& images_data, const VkDevice device, const VmaAllocator allocator, const std::vector<uint32_t>& queue_family_indices, TransferHelpers* transfer_helpers);
 
 		ImageResource* GetImageResource() const;
 
@@ -54,21 +54,26 @@ public:
 	{
 	public:
 		Mesh(const Scene::Mesh& mesh, const std::vector<RasterizerWorldScene::Image>& images,
-			const VkDevice device, const VkDescriptorPool desc_pool, const VkDescriptorSetLayout desc_set_layout,
-			const VkSampler null_sampler);
+			const VkDevice device, const VmaAllocator allocator, const VkDescriptorPool desc_pool, const VkDescriptorSetLayout desc_set_layout,
+			const std::vector<uint32_t>& queue_family_indices, const VkSampler null_sampler,
+			TransferHelpers* transfer_helpers);
 
 		class Primitive : public Scene::Mesh::Primitive
 		{
 		public:
-			Primitive(const Scene::Mesh::Primitive& primitive, const std::vector<RasterizerWorldScene::Image>& images, const VkDevice device, const VkDescriptorPool desc_pool, const VkDescriptorSetLayout desc_set_layout, const VkSampler null_sampler);
+			Primitive(const Scene::Mesh::Primitive& primitive, const std::vector<RasterizerWorldScene::Image>& images,
+				const VkDevice device, const VmaAllocator allocator,
+				const VkDescriptorPool desc_pool, const VkDescriptorSetLayout desc_set_layout,
+				const std::vector<uint32_t>& queue_family_indices,
+				const VkSampler null_sampler, TransferHelpers* transfer_helpers
+			);
 
 			VkDescriptorSet GetTexDescSet() const;
 
 		private:
-			VkDescriptorSet mTexDescSet = VK_NULL_HANDLE;
+			VkDescriptorSet mTexsDescSet = VK_NULL_HANDLE;
 
-			std::unique_ptr<ImageResource> mDiffuseTex = nullptr;
-			std::unique_ptr<ImageResource> mNormalTex = nullptr;
+			std::unique_ptr<ImageResource> mBaseColorImage = nullptr;
 		};
 
 		const std::vector<Primitive>& GetPrimitives() const;

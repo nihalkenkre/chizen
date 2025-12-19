@@ -6,7 +6,7 @@
 
 #include <stb_image.h>
 
-RasterizerWorldScene::RasterizerWorldScene(const Scene& scene, const VkDevice device, const VmaAllocator allocator, const std::vector<VkDescriptorSetLayout>& desc_set_layouts, TransferHelpers* transfer_helpers)
+RasterizerWorldScene::RasterizerWorldScene(const Scene& scene, const VkDevice device, const VmaAllocator allocator, const std::vector<VkDescriptorSetLayout>& desc_set_layouts, const std::vector<uint32_t>& queue_family_indices, TransferHelpers* transfer_helpers)
 	: mDevice(device)
 {
 	auto wait_and_delete = [device, transfer_helpers](HostBufferResource* hbr) {
@@ -69,12 +69,12 @@ RasterizerWorldScene::RasterizerWorldScene(const Scene& scene, const VkDevice de
 	{
 		for (const auto& prim : mesh.GetPrimitives())
 		{
-			desc_count += 2;
+			desc_count += 3; // diffuse_col, diffuse_tex and normal tex
 		}
 	}
 	VkDescriptorPoolSize model_tex_desc_size = {
 		.type = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
-		.descriptorCount = desc_count, // (multplied by the number of textures expected by the shader(pipeline))
+		.descriptorCount = desc_count,
 	};
 
 	const VkDescriptorPoolSize pool_sizes[] = {
@@ -117,7 +117,7 @@ RasterizerWorldScene::RasterizerWorldScene(const Scene& scene, const VkDevice de
 	mImages.reserve(scene.GetImages().size());
 	for (const auto& image : scene.GetImages())
 	{
-		mImages.push_back(RasterizerWorldScene::Image(image, scene.GetImagesData(), device, allocator, transfer_helpers));
+		mImages.push_back(RasterizerWorldScene::Image(image, scene.GetImagesData(), device, allocator, queue_family_indices, transfer_helpers));
 	}
 
 	const VkSamplerCreateInfo s_ci = {
@@ -129,7 +129,9 @@ RasterizerWorldScene::RasterizerWorldScene(const Scene& scene, const VkDevice de
 	mMeshes.reserve(scene.GetMeshes().size());
 	for (const auto& mesh : scene.GetMeshes())
 	{
-		mMeshes.push_back(RasterizerWorldScene::Mesh(mesh, mImages, device, mDescriptorPool, desc_set_layouts[2], mNullSampler));
+		mMeshes.push_back(RasterizerWorldScene::Mesh(mesh, mImages, device, allocator, mDescriptorPool, desc_set_layouts[2],
+			queue_family_indices, mNullSampler, transfer_helpers
+		));
 	}
 }
 
@@ -262,15 +264,19 @@ VkDescriptorSet RasterizerWorldScene::MeshInstance::GetModelMatDescSet() const
 }
 
 RasterizerWorldScene::Mesh::Mesh(const Scene::Mesh& mesh, const std::vector<RasterizerWorldScene::Image>& images,
-	const VkDevice device, const VkDescriptorPool desc_pool, const VkDescriptorSetLayout desc_set_layout, const VkSampler null_sampler)
+	const VkDevice device, const VmaAllocator allocator, const VkDescriptorPool desc_pool, const VkDescriptorSetLayout desc_set_layout,
+	const std::vector<uint32_t>& queue_family_indices, const VkSampler null_sampler,
+	TransferHelpers* transfer_helpers)
 	: Scene::Mesh(mesh)
 {
 	mPrimitives.reserve(mesh.GetPrimitives().size());
 	for (const auto& prim : mesh.GetPrimitives())
 	{
-		mPrimitives.push_back(RasterizerWorldScene::Mesh::Primitive(
-			prim, images, device, desc_pool, desc_set_layout, null_sampler
-		)
+		mPrimitives.push_back(
+			RasterizerWorldScene::Mesh::Primitive(
+				prim, images, device, allocator, desc_pool, desc_set_layout,
+				queue_family_indices, null_sampler, transfer_helpers
+			)
 		);
 	}
 }
@@ -282,8 +288,10 @@ const std::vector<RasterizerWorldScene::Mesh::Primitive>& RasterizerWorldScene::
 
 RasterizerWorldScene::Mesh::Primitive::Primitive(
 	const Scene::Mesh::Primitive& primitive, const std::vector<RasterizerWorldScene::Image>& images,
-	const VkDevice device, const VkDescriptorPool desc_pool, const VkDescriptorSetLayout desc_set_layout,
-	const VkSampler null_sampler
+	const VkDevice device, const VmaAllocator allocator,
+	const VkDescriptorPool desc_pool, const VkDescriptorSetLayout desc_set_layout,
+	const std::vector<uint32_t>& queue_family_indices,
+	const VkSampler null_sampler, TransferHelpers* transfer_helpers
 )
 	: Scene::Mesh::Primitive(primitive)
 {
@@ -294,20 +302,79 @@ RasterizerWorldScene::Mesh::Primitive::Primitive(
 		.pSetLayouts = &desc_set_layout,
 	};
 
-	VK_CHECK("allocate ds", vkAllocateDescriptorSets(device, &ds_ai, &mTexDescSet));
+	VK_CHECK("allocate ds", vkAllocateDescriptorSets(device, &ds_ai, &mTexsDescSet));
 
 #ifdef _DEBUG
-	Utils_SetObjectName(device, VK_OBJECT_TYPE_DESCRIPTOR_SET, reinterpret_cast<uint64_t>(mTexDescSet), "prim desc set");
+	Utils_SetObjectName(device, VK_OBJECT_TYPE_DESCRIPTOR_SET, reinterpret_cast<uint64_t>(mTexsDescSet), "prim desc set");
 #endif // _DEBUG
 
-	int32_t base_img_index = primitive.GetBaseImageIndex();
+	Material material = primitive.GetMaterial();
+	int32_t base_img_index = material.GetBaseImageIndex();
+
+	auto wait_and_delete = [device, transfer_helpers](HostBufferResource* hbr) {
+		VkSemaphore sem = transfer_helpers->GetSemaphore();
+		const uint64_t sem_value = transfer_helpers->GetSemaphoreValueConst();
+
+		const VkSemaphoreWaitInfo wait_info = {
+			.sType = VK_STRUCTURE_TYPE_SEMAPHORE_WAIT_INFO,
+			.semaphoreCount = 1,
+			.pSemaphores = &sem,
+			.pValues = &sem_value,
+		};
+		VK_CHECK("wait for sem", vkWaitSemaphoresKHR(device, &wait_info, UINT64_MAX));
+
+		hbr->~HostBufferResource();
+	};
+
+	float base_color[4] = {
+		material.GetBaseColorFactor().r,
+		material.GetBaseColorFactor().g,
+		material.GetBaseColorFactor().b,
+		material.GetBaseColorFactor().a,
+	};
+	std::vector<uint8_t> base_color_data(sizeof(float) * 4);
+	std::memcpy(base_color_data.data(), base_color, base_color_data.size());
+
+	mBaseColorImage = std::make_unique<ImageResource>(
+		device, VkExtent3D{ 1, 1, 1 }, VK_FORMAT_R32G32B32A32_SFLOAT,
+		VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_SAMPLED_BIT,
+		allocator, queue_family_indices, "base color"
+	);
+
+	std::unique_ptr<HostBufferResource, decltype(wait_and_delete)> staging_base_color(new HostBufferResource(
+		device, allocator, VK_BUFFER_USAGE_TRANSFER_SRC_BIT, VMA_ALLOCATION_CREATE_HOST_ACCESS_SEQUENTIAL_WRITE_BIT,
+		base_color_data, "base color staging"), wait_and_delete
+	);
+
+	transfer_helpers->BeginBatch();
+	transfer_helpers->ChangeImageLayout(
+		VK_PIPELINE_STAGE_2_TOP_OF_PIPE_BIT, 0,
+		VK_PIPELINE_STAGE_2_COPY_BIT, VK_ACCESS_2_TRANSFER_WRITE_BIT,
+		VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_GENERAL,
+		VK_QUEUE_FAMILY_IGNORED, VK_QUEUE_FAMILY_IGNORED,
+		VK_IMAGE_ASPECT_COLOR_BIT, mBaseColorImage->GetImage()
+	);
+	transfer_helpers->CopyBufferToImage(staging_base_color->GetVkBuffer(), mBaseColorImage->GetImage(), VkExtent2D{ 1,1 });
+	transfer_helpers->EndBatch();
+
+	const VkDescriptorImageInfo desc_img_info = mBaseColorImage->GetDescriptorInfo();
+	const VkWriteDescriptorSet write_desc_set = {
+			.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
+			.dstSet = mTexsDescSet,
+			.descriptorCount = 1,
+			.descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
+			.pImageInfo = &desc_img_info,
+	};
+
+	vkUpdateDescriptorSets(device, 1, &write_desc_set, 0, nullptr);
 
 	if (base_img_index >= 0)
 	{
 		const VkDescriptorImageInfo desc_img_info = images[base_img_index].GetImageResource()->GetDescriptorInfo();
 		const VkWriteDescriptorSet write_desc_set = {
 				.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
-				.dstSet = mTexDescSet,
+				.dstSet = mTexsDescSet,
+				.dstBinding = 1,
 				.descriptorCount = 1,
 				.descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
 				.pImageInfo = &desc_img_info
@@ -321,7 +388,8 @@ RasterizerWorldScene::Mesh::Primitive::Primitive(
 		};
 		const VkWriteDescriptorSet write_desc_set = {
 				.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
-				.dstSet = mTexDescSet,
+				.dstSet = mTexsDescSet,
+				.dstBinding = 1,
 				.descriptorCount = 1,
 				.descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
 				.pImageInfo = &desc_img_info,
@@ -329,14 +397,14 @@ RasterizerWorldScene::Mesh::Primitive::Primitive(
 		vkUpdateDescriptorSets(device, 1, &write_desc_set, 0, nullptr);
 	}
 
-	int32_t norm_img_index = primitive.GetNormalImageIndex();
+	int32_t norm_img_index = material.GetNormalImageIndex();
 	if (norm_img_index >= 0)
 	{
 		const VkDescriptorImageInfo desc_img_info = images[norm_img_index].GetImageResource()->GetDescriptorInfo();
 		const VkWriteDescriptorSet write_desc_set = {
 				.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
-				.dstSet = mTexDescSet,
-				.dstBinding = 1,
+				.dstSet = mTexsDescSet,
+				.dstBinding = 2,
 				.descriptorCount = 1,
 				.descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
 				.pImageInfo = &desc_img_info
@@ -350,8 +418,8 @@ RasterizerWorldScene::Mesh::Primitive::Primitive(
 		};
 		const VkWriteDescriptorSet write_desc_set = {
 				.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
-				.dstSet = mTexDescSet,
-				.dstBinding = 1,
+				.dstSet = mTexsDescSet,
+				.dstBinding = 2,
 				.descriptorCount = 1,
 				.descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
 				.pImageInfo = &desc_img_info,
@@ -362,7 +430,7 @@ RasterizerWorldScene::Mesh::Primitive::Primitive(
 
 VkDescriptorSet RasterizerWorldScene::Mesh::Primitive::GetTexDescSet() const
 {
-	return mTexDescSet;
+	return mTexsDescSet;
 }
 
 RasterizerWorldScene::CameraInstance::CameraInstance(const Scene::CameraInstance& camera_instance, const DeviceBufferResource* scene_data, const VkDevice device, const VkDescriptorPool desc_pool, const VkDescriptorSetLayout desc_set_layout)
@@ -404,20 +472,26 @@ RasterizerWorldScene::Camera::Camera(const Scene::Camera& camera, const DeviceBu
 {
 }
 
-RasterizerWorldScene::Image::Image(const Scene::Image& image, const std::vector<uint8_t>& images_data, const VkDevice device, const VmaAllocator allocator, TransferHelpers* transfer_helpers)
+RasterizerWorldScene::Image::Image(const Scene::Image& image, const std::vector<uint8_t>& images_data, const VkDevice device, const VmaAllocator allocator, const std::vector<uint32_t>& queue_family_indices, TransferHelpers* transfer_helpers)
 {
 	uint32_t w, h, c;
 	uint8_t* pixels = stbi_load_from_memory(images_data.data() + image.GetDataOffset(), static_cast<int>(image.GetDataSize()),
 		reinterpret_cast<int*>(&w), reinterpret_cast<int*>(&h), reinterpret_cast<int*>(&c), 4);
 
+	VkFormat format = VK_FORMAT_R8G8B8A8_SRGB;
+	if (image.GetName().contains("normal") || image.GetName().contains("NRM") || image.GetName().contains("nrm"))
+	{
+		format = VK_FORMAT_R8G8B8A8_SNORM;
+	}
+
 	mImageResource = std::make_unique<ImageResource>(
-		g_device, VkExtent3D{ w, h, 1 }, VK_FORMAT_R8G8B8A8_SRGB, VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_SAMPLED_BIT,
-		g_allocator,
-		std::vector<uint32_t>{ g_graphics_queue_family_index, g_compute_queue_family_index, g_transfer_queue_family_index },
+		device, VkExtent3D{ w, h, 1 }, format, VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_SAMPLED_BIT,
+		allocator,
+		queue_family_indices,
 		"texture"
 	);
 
-	auto wait_and_delete = [transfer_helpers](HostBufferResource* hbr) {
+	auto wait_and_delete = [device, transfer_helpers](HostBufferResource* hbr) {
 		VkSemaphore sem = transfer_helpers->GetSemaphore();
 		const uint64_t sem_value = transfer_helpers->GetSemaphoreValueConst();
 
@@ -427,13 +501,13 @@ RasterizerWorldScene::Image::Image(const Scene::Image& image, const std::vector<
 			.pSemaphores = &sem,
 			.pValues = &sem_value,
 		};
-		VK_CHECK("wait for sem", vkWaitSemaphoresKHR(g_device, &wait_info, UINT64_MAX));
+		VK_CHECK("wait for sem", vkWaitSemaphoresKHR(device, &wait_info, UINT64_MAX));
 
 		hbr->~HostBufferResource();
-	};
+		};
 
 	std::unique_ptr<HostBufferResource, decltype(wait_and_delete)> staging_buffer(new HostBufferResource(
-		g_device, g_allocator, VK_IMAGE_USAGE_TRANSFER_SRC_BIT, VMA_ALLOCATION_CREATE_HOST_ACCESS_SEQUENTIAL_WRITE_BIT,
+		device, allocator, VK_IMAGE_USAGE_TRANSFER_SRC_BIT, VMA_ALLOCATION_CREATE_HOST_ACCESS_SEQUENTIAL_WRITE_BIT,
 		mImageResource->GetAllocationInfo2().allocationInfo.size, "texture staging"), wait_and_delete);
 	std::memcpy(
 		staging_buffer->GetAllocationInfo2().allocationInfo.pMappedData,
@@ -444,7 +518,7 @@ RasterizerWorldScene::Image::Image(const Scene::Image& image, const std::vector<
 	transfer_helpers->BeginBatch();
 	transfer_helpers->ChangeImageLayout(
 		VK_PIPELINE_STAGE_2_TOP_OF_PIPE_BIT, 0,
-		VK_PIPELINE_STAGE_2_TRANSFER_BIT_KHR, VK_ACCESS_2_TRANSFER_WRITE_BIT,
+		VK_PIPELINE_STAGE_2_COPY_BIT, VK_ACCESS_2_TRANSFER_WRITE_BIT,
 		VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_GENERAL,
 		VK_QUEUE_FAMILY_IGNORED, VK_QUEUE_FAMILY_IGNORED,
 		VK_IMAGE_ASPECT_COLOR_BIT, mImageResource->GetImage()

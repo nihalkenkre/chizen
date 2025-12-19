@@ -494,6 +494,25 @@ void TransferHelpers::CopyBufferToImage(const VkBuffer src_buffer, const VkImage
 	vkCmdCopyBufferToImage2KHR(mCommandBuffer, &copy_buff_info);
 }
 
+void TransferHelpers::InsertMemoryBarrier(const VkPipelineStageFlags2 src_stage_mask, const VkAccessFlags2 src_access_mask, const VkPipelineStageFlags2 dst_stage_mask, const VkAccessFlags2 dst_access_mask)
+{
+	VkMemoryBarrier2 mem_bar = {
+		.sType = VK_STRUCTURE_TYPE_MEMORY_BARRIER_2,
+		.srcStageMask = src_stage_mask,
+		.srcAccessMask = src_access_mask,
+		.dstStageMask = dst_stage_mask,
+		.dstAccessMask = dst_access_mask,
+	};
+
+	const VkDependencyInfo dep_info = {
+		.sType = VK_STRUCTURE_TYPE_DEPENDENCY_INFO,
+		.memoryBarrierCount = 1,
+		.pMemoryBarriers = &mem_bar,
+	};
+
+	vkCmdPipelineBarrier2KHR(mCommandBuffer, &dep_info);
+}
+
 void TransferHelpers::EndBatch()
 {
 	VK_CHECK("end xfer cmd buff", vkEndCommandBuffer(mCommandBuffer));

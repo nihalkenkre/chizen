@@ -116,11 +116,13 @@ void App::ProcessEvent(SDL_Event* event)
 			mVulkanInterface->GetVkDevice(),
 			mVulkanInterface->GetVmaAllocator(),
 			mRasterizer->GetDescriptorSetLayouts(),
+			std::vector<uint32_t>{mVulkanInterface->GetPhysicalDeviceData()->GraphicsQueueFamilyIndex,
+			mVulkanInterface->GetPhysicalDeviceData()->ComputeQueueFamilyIndex,
+			mVulkanInterface->GetPhysicalDeviceData()->TransferQueueFamilyIndex},
 			mVulkanInterface->GetTransferHelpers()
 		);
 
 		mVulkanRaytracerScene = std::make_unique<VulkanRaytracerScene>(scene, mVulkanInterface->GetComputeHelpers()->GetCommandBuffer(), mVulkanInterface->GetComputeHelpers()->GetQueue());
-		//mEmbreeRaytacerScene = std::make_unique<EmbreeRaytracerScene>(scene);
 
 		mDisplayRender = false;
 	}

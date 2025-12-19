@@ -31,14 +31,28 @@ public:
 		class Primitive
 		{
 		public:
-			Primitive() {}
+			class Material
+			{
+			public:
+				Material(int32_t base_index, int32_t normal_index, glm::vec4 diffuse_color) : mBaseImageIndex(base_index), mNormalImageIndex(normal_index), mBaseColorFactor(diffuse_color){}
+
+				int32_t GetBaseImageIndex() const;
+				int32_t GetNormalImageIndex() const;
+				glm::vec4 GetBaseColorFactor() const;
+
+			private:
+				int32_t mBaseImageIndex = -1;
+				int32_t mNormalImageIndex = -1;
+				glm::vec4 mBaseColorFactor = glm::vec4(0.f);
+			};
+
 			Primitive(
-				const size_t positions_size, const size_t positions_offset, 
-				const size_t normals_size, const size_t normals_offset, 
-				const size_t texcoords_size, const size_t texcoords_offset, 
-				const size_t vertex_count, 
+				const size_t positions_size, const size_t positions_offset,
+				const size_t normals_size, const size_t normals_offset,
+				const size_t texcoords_size, const size_t texcoords_offset,
+				const size_t vertex_count,
 				const size_t indices_size, const size_t indices_offset, const size_t index_count, const VkIndexType index_type,
-				const int32_t base_img_index, const int32_t normal_img_index
+				const Material material
 			);
 
 			size_t GetPositionsSize() const;
@@ -54,8 +68,7 @@ public:
 			size_t GetVertexCount() const;
 			size_t GetIndexCount() const;
 
-			int32_t GetBaseImageIndex() const;
-			int32_t GetNormalImageIndex() const;
+			Material GetMaterial() const;
 
 		private:
 			size_t mPositionsSize = 0;
@@ -71,8 +84,7 @@ public:
 			size_t mVertexCount = 0;
 			size_t mIndexCount = 0;
 
-			int32_t mBaseImageIndex = -1;
-			int32_t mNormalImageIndex = -1;
+			Material mMaterial;
 		};
 
 		Mesh(std::vector<Scene::Mesh::Primitive> primitives);
@@ -114,14 +126,16 @@ public:
 	{
 	public:
 		Image() {}
-		Image(const size_t offset, const size_t size);
+		Image(const size_t offset, const size_t size, const std::string& name);
 
 		size_t GetDataOffset() const;
 		size_t GetDataSize() const;
+		const std::string& GetName() const;
 
 	private:
 		size_t mDataOffset = 0;
 		size_t mDataSize = 0;
+		std::string mName;
 	};
 
 	const std::vector<MeshInstance>& GetMeshInstances() const;
