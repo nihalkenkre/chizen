@@ -1,14 +1,14 @@
 #pragma once
 
 class VulkanInterface;
-class Rasterizer;
+class Viewport;
 class Display;
 class VulkanRaytracer;
 class EmbreeRaytracer;
 class ImGUIState;
 class ImageResource;
 class HostBufferResource;
-class RasterizerScene;
+class ViewportScene;
 class VulkanRaytracerScene;
 class EmbreeRaytracerScene;
 
@@ -33,7 +33,7 @@ public:
 	void RecreateRasterSwapchain();
 
 	VulkanInterface* GetVulkanInterface() const;
-	Rasterizer* GetRasterizer() const;
+	Viewport* GetRasterizer() const;
 	Display* GetDisplay() const;
 
 	SDL_Window* GetWindow() const;
@@ -47,7 +47,7 @@ public:
 	ImGUIState* GetImGUIState();
 	bool& IsRaytracing();
 
-	VkExtent2D& GetRenderTargetExtent();
+	VkExtent2D& GetFinalRenderTargetExtent();
 	ImageResource* GetFinalRenderTarget() const;
 
 private:
@@ -56,18 +56,18 @@ private:
 	float mZoomLevel = 1.f;
 	uint32_t mMaxSamples = 1024;
 	std::unique_ptr<VulkanInterface> mVulkanInterface = nullptr;
-	std::unique_ptr<Rasterizer> mRasterizer = nullptr;
+	std::unique_ptr<Viewport> mRasterizer = nullptr;
 	std::unique_ptr<Display> mDisplay = nullptr;
 	std::unique_ptr<VulkanRaytracer> mVulkanRaytracer = nullptr;
 	std::unique_ptr<EmbreeRaytracer> mEmbreeRaytracer = nullptr;
 	std::unique_ptr<ImGUIState> mImGUIState = nullptr;
-	std::unique_ptr<RasterizerScene> mRasterizerScene = nullptr;
+	std::unique_ptr<ViewportScene> mRasterizerScene = nullptr;
 	std::unique_ptr<VulkanRaytracerScene> mVulkanRaytracerScene = nullptr;
 	std::unique_ptr<EmbreeRaytracerScene> mEmbreeRaytacerScene = nullptr;
 	std::unique_ptr<ImageResource> mFinalRenderTarget = nullptr;
 	std::unique_ptr<HostBufferResource> mEmbreeRenderTarget = nullptr;
 	SDL_Window* mWindow = nullptr;
-	VkExtent2D mRenderTargetExtent = { 1280, 720 };
+	VkExtent2D mFinalRenderTargetExtent = { 1280, 720 };
 	std::thread mRaytraceThread = {};
 	bool mIsTrackingMouse = false;
 	bool mDisplayRender = false;

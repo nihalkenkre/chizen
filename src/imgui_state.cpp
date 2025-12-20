@@ -201,7 +201,7 @@ int& ImGUIState::GetMaxSamples()
 	return mMaxSamples;
 }
 
-int* ImGUIState::GetRenderTargetExtent()
+int* ImGUIState::GetFinalRenderTargetExtent()
 {
 	return mRenderTargetExtent;
 }

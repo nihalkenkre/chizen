@@ -5,28 +5,25 @@ class Swapchain;
 class FrameObjects;
 class RasterizerPipelineData;
 class ImGUIState;
-class RasterizerScene;
+class ViewportScene;
 class ImageResource;
 class Allocator;
 class TransferHelpers;
 
-class Rasterizer
+class Viewport
 {
 public:
-	Rasterizer() = delete;
+	Viewport() = delete;
 
-	Rasterizer(const VulkanInterface* vulkan_interface, const std::string& current_path, const std::string& name);
+	Viewport(const VulkanInterface* vulkan_interface, const std::string& current_path, const std::string& name);
 
-	Rasterizer(const Rasterizer& other) = delete;
-	Rasterizer& operator=(const Rasterizer& other) = delete;
+	Viewport(const Viewport& other) = delete;
+	Viewport& operator=(const Viewport& other) = delete;
 
-	~Rasterizer() noexcept;
+	~Viewport() noexcept;
 
-	void Render(const RasterizerScene* scene, ImGUIState* imgui_state);
-	void UpdateSwapchain(Swapchain* swapchain);
-	void UpdateExtent(const VkExtent2D& extent);
-	void RecreateDepthTexture();
-	void InitializeResources(TransferHelpers* transfer_objects);
+	void Render(const ViewportScene* scene, const Swapchain* swapchain, const VkExtent2D extent, ImGUIState* imgui_state);
+	void RecreateDepthTexture(const VkExtent2D extent);
 
 	const std::vector<VkDescriptorSetLayout>& GetDescriptorSetLayouts() const;
 
@@ -43,9 +40,7 @@ private:
 
 	TransferHelpers* mTransferHelpers = nullptr;
 	Allocator* mAllocator = nullptr;
-	Swapchain* mSwapchain = nullptr;
 	VkDevice mDevice = VK_NULL_HANDLE;
-	VkExtent2D mExtent = { 1280, 720 };
 	VkQueue mQueue = VK_NULL_HANDLE;
 	uint8_t mMaxFramesInFlight = 0;
 };

@@ -24,11 +24,7 @@ add_executable(${PROJECT_NAME} ${PROJECT_SRCS} ${IMGUI_SRCS} ${IMGUI_FILE_DLG_SR
 
 target_precompile_headers(${PROJECT_NAME} PRIVATE 
                                        <vector>
-                                       <fstream>
-                                       <chrono>
-                                       <algorithm>
                                        <filesystem>
-                                       <expected>
                                        <print>
                                        <SDL3/SDL.h>
 	                                    <SDL3/SDL_main.h>

@@ -13,7 +13,7 @@ class VulkanRaytracer
 {
 public:
 	VulkanRaytracer() = delete;
-	VulkanRaytracer(const VulkanInterface* const vulkan_interface, ImageResource* final_render_target, const VkExtent3D& extent, const std::string& current_path, const std::string& name);
+	VulkanRaytracer(const VulkanInterface* const vulkan_interface, const VkExtent3D& extent, const std::string& current_path, const std::string& name);
 
 	VulkanRaytracer(const VulkanRaytracer& other) = delete;
 	VulkanRaytracer& operator=(const VulkanRaytracer& other) = delete;
@@ -21,8 +21,7 @@ public:
 	~VulkanRaytracer() noexcept;
 
 	void RecreateRenderResources(const VkExtent2D& extent);
-	void Start(const VulkanRaytracerScene* scene, const uint32_t max_samples);
-	void UpdateFinalRenderTarget(ImageResource* FinalRenderTarget);
+	void Start(const VulkanRaytracerScene* scene, const ImageResource* final_render_target, const uint32_t max_samples);
 	void Stop();
 
 	FrameObjects* GetFrameObjects() const;
@@ -30,7 +29,6 @@ public:
 private:
 	void InitializeResources();
 
-	ImageResource* mFinalRenderTarget = {};
 	std::unique_ptr<ImageResource> mAccumRenderTarget = nullptr;
 	std::unique_ptr<DeviceBufferResource> mRandomStates = nullptr;
 	std::unique_ptr<HostBufferResource> mRaygenSBT = nullptr;

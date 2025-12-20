@@ -4,7 +4,8 @@
 #include "resources.hpp"
 #include "utils.hpp"
 
-VulkanRaytracerScene::VulkanRaytracerScene(const Scene& scene, const VkDevice device, const VmaAllocator allocator, ComputeHelpers* compute_helpers)
+VulkanRaytracerScene::VulkanRaytracerScene(const Scene& scene, const VkDevice device, const VmaAllocator allocator, const size_t uniform_buffer_alignment, ComputeHelpers* compute_helpers)
+	: mDevice(device)
 {
 	for (const auto& mesh : scene.GetMeshes())
 	{

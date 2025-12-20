@@ -6,23 +6,23 @@ class DeviceBufferResource;
 class ImageResource;
 class TransferHelpers;
 
-class RasterizerScene
+class ViewportScene
 {
 public:
 	virtual void Render(const VkCommandBuffer cmd_buff, const VkPipelineLayout pipeline_layout, const uint32_t cam_index) const = 0;
-	virtual ~RasterizerScene() noexcept {}
+	virtual ~ViewportScene() noexcept {}
 };
 
-class RasterizeEmptyScene : public RasterizerScene
+class ViewportEmptyScene : public ViewportScene
 {
 public:
 	void Render(const VkCommandBuffer cmd_buff, const VkPipelineLayout pipeline_layout, const uint32_t cam_index) const override {}
 };
 
-class RasterizerWorldScene : public RasterizerScene
+class ViewportWorldScene : public ViewportScene
 {
 public:
-	RasterizerWorldScene(const Scene& scene, const VkDevice device, const VmaAllocator allocator, const std::vector<VkDescriptorSetLayout>& desc_set_layouts, const std::vector<uint32_t>& queue_family_indices, TransferHelpers* transfer_objects);
+	ViewportWorldScene(const Scene& scene, const VkDevice device, const VmaAllocator allocator, const std::vector<VkDescriptorSetLayout>& desc_set_layouts, const std::vector<uint32_t>& queue_family_indices, TransferHelpers* transfer_objects);
 
 	void Render(const VkCommandBuffer cmd_buff, const VkPipelineLayout pipeline_layout, const uint32_t cam_index) const override;
 
@@ -53,7 +53,7 @@ public:
 	class Mesh : public Scene::Mesh
 	{
 	public:
-		Mesh(const Scene::Mesh& mesh, const std::vector<RasterizerWorldScene::Image>& images,
+		Mesh(const Scene::Mesh& mesh, const std::vector<ViewportWorldScene::Image>& images,
 			const VkDevice device, const VmaAllocator allocator, const VkDescriptorPool desc_pool, const VkDescriptorSetLayout desc_set_layout,
 			const std::vector<uint32_t>& queue_family_indices, const VkSampler null_sampler,
 			TransferHelpers* transfer_helpers);
@@ -61,7 +61,7 @@ public:
 		class Primitive : public Scene::Mesh::Primitive
 		{
 		public:
-			Primitive(const Scene::Mesh::Primitive& primitive, const std::vector<RasterizerWorldScene::Image>& images,
+			Primitive(const Scene::Mesh::Primitive& primitive, const std::vector<ViewportWorldScene::Image>& images,
 				const VkDevice device, const VmaAllocator allocator,
 				const VkDescriptorPool desc_pool, const VkDescriptorSetLayout desc_set_layout,
 				const std::vector<uint32_t>& queue_family_indices,
@@ -99,14 +99,14 @@ public:
 		Camera(const Scene::Camera& camera, const DeviceBufferResource* scene_data);
 	};
 
-	~RasterizerWorldScene() noexcept override;
+	~ViewportWorldScene() noexcept override;
 
 private:
-	std::vector<RasterizerWorldScene::MeshInstance> mMeshInstances;
-	std::vector<RasterizerWorldScene::Mesh> mMeshes;
-	std::vector<RasterizerWorldScene::CameraInstance> mCameraInstances;
-	std::vector<RasterizerWorldScene::Camera> mCameras;
-	std::vector<RasterizerWorldScene::Image> mImages;
+	std::vector<ViewportWorldScene::MeshInstance> mMeshInstances;
+	std::vector<ViewportWorldScene::Mesh> mMeshes;
+	std::vector<ViewportWorldScene::CameraInstance> mCameraInstances;
+	std::vector<ViewportWorldScene::Camera> mCameras;
+	std::vector<ViewportWorldScene::Image> mImages;
 
 	std::unique_ptr<DeviceBufferResource> mPositionsData = nullptr;
 	std::unique_ptr<DeviceBufferResource> mUniformData = nullptr;

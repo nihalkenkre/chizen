@@ -397,13 +397,10 @@ const std::vector<VkDescriptorSetLayout>& DisplayPipelineData::GetDescriptorSetL
 	return mDescriptorSetLayouts;
 }
 
-Display::Display(const VulkanInterface* vulkan_interface, ImageResource* final_render_target, const std::string& current_path)
+Display::Display(const VulkanInterface* vulkan_interface, const std::string& current_path)
 {
-	mFinalRenderTarget = final_render_target;
 	mMaxFramesInFlight = static_cast<uint8_t>(vulkan_interface->GetSwapchain()->GetImagesCount());
-	mExtent = vulkan_interface->GetSurfaceKHR()->GetSurfaceCapabilities().surfaceCapabilities.currentExtent;
 	mTransferHelpers = vulkan_interface->GetTransferHelpers();
-	mSwapchain = vulkan_interface->GetSwapchain();
 	mQueue = vulkan_interface->GetDevice()->GetGraphicsQueue();
 	mDevice = vulkan_interface->GetVkDevice();
 	mFrameObjects = std::make_unique<FrameObjects>(mDevice, vulkan_interface->GetPhysicalDeviceData()->GraphicsQueueFamilyIndex, mMaxFramesInFlight, "display frame objects");
@@ -508,7 +505,10 @@ Display::~Display() noexcept
 	vkDestroyDescriptorPool(mDevice, mDescriptorPool, nullptr);
 }
 
-void Display::Render(const float position_offset[], const float zoom_level, ImGUIState* imgui_state)
+void Display::Render(
+	const ImageResource* final_render_target, 
+	const Swapchain* swapchain, const VkExtent2D extent,
+	const float position_offset[], const float zoom_level, ImGUIState* imgui_state)
 {
 	VkDevice device = mDevice;
 	VkCommandBuffer cmd_buff = mFrameObjects->GetCommandBuffer();
@@ -527,7 +527,7 @@ void Display::Render(const float position_offset[], const float zoom_level, ImGU
 
 	const VkAcquireNextImageInfoKHR acq_info = {
 		.sType = VK_STRUCTURE_TYPE_ACQUIRE_NEXT_IMAGE_INFO_KHR,
-		.swapchain = mSwapchain->GetSwapchain(),
+		.swapchain = swapchain->GetSwapchain(),
 		.timeout = UINT64_MAX,
 		.semaphore = mAcquireSignalSemaphores[frame_in_flight],
 		.deviceMask = 0x1,
@@ -549,12 +549,12 @@ void Display::Render(const float position_offset[], const float zoom_level, ImGU
 		VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
 		VK_QUEUE_FAMILY_IGNORED, VK_QUEUE_FAMILY_IGNORED,
 		VK_IMAGE_ASPECT_COLOR_BIT,
-		mSwapchain->GetImages()[img_idx]);
+		swapchain->GetImages()[img_idx]);
 
 	VkRenderingAttachmentInfo col_attachs[] = {
 		{
 			.sType = VK_STRUCTURE_TYPE_RENDERING_ATTACHMENT_INFO,
-			.imageView = mSwapchain->GetImageViews()[img_idx],
+			.imageView = swapchain->GetImageViews()[img_idx],
 			.imageLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
 			.loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR,
 			.storeOp = VK_ATTACHMENT_STORE_OP_STORE,
@@ -574,7 +574,7 @@ void Display::Render(const float position_offset[], const float zoom_level, ImGU
 	const VkRenderingInfo rendering_info = {
 		.sType = VK_STRUCTURE_TYPE_RENDERING_INFO,
 		.renderArea = {
-			.extent = mExtent,
+			.extent = extent,
 		},
 		.layerCount = 1,
 		.colorAttachmentCount = std::size(col_attachs),
@@ -585,7 +585,7 @@ void Display::Render(const float position_offset[], const float zoom_level, ImGU
 
 	vkCmdBindPipeline(cmd_buff, VK_PIPELINE_BIND_POINT_GRAPHICS, mPipelineData->GetPipeline());
 
-	VkDescriptorImageInfo descriptor_info = mFinalRenderTarget->GetDescriptorInfo();
+	VkDescriptorImageInfo descriptor_info = final_render_target->GetDescriptorInfo();
 	const VkWriteDescriptorSet desc_writes[] = {
 		{
 			.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
@@ -618,7 +618,7 @@ void Display::Render(const float position_offset[], const float zoom_level, ImGU
 
 	const VkRect2D scissors[] = {
 		{
-			.extent = mExtent,
+			.extent = extent,
 		},
 	};
 
@@ -665,7 +665,7 @@ void Display::Render(const float position_offset[], const float zoom_level, ImGU
 		VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL, VK_IMAGE_LAYOUT_PRESENT_SRC_KHR,
 		VK_QUEUE_FAMILY_IGNORED, VK_QUEUE_FAMILY_IGNORED,
 		VK_IMAGE_ASPECT_COLOR_BIT,
-		mSwapchain->GetImages()[img_idx]);
+		swapchain->GetImages()[img_idx]);
 
 	VK_CHECK("end display cmd buff", vkEndCommandBuffer(cmd_buff));
 
@@ -718,13 +718,13 @@ void Display::Render(const float position_offset[], const float zoom_level, ImGU
 
 	VK_CHECK("submit display render commands", vkQueueSubmit2KHR(mQueue, std::size(submit_infos), submit_infos, VK_NULL_HANDLE));
 
-	VkSwapchainKHR swapchain = mSwapchain->GetSwapchain();
+	VkSwapchainKHR sc = swapchain->GetSwapchain();
 	const VkPresentInfoKHR present_info = {
 		.sType = VK_STRUCTURE_TYPE_PRESENT_INFO_KHR,
 		.waitSemaphoreCount = 1,
 		.pWaitSemaphores = mPresentWaitSemaphores.data() + frame_in_flight,
 		.swapchainCount = 1,
-		.pSwapchains = &swapchain,
+		.pSwapchains = &sc,
 		.pImageIndices = &img_idx,
 	};
 
@@ -736,19 +736,4 @@ void Display::Render(const float position_offset[], const float zoom_level, ImGU
 	VK_CHECK("gfx q wait idle", vkQueueWaitIdle(mQueue));
 
 	mFrameObjects->NextFrame();
-}
-
-void Display::UpdateFinalRenderTarget(ImageResource* final_render_target)
-{
-	mFinalRenderTarget = final_render_target;
-}
-
-void Display::UpdateSwapchain(Swapchain* swapchain)
-{
-	mSwapchain = swapchain;
-}
-
-void Display::UpdateExtent(VkExtent2D extent)
-{
-	mExtent = extent;
 }

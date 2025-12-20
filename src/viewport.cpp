@@ -1,11 +1,11 @@
-#include "rasterizer.hpp"
+#include "viewport.hpp"
 #include "vulkan_interface.hpp"
 #include "vulkan_objects.hpp"
 #include "frame_objects.hpp"
 #include "imgui_state.hpp"
 #include "resources.hpp"
 #include "scene.hpp"
-#include "rasterizer_scene.hpp"
+#include "viewport_scene.hpp"
 
 #include "utils.hpp"
 
@@ -452,9 +452,8 @@ const std::vector<VkDescriptorSetLayout>& RasterizerPipelineData::GetDescriptorS
 	return mDescriptorSetLayouts;
 }
 
-Rasterizer::Rasterizer(const VulkanInterface* vulkan_interface, const std::string& current_path, const std::string& name) :
+Viewport::Viewport(const VulkanInterface* vulkan_interface, const std::string& current_path, const std::string& name) :
 	mDevice(vulkan_interface->GetVkDevice()),
-	mSwapchain(vulkan_interface->GetSwapchain()),
 	mQueue(vulkan_interface->GetDevice()->GetGraphicsQueue()),
 	mAllocator(vulkan_interface->GetAllocator()),
 	mTransferHelpers(vulkan_interface->GetTransferHelpers()),
@@ -462,11 +461,7 @@ Rasterizer::Rasterizer(const VulkanInterface* vulkan_interface, const std::strin
 			vulkan_interface->GetPhysicalDeviceData()->GraphicsQueueFamilyIndex,
 			vulkan_interface->GetPhysicalDeviceData()->ComputeQueueFamilyIndex,
 			vulkan_interface->GetPhysicalDeviceData()->TransferQueueFamilyIndex,
-		}),
-		mExtent({
-				vulkan_interface->GetSurfaceKHR()->GetSurfaceCapabilities().surfaceCapabilities.currentExtent.width,
-				vulkan_interface->GetSurfaceKHR()->GetSurfaceCapabilities().surfaceCapabilities.currentExtent.height,
-			})
+		})
 {
 	mMaxFramesInFlight = static_cast<uint8_t>(vulkan_interface->GetSwapchain()->GetImagesCount()) + 2;
 	mFrameObjects = std::make_unique<FrameObjects>(vulkan_interface->GetVkDevice(), vulkan_interface->GetPhysicalDeviceData()->GraphicsQueueFamilyIndex, mMaxFramesInFlight, "rasterizer frame objects");
@@ -474,8 +469,8 @@ Rasterizer::Rasterizer(const VulkanInterface* vulkan_interface, const std::strin
 	mDepthTexture = std::make_unique<ImageResource>(
 		vulkan_interface->GetVkDevice(),
 		VkExtent3D{
-			mExtent.width,
-			mExtent.height,
+				vulkan_interface->GetSurfaceKHR()->GetSurfaceCapabilities().surfaceCapabilities.currentExtent.width,
+				vulkan_interface->GetSurfaceKHR()->GetSurfaceCapabilities().surfaceCapabilities.currentExtent.height,
 			1,
 		},
 		VK_FORMAT_D32_SFLOAT, VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT, vulkan_interface->GetVmaAllocator(),
@@ -501,13 +496,8 @@ Rasterizer::Rasterizer(const VulkanInterface* vulkan_interface, const std::strin
 #endif // _DEBUG
 	}
 
-	InitializeResources(vulkan_interface->GetTransferHelpers());
-}
-
-void Rasterizer::InitializeResources(TransferHelpers* transfer_objects)
-{
-	transfer_objects->BeginBatch();
-	transfer_objects->ChangeImageLayout(
+	mTransferHelpers->BeginBatch();
+	mTransferHelpers->ChangeImageLayout(
 		VK_PIPELINE_STAGE_2_TOP_OF_PIPE_BIT, 0,
 		VK_PIPELINE_STAGE_2_BOTTOM_OF_PIPE_BIT, 0,
 		VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_DEPTH_ATTACHMENT_OPTIMAL,
@@ -515,10 +505,10 @@ void Rasterizer::InitializeResources(TransferHelpers* transfer_objects)
 		VK_IMAGE_ASPECT_DEPTH_BIT,
 		mDepthTexture->GetImage()
 	);
-	transfer_objects->EndBatch();
+	mTransferHelpers->EndBatch();
 }
 
-void Rasterizer::Render(const RasterizerScene* scene, ImGUIState* imgui_state)
+void Viewport::Render(const ViewportScene* scene, const Swapchain* swapchain, const VkExtent2D extent, ImGUIState* imgui_state)
 {
 	VkDevice device = mDevice;
 	VkCommandBuffer cmd_buff = mFrameObjects->GetCommandBuffer();
@@ -537,7 +527,7 @@ void Rasterizer::Render(const RasterizerScene* scene, ImGUIState* imgui_state)
 
 	const VkAcquireNextImageInfoKHR acq_info = {
 		.sType = VK_STRUCTURE_TYPE_ACQUIRE_NEXT_IMAGE_INFO_KHR,
-		.swapchain = mSwapchain->GetSwapchain(),
+		.swapchain = swapchain->GetSwapchain(),
 		.timeout = UINT64_MAX,
 		.semaphore = mAcquireSignalSemaphores[frame_in_flight],
 		.deviceMask = 0x1,
@@ -559,13 +549,13 @@ void Rasterizer::Render(const RasterizerScene* scene, ImGUIState* imgui_state)
 		VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
 		VK_QUEUE_FAMILY_IGNORED, VK_QUEUE_FAMILY_IGNORED,
 		VK_IMAGE_ASPECT_COLOR_BIT,
-		mSwapchain->GetImages()[img_idx]
+		swapchain->GetImages()[img_idx]
 	);
 
 	VkRenderingAttachmentInfo col_attachs[] = {
 		{
 			.sType = VK_STRUCTURE_TYPE_RENDERING_ATTACHMENT_INFO,
-			.imageView = mSwapchain->GetImageViews()[img_idx],
+			.imageView = swapchain->GetImageViews()[img_idx],
 			.imageLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
 			.loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR,
 			.storeOp = VK_ATTACHMENT_STORE_OP_STORE,
@@ -598,7 +588,7 @@ void Rasterizer::Render(const RasterizerScene* scene, ImGUIState* imgui_state)
 	const VkRenderingInfo rendering_info = {
 		.sType = VK_STRUCTURE_TYPE_RENDERING_INFO,
 		.renderArea = {
-			.extent = mExtent,
+			.extent = extent,
 		},
 		.layerCount = 1,
 		.colorAttachmentCount = std::size(col_attachs),
@@ -619,7 +609,7 @@ void Rasterizer::Render(const RasterizerScene* scene, ImGUIState* imgui_state)
 
 	const VkRect2D scissors[] = {
 		{
-			.extent = mExtent,
+			.extent = extent,
 		},
 	};
 
@@ -639,7 +629,7 @@ void Rasterizer::Render(const RasterizerScene* scene, ImGUIState* imgui_state)
 		VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL, VK_IMAGE_LAYOUT_PRESENT_SRC_KHR,
 		VK_QUEUE_FAMILY_IGNORED, VK_QUEUE_FAMILY_IGNORED,
 		VK_IMAGE_ASPECT_COLOR_BIT,
-		mSwapchain->GetImages()[img_idx]
+		swapchain->GetImages()[img_idx]
 	);
 
 	VK_CHECK("end rasterizer cmd buff", vkEndCommandBuffer(cmd_buff));
@@ -691,15 +681,15 @@ void Rasterizer::Render(const RasterizerScene* scene, ImGUIState* imgui_state)
 		},
 	};
 
-	VK_CHECK("submit rasterizer render commands", vkQueueSubmit2KHR(mQueue, std::size(submit_infos), submit_infos, VK_NULL_HANDLE));
+	VK_CHECK("submit viewport render commands", vkQueueSubmit2KHR(mQueue, std::size(submit_infos), submit_infos, VK_NULL_HANDLE));
 
-	VkSwapchainKHR swapchain = mSwapchain->GetSwapchain();
+	VkSwapchainKHR sc = swapchain->GetSwapchain();
 	const VkPresentInfoKHR present_info = {
 		.sType = VK_STRUCTURE_TYPE_PRESENT_INFO_KHR,
 		.waitSemaphoreCount = 1,
 		.pWaitSemaphores = mPresentWaitSemaphores.data() + frame_in_flight,
 		.swapchainCount = 1,
-		.pSwapchains = &swapchain,
+		.pSwapchains = &sc,
 		.pImageIndices = &img_idx,
 	};
 
@@ -713,23 +703,13 @@ void Rasterizer::Render(const RasterizerScene* scene, ImGUIState* imgui_state)
 	mFrameObjects->NextFrame();
 }
 
-void Rasterizer::UpdateSwapchain(Swapchain* swapchain)
-{
-	mSwapchain = swapchain;
-}
-
-void Rasterizer::UpdateExtent(const VkExtent2D& extent)
-{
-	mExtent = extent;
-}
-
-void Rasterizer::RecreateDepthTexture()
+void Viewport::RecreateDepthTexture(const VkExtent2D extent)
 {
 	mDepthTexture = std::make_unique<ImageResource>(
 		mDevice,
 		VkExtent3D{
-			mExtent.width,
-			mExtent.height,
+			extent.width,
+			extent.height,
 			1,
 		},
 		VK_FORMAT_D32_SFLOAT, VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT, mAllocator->GetAllocator(),
@@ -738,12 +718,12 @@ void Rasterizer::RecreateDepthTexture()
 		);
 }
 
-const std::vector<VkDescriptorSetLayout>& Rasterizer::GetDescriptorSetLayouts() const
+const std::vector<VkDescriptorSetLayout>& Viewport::GetDescriptorSetLayouts() const
 {
 	return mPipelineData->GetDescriptorSetLayouts();
 }
 
-Rasterizer::~Rasterizer() noexcept
+Viewport::~Viewport() noexcept
 {
 	if (mDevice != VK_NULL_HANDLE)
 	{

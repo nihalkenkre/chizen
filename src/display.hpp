@@ -13,20 +13,16 @@ class Display
 {
 public:
 	Display() = delete;
-	Display(const VulkanInterface* vulkan_interface, ImageResource* final_render_target, const std::string& current_path);
+	Display(const VulkanInterface* vulkan_interface, const std::string& current_path);
 
 	Display(const Display& other) = delete;
 	Display& operator=(const Display& other) = delete;
 
 	~Display() noexcept;
 
-	void Render(const float position_offset[], const float zoom_level, ImGUIState* imgui_state);
-	void UpdateFinalRenderTarget(ImageResource* final_render_target);
-	void UpdateSwapchain(Swapchain* swapchain);
-	void UpdateExtent(VkExtent2D extent);
+	void Render(const ImageResource* final_render_target, const Swapchain* swapchain, const VkExtent2D extent, const float position_offset[], const float zoom_level, ImGUIState* imgui_state);
 
 private:
-	ImageResource* mFinalRenderTarget = nullptr;
 
 	std::unique_ptr<FrameObjects> mFrameObjects = nullptr;
 	std::vector<VkSemaphore> mPresentWaitSemaphores;
@@ -38,8 +34,6 @@ private:
 	std::unique_ptr<DeviceBufferResource> mGeometryBuffer;
 
 	TransferHelpers* mTransferHelpers = {};
-	Swapchain* mSwapchain = {};
-	VkExtent2D mExtent = {};
 	VkQueue mQueue = VK_NULL_HANDLE;
 	VkDevice mDevice = VK_NULL_HANDLE;
 

@@ -19,7 +19,7 @@ public:
 
 	bool& GetShouldStartRaytracing();
 	int& GetMaxSamples();
-	int* GetRenderTargetExtent();
+	int* GetFinalRenderTargetExtent();
 	const int GetSelectedCameraIndex() const;
 	const int GetSelectedRendererIndex() const;
 

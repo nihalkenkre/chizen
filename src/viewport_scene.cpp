@@ -1,4 +1,4 @@
-#include "rasterizer_scene.hpp"
+#include "viewport_scene.hpp"
 #include "utils.hpp"
 #include "resources.hpp"
 #include "vulkan_objects.hpp"
@@ -6,7 +6,7 @@
 
 #include <stb_image.h>
 
-RasterizerWorldScene::RasterizerWorldScene(const Scene& scene, const VkDevice device, const VmaAllocator allocator, const std::vector<VkDescriptorSetLayout>& desc_set_layouts, const std::vector<uint32_t>& queue_family_indices, TransferHelpers* transfer_helpers)
+ViewportWorldScene::ViewportWorldScene(const Scene& scene, const VkDevice device, const VmaAllocator allocator, const std::vector<VkDescriptorSetLayout>& desc_set_layouts, const std::vector<uint32_t>& queue_family_indices, TransferHelpers* transfer_helpers)
 	: mDevice(device)
 {
 	auto wait_and_delete = [device, transfer_helpers](HostBufferResource* hbr) {
@@ -99,25 +99,25 @@ RasterizerWorldScene::RasterizerWorldScene(const Scene& scene, const VkDevice de
 	mCameraInstances.reserve(scene.GetCameraInstances().size());
 	for (const auto& cam_instance : scene.GetCameraInstances())
 	{
-		mCameraInstances.push_back(RasterizerWorldScene::CameraInstance(cam_instance, mUniformData.get(), device, mDescriptorPool, desc_set_layouts[0]));
+		mCameraInstances.push_back(ViewportWorldScene::CameraInstance(cam_instance, mUniformData.get(), device, mDescriptorPool, desc_set_layouts[0]));
 	}
 
 	mCameras.reserve(scene.GetCameras().size());
 	for (const auto& cam : scene.GetCameras())
 	{
-		mCameras.push_back(RasterizerWorldScene::Camera(cam, mUniformData.get()));
+		mCameras.push_back(ViewportWorldScene::Camera(cam, mUniformData.get()));
 	}
 
 	mMeshInstances.reserve(scene.GetMeshInstances().size());
 	for (const auto& mesh_instance : scene.GetMeshInstances())
 	{
-		mMeshInstances.push_back(RasterizerWorldScene::MeshInstance(mesh_instance, mUniformData.get(), device, mDescriptorPool, desc_set_layouts[1]));
+		mMeshInstances.push_back(ViewportWorldScene::MeshInstance(mesh_instance, mUniformData.get(), device, mDescriptorPool, desc_set_layouts[1]));
 	}
 
 	mImages.reserve(scene.GetImages().size());
 	for (const auto& image : scene.GetImages())
 	{
-		mImages.push_back(RasterizerWorldScene::Image(image, scene.GetImagesData(), device, allocator, queue_family_indices, transfer_helpers));
+		mImages.push_back(ViewportWorldScene::Image(image, scene.GetImagesData(), device, allocator, queue_family_indices, transfer_helpers));
 	}
 
 	const VkSamplerCreateInfo s_ci = {
@@ -129,13 +129,13 @@ RasterizerWorldScene::RasterizerWorldScene(const Scene& scene, const VkDevice de
 	mMeshes.reserve(scene.GetMeshes().size());
 	for (const auto& mesh : scene.GetMeshes())
 	{
-		mMeshes.push_back(RasterizerWorldScene::Mesh(mesh, mImages, device, allocator, mDescriptorPool, desc_set_layouts[2],
+		mMeshes.push_back(ViewportWorldScene::Mesh(mesh, mImages, device, allocator, mDescriptorPool, desc_set_layouts[2],
 			queue_family_indices, mNullSampler, transfer_helpers
 		));
 	}
 }
 
-void RasterizerWorldScene::Render(const VkCommandBuffer cmd_buff, const VkPipelineLayout pipeline_layout, const uint32_t cam_index) const
+void ViewportWorldScene::Render(const VkCommandBuffer cmd_buff, const VkPipelineLayout pipeline_layout, const uint32_t cam_index) const
 {
 	const VkDescriptorSet view_proj_desc_set = mCameraInstances[cam_index].GetViewProjDescSet();
 	const VkBindDescriptorSetsInfoKHR bind_ds_info = {
@@ -212,7 +212,7 @@ void RasterizerWorldScene::Render(const VkCommandBuffer cmd_buff, const VkPipeli
 	}
 }
 
-RasterizerWorldScene::~RasterizerWorldScene() noexcept
+ViewportWorldScene::~ViewportWorldScene() noexcept
 {
 	if (mDevice != VK_NULL_HANDLE)
 	{
@@ -221,7 +221,7 @@ RasterizerWorldScene::~RasterizerWorldScene() noexcept
 	}
 }
 
-RasterizerWorldScene::MeshInstance::MeshInstance(const Scene::MeshInstance& mesh_instance, const DeviceBufferResource* scene_data, const VkDevice device, const VkDescriptorPool desc_pool, const VkDescriptorSetLayout desc_set_layout)
+ViewportWorldScene::MeshInstance::MeshInstance(const Scene::MeshInstance& mesh_instance, const DeviceBufferResource* scene_data, const VkDevice device, const VkDescriptorPool desc_pool, const VkDescriptorSetLayout desc_set_layout)
 	: Scene::MeshInstance(mesh_instance)
 {
 	const VkDescriptorSetAllocateInfo mesh_ds_ai = {
@@ -254,16 +254,16 @@ RasterizerWorldScene::MeshInstance::MeshInstance(const Scene::MeshInstance& mesh
 	vkUpdateDescriptorSets(device, 1, &write_desc_set, 0, nullptr);
 }
 
-RasterizerWorldScene::MeshInstance::~MeshInstance() noexcept
+ViewportWorldScene::MeshInstance::~MeshInstance() noexcept
 {
 }
 
-VkDescriptorSet RasterizerWorldScene::MeshInstance::GetModelMatDescSet() const
+VkDescriptorSet ViewportWorldScene::MeshInstance::GetModelMatDescSet() const
 {
 	return mModelMatDescSet;
 }
 
-RasterizerWorldScene::Mesh::Mesh(const Scene::Mesh& mesh, const std::vector<RasterizerWorldScene::Image>& images,
+ViewportWorldScene::Mesh::Mesh(const Scene::Mesh& mesh, const std::vector<ViewportWorldScene::Image>& images,
 	const VkDevice device, const VmaAllocator allocator, const VkDescriptorPool desc_pool, const VkDescriptorSetLayout desc_set_layout,
 	const std::vector<uint32_t>& queue_family_indices, const VkSampler null_sampler,
 	TransferHelpers* transfer_helpers)
@@ -273,7 +273,7 @@ RasterizerWorldScene::Mesh::Mesh(const Scene::Mesh& mesh, const std::vector<Rast
 	for (const auto& prim : mesh.GetPrimitives())
 	{
 		mPrimitives.push_back(
-			RasterizerWorldScene::Mesh::Primitive(
+			ViewportWorldScene::Mesh::Primitive(
 				prim, images, device, allocator, desc_pool, desc_set_layout,
 				queue_family_indices, null_sampler, transfer_helpers
 			)
@@ -281,13 +281,13 @@ RasterizerWorldScene::Mesh::Mesh(const Scene::Mesh& mesh, const std::vector<Rast
 	}
 }
 
-const std::vector<RasterizerWorldScene::Mesh::Primitive>& RasterizerWorldScene::Mesh::GetPrimitives() const
+const std::vector<ViewportWorldScene::Mesh::Primitive>& ViewportWorldScene::Mesh::GetPrimitives() const
 {
 	return mPrimitives;
 }
 
-RasterizerWorldScene::Mesh::Primitive::Primitive(
-	const Scene::Mesh::Primitive& primitive, const std::vector<RasterizerWorldScene::Image>& images,
+ViewportWorldScene::Mesh::Primitive::Primitive(
+	const Scene::Mesh::Primitive& primitive, const std::vector<ViewportWorldScene::Image>& images,
 	const VkDevice device, const VmaAllocator allocator,
 	const VkDescriptorPool desc_pool, const VkDescriptorSetLayout desc_set_layout,
 	const std::vector<uint32_t>& queue_family_indices,
@@ -428,12 +428,12 @@ RasterizerWorldScene::Mesh::Primitive::Primitive(
 	}
 }
 
-VkDescriptorSet RasterizerWorldScene::Mesh::Primitive::GetTexDescSet() const
+VkDescriptorSet ViewportWorldScene::Mesh::Primitive::GetTexDescSet() const
 {
 	return mTexsDescSet;
 }
 
-RasterizerWorldScene::CameraInstance::CameraInstance(const Scene::CameraInstance& camera_instance, const DeviceBufferResource* scene_data, const VkDevice device, const VkDescriptorPool desc_pool, const VkDescriptorSetLayout desc_set_layout)
+ViewportWorldScene::CameraInstance::CameraInstance(const Scene::CameraInstance& camera_instance, const DeviceBufferResource* scene_data, const VkDevice device, const VkDescriptorPool desc_pool, const VkDescriptorSetLayout desc_set_layout)
 	: Scene::CameraInstance(camera_instance)
 {
 	const VkDescriptorSetAllocateInfo view_proj_ds_ai = {
@@ -462,17 +462,17 @@ RasterizerWorldScene::CameraInstance::CameraInstance(const Scene::CameraInstance
 	vkUpdateDescriptorSets(device, 1, &write_desc_set, 0, nullptr);
 }
 
-VkDescriptorSet RasterizerWorldScene::CameraInstance::GetViewProjDescSet() const
+VkDescriptorSet ViewportWorldScene::CameraInstance::GetViewProjDescSet() const
 {
 	return mViewProjDescSet;
 }
 
-RasterizerWorldScene::Camera::Camera(const Scene::Camera& camera, const DeviceBufferResource* scene_data)
+ViewportWorldScene::Camera::Camera(const Scene::Camera& camera, const DeviceBufferResource* scene_data)
 	: Scene::Camera(camera)
 {
 }
 
-RasterizerWorldScene::Image::Image(const Scene::Image& image, const std::vector<uint8_t>& images_data, const VkDevice device, const VmaAllocator allocator, const std::vector<uint32_t>& queue_family_indices, TransferHelpers* transfer_helpers)
+ViewportWorldScene::Image::Image(const Scene::Image& image, const std::vector<uint8_t>& images_data, const VkDevice device, const VmaAllocator allocator, const std::vector<uint32_t>& queue_family_indices, TransferHelpers* transfer_helpers)
 {
 	uint32_t w, h, c;
 	uint8_t* pixels = stbi_load_from_memory(images_data.data() + image.GetDataOffset(), static_cast<int>(image.GetDataSize()),
@@ -527,7 +527,7 @@ RasterizerWorldScene::Image::Image(const Scene::Image& image, const std::vector<
 	transfer_helpers->EndBatch();
 }
 
-ImageResource* RasterizerWorldScene::Image::GetImageResource() const
+ImageResource* ViewportWorldScene::Image::GetImageResource() const
 {
 	return mImageResource.get();
 }

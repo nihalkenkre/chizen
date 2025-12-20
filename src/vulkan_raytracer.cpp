@@ -410,12 +410,11 @@ std::vector<VkRayTracingShaderGroupCreateInfoKHR> RaytracerPipelineData::GetShad
 	return mShaderGroups;
 }
 
-VulkanRaytracer::VulkanRaytracer(const VulkanInterface* const vulkan_interface, ImageResource* final_render_target, const VkExtent3D& extent, const std::string& current_path, const std::string& name)
+VulkanRaytracer::VulkanRaytracer(const VulkanInterface* const vulkan_interface, const VkExtent3D& extent, const std::string& current_path, const std::string& name)
 {
 	mDevice = vulkan_interface->GetVkDevice();
 	mAllocator = vulkan_interface->GetVmaAllocator();
 	mRayTracingProperties = vulkan_interface->GetPhysicalDeviceData()->RayTracingProperties;
-	mFinalRenderTarget = final_render_target;
 	mQueueFamilyIndices = {
 		vulkan_interface->GetPhysicalDeviceData()->GraphicsQueueFamilyIndex,
 		vulkan_interface->GetPhysicalDeviceData()->ComputeQueueFamilyIndex,
@@ -567,7 +566,7 @@ void VulkanRaytracer::InitializeResources()
 	memcpy(mMissSBT->GetAllocationInfo2().allocationInfo.pMappedData, shader_handle_storage.data() + mRayTracingProperties.shaderGroupHandleSize, sbt_size);
 	memcpy(mCHSBT->GetAllocationInfo2().allocationInfo.pMappedData, shader_handle_storage.data() + (mRayTracingProperties.shaderGroupHandleSize * 2), sbt_size);
 
-	auto proj = glm::perspective(glm::radians(135.f), 1.77f, 0.001f, 100.f);
+	auto proj = glm::perspective(glm::radians(35.f), 1.77f, 0.001f, 100.f);
 	proj[1][1] *= -1;
 
 	glm::highp_mat4 mats[2] = {
@@ -588,7 +587,7 @@ void VulkanRaytracer::RecreateRenderResources(const VkExtent2D& extent)
 	InitializeResources();
 }
 
-void VulkanRaytracer::Start(const VulkanRaytracerScene* scene, const uint32_t max_samples)
+void VulkanRaytracer::Start(const VulkanRaytracerScene* scene, const ImageResource* final_render_target, const uint32_t max_samples)
 {
 	VkDevice device = mDevice;
 	VkCommandBuffer cmd_buff = mFrameObjects->GetCommandBuffer();
@@ -645,7 +644,7 @@ void VulkanRaytracer::Start(const VulkanRaytracerScene* scene, const uint32_t ma
 		vkCmdBindPipeline(cmd_buff, VK_PIPELINE_BIND_POINT_RAY_TRACING_KHR, mPipelineData->GetPipeline());
 
 		const VkDescriptorImageInfo accum_target_desc_info = mAccumRenderTarget->GetDescriptorInfo();
-		const VkDescriptorImageInfo final_render_desc_info = mFinalRenderTarget->GetDescriptorInfo();
+		const VkDescriptorImageInfo final_render_desc_info = final_render_target->GetDescriptorInfo();
 		const VkDescriptorBufferInfo rand_states_desc_info = mRandomStates->GetDescriptorInfo();
 		const VkDescriptorBufferInfo uniform_buff_desc_info = mUniformBuffer->GetDescriptorInfo();
 		const VkAccelerationStructureKHR tlas = scene->GetTLAS();
@@ -784,11 +783,6 @@ void VulkanRaytracer::Start(const VulkanRaytracerScene* scene, const uint32_t ma
 	mStopRendering = false;
 
 	SDL_CHECK(SDL_PushEvent(&events.RaytraceStopped));
-}
-
-void VulkanRaytracer::UpdateFinalRenderTarget(ImageResource* FinalRenderTarget)
-{
-	mFinalRenderTarget = FinalRenderTarget;
 }
 
 void VulkanRaytracer::Stop()
