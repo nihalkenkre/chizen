@@ -2,6 +2,7 @@
 #include "utils.hpp"
 #include "vulkan_functions.hpp"
 #include "vulkan_interface.hpp"
+#include "resources.hpp"
 
 Instance::Instance(const char* const* extensions, const uint32_t extensions_count)
 {
@@ -609,6 +610,7 @@ Device::Device(const PhysicalDeviceData* physical_device_data)
 		VK_KHR_SYNCHRONIZATION_2_EXTENSION_NAME,
 		VK_KHR_TIMELINE_SEMAPHORE_EXTENSION_NAME,
 		VK_KHR_COPY_COMMANDS_2_EXTENSION_NAME,
+		VK_KHR_RAY_TRACING_POSITION_FETCH_EXTENSION_NAME,
 		"VK_KHR_maintenance5",
 		"VK_KHR_maintenance6",
 		VK_EXT_DESCRIPTOR_INDEXING_EXTENSION_NAME,
@@ -682,9 +684,14 @@ Device::Device(const PhysicalDeviceData* physical_device_data)
 		.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_ROBUSTNESS_2_FEATURES_EXT,
 	};
 
+	VkPhysicalDeviceRayTracingPositionFetchFeaturesKHR rt_pos_fetch_feats = {
+		.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_RAY_TRACING_POSITION_FETCH_FEATURES_KHR,
+		.pNext = &rob2_feats,
+	};
+
 	VkPhysicalDeviceRayTracingPipelineFeaturesKHR rt_pipe_feats = {
 		.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_RAY_TRACING_PIPELINE_FEATURES_KHR,
-		.pNext = &rob2_feats,
+		.pNext = &rt_pos_fetch_feats,
 	};
 
 	VkPhysicalDeviceAccelerationStructureFeaturesKHR accel_struct_feats = {
@@ -817,16 +824,6 @@ VkQueue Device::GetTransferQueue() const
 	return mTransferQueue;
 }
 
-AccelerationStructure::AccelerationStructure(const VkDevice device, const VmaAllocator allocator, const VkCommandBuffer command_buffer, const VkQueue queue)
-{
-}
-
-AccelerationStructure::~AccelerationStructure() noexcept
-{
-	if (mDevice != VK_NULL_HANDLE)
-		vkDestroyAccelerationStructureKHR(mDevice, mAccelerationStructure, nullptr);
-}
-
 ComputeHelpers::ComputeHelpers(const VkDevice device, const VkQueue compute_queue, const uint32_t compute_queue_family_index, const std::string& name)
 	:mDevice(device), mQueue(compute_queue)
 {
@@ -874,6 +871,110 @@ ComputeHelpers::~ComputeHelpers() noexcept
 		vkDestroySemaphore(mDevice, mSemaphore, nullptr);
 	}
 }
+void ComputeHelpers::BeginBatch()
+{
+	const VkSemaphoreWaitInfo  wait_info = {
+		.sType = VK_STRUCTURE_TYPE_SEMAPHORE_WAIT_INFO,
+		.semaphoreCount = 1,
+		.pSemaphores = &mSemaphore,
+		.pValues = &mSemaphoreValue,
+	};
+	VK_CHECK("wait cmpt sem", vkWaitSemaphoresKHR(mDevice, &wait_info, UINT64_MAX));
+
+	const VkCommandBufferBeginInfo begin_info = {
+		.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO,
+		.flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT,
+	};
+	VK_CHECK("begin cmpt cmd buff", vkBeginCommandBuffer(mCommandBuffer, &begin_info))
+}
+
+void ComputeHelpers::CopyBufferToBuffer(const VkBuffer src_buffer, const VkBuffer dst_buffer, const VkDeviceSize size)
+{
+	const VkBufferCopy2 regions[] = {
+		{
+			.sType = VK_STRUCTURE_TYPE_BUFFER_COPY_2,
+			.size = size,
+		},
+	};
+
+	const VkCopyBufferInfo2 copy_buff_info = {
+		.sType = VK_STRUCTURE_TYPE_COPY_BUFFER_INFO_2,
+		.srcBuffer = src_buffer,
+		.dstBuffer = dst_buffer,
+		.regionCount = std::size(regions),
+		.pRegions = regions,
+	};
+
+	vkCmdCopyBuffer2KHR(mCommandBuffer, &copy_buff_info);
+}
+
+void ComputeHelpers::InsertMemoryBarrier(const VkPipelineStageFlags2 src_stage_mask, const VkAccessFlags2 src_access_mask, const VkPipelineStageFlags2 dst_stage_mask, const VkAccessFlags2 dst_access_mask)
+{
+	VkMemoryBarrier2 mem_bar = {
+		.sType = VK_STRUCTURE_TYPE_MEMORY_BARRIER_2,
+		.srcStageMask = src_stage_mask,
+		.srcAccessMask = src_access_mask,
+		.dstStageMask = dst_stage_mask,
+		.dstAccessMask = dst_access_mask,
+	};
+
+	const VkDependencyInfo dep_info = {
+		.sType = VK_STRUCTURE_TYPE_DEPENDENCY_INFO,
+		.memoryBarrierCount = 1,
+		.pMemoryBarriers = &mem_bar,
+	};
+
+	vkCmdPipelineBarrier2KHR(mCommandBuffer, &dep_info);
+}
+
+void ComputeHelpers::BuildAccelerationStructure(const std::vector<VkAccelerationStructureBuildGeometryInfoKHR>& build_geom_infos, const std::vector<VkAccelerationStructureBuildRangeInfoKHR*>& range_infos)
+{
+	vkCmdBuildAccelerationStructuresKHR(mCommandBuffer, static_cast<uint32_t>(std::size(build_geom_infos)), build_geom_infos.data(), range_infos.data());
+}
+
+void ComputeHelpers::EndBatch()
+{
+	VK_CHECK("end cmpt cmd buff", vkEndCommandBuffer(mCommandBuffer));
+
+	const VkSemaphoreSubmitInfo wait_sem_infos[] = {
+		{
+			.sType = VK_STRUCTURE_TYPE_SEMAPHORE_SUBMIT_INFO,
+			.semaphore = mSemaphore,
+			.value = mSemaphoreValue,
+			.stageMask = VK_PIPELINE_STAGE_2_TOP_OF_PIPE_BIT,
+		}
+	};
+
+	const VkCommandBufferSubmitInfo cmd_buff_infos[] = {
+		{
+			.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_SUBMIT_INFO,
+			.commandBuffer = mCommandBuffer,
+		},
+	};
+
+	const VkSemaphoreSubmitInfo sig_sem_infos[] = {
+		{
+			.sType = VK_STRUCTURE_TYPE_SEMAPHORE_SUBMIT_INFO,
+			.semaphore = mSemaphore,
+			.value = ++mSemaphoreValue,
+			.stageMask = VK_PIPELINE_STAGE_2_BOTTOM_OF_PIPE_BIT,
+		},
+	};
+
+	const VkSubmitInfo2 submit_infos[] = {
+		{
+			.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO_2,
+			.waitSemaphoreInfoCount = std::size(wait_sem_infos),
+			.pWaitSemaphoreInfos = wait_sem_infos,
+			.commandBufferInfoCount = std::size(cmd_buff_infos),
+			.pCommandBufferInfos = cmd_buff_infos,
+			.signalSemaphoreInfoCount = std::size(sig_sem_infos),
+			.pSignalSemaphoreInfos = sig_sem_infos,
+		},
+	};
+
+	VK_CHECK("submit xfer batch", vkQueueSubmit2KHR(mQueue, std::size(submit_infos), submit_infos, VK_NULL_HANDLE))
+}
 
 VkCommandPool ComputeHelpers::GetCommandPool() const
 {
@@ -900,8 +1001,343 @@ uint64_t& ComputeHelpers::GetSemaphoreValue()
 	return mSemaphoreValue;
 }
 
+uint64_t ComputeHelpers::GetSemaphoreValueConst() const
+{
+	return mSemaphoreValue;
+}
+
 uint32_t ComputeHelpers::GetQueueFamilyIndex() const
 {
 	return mQueueFamilyIndex;
 }
 
+BLAccelerationStructure::BLAccelerationStructure(const VkDevice device, const VmaAllocator allocator, const Scene::Mesh::Primitive& primitive, const std::vector<uint8_t>& vertex_data, ComputeHelpers* compute_helpers, const std::string& name)
+	: mDevice(device)
+{
+ 	auto host_wait_and_delete = [device, compute_helpers](HostBufferResource* hbr) {
+		VkSemaphore sem = compute_helpers->GetSemaphore();
+		const uint64_t sem_value = compute_helpers->GetSemaphoreValueConst();
+
+		const VkSemaphoreWaitInfo wait_info = {
+			.sType = VK_STRUCTURE_TYPE_SEMAPHORE_WAIT_INFO,
+			.semaphoreCount = 1,
+			.pSemaphores = &sem,
+			.pValues = &sem_value,
+		};
+		VK_CHECK("wait for sem", vkWaitSemaphoresKHR(device, &wait_info, UINT64_MAX));
+
+		hbr->~HostBufferResource();
+	};
+
+ 	auto device_wait_and_delete = [device, compute_helpers](DeviceBufferResource* hbr) {
+		VkSemaphore sem = compute_helpers->GetSemaphore();
+		const uint64_t sem_value = compute_helpers->GetSemaphoreValueConst();
+
+		const VkSemaphoreWaitInfo wait_info = {
+			.sType = VK_STRUCTURE_TYPE_SEMAPHORE_WAIT_INFO,
+			.semaphoreCount = 1,
+			.pSemaphores = &sem,
+			.pValues = &sem_value,
+		};
+		VK_CHECK("wait for sem", vkWaitSemaphoresKHR(device, &wait_info, UINT64_MAX));
+
+		hbr->~DeviceBufferResource();
+	};
+
+	std::vector<uint8_t> positions_data(primitive.GetPositionsSize());
+	std::memcpy(positions_data.data(), vertex_data.data() + primitive.GetPositionsOffset(), primitive.GetPositionsSize());
+
+	std::unique_ptr<HostBufferResource, decltype(host_wait_and_delete)> staging_positions_data(
+		new HostBufferResource(
+			device, allocator, 
+			VK_BUFFER_USAGE_TRANSFER_SRC_BIT, VMA_ALLOCATION_CREATE_HOST_ACCESS_SEQUENTIAL_WRITE_BIT,
+			positions_data, "staging positions data"), 
+		host_wait_and_delete
+	);
+
+	std::unique_ptr<DeviceBufferResource, decltype(device_wait_and_delete)> positions_buffer(
+		new DeviceBufferResource(
+			device, allocator,
+			VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_ACCELERATION_STRUCTURE_BUILD_INPUT_READ_ONLY_BIT_KHR,
+			positions_data.size(), "positions data"), device_wait_and_delete
+	);
+
+	std::vector<uint8_t> indices_data(primitive.GetIndicesSize());
+	std::memcpy(indices_data.data(), vertex_data.data() + primitive.GetIndicesOffset(), primitive.GetIndicesSize());
+
+	std::unique_ptr<HostBufferResource, decltype(host_wait_and_delete)> staging_indices_data(
+		new HostBufferResource(
+			device, allocator, 
+			VK_BUFFER_USAGE_TRANSFER_SRC_BIT, VMA_ALLOCATION_CREATE_HOST_ACCESS_SEQUENTIAL_WRITE_BIT,
+			indices_data, "staging index data"), 
+		host_wait_and_delete
+	);
+
+	std::unique_ptr<DeviceBufferResource, decltype(device_wait_and_delete)>indices_buffer(
+		new DeviceBufferResource(
+			device, allocator,
+			VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_ACCELERATION_STRUCTURE_BUILD_INPUT_READ_ONLY_BIT_KHR,
+			indices_data.size(), "index data"), device_wait_and_delete
+	);
+
+	compute_helpers->BeginBatch();
+	compute_helpers->CopyBufferToBuffer(staging_positions_data->GetVkBuffer(), positions_buffer->GetVkBuffer(), positions_data.size());
+	compute_helpers->CopyBufferToBuffer(staging_indices_data->GetVkBuffer(), indices_buffer->GetVkBuffer(), indices_data.size());
+	compute_helpers->InsertMemoryBarrier(
+		VK_PIPELINE_STAGE_2_TRANSFER_BIT, VK_ACCESS_2_TRANSFER_WRITE_BIT,
+		VK_PIPELINE_STAGE_2_ACCELERATION_STRUCTURE_BUILD_BIT_KHR, VK_ACCESS_2_SHADER_READ_BIT
+	);
+
+	const VkAccelerationStructureGeometryKHR geom = {
+		.sType = VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_GEOMETRY_KHR,
+		.geometryType = VK_GEOMETRY_TYPE_TRIANGLES_KHR,
+		.geometry = {
+			.triangles = {
+				.sType = VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_GEOMETRY_TRIANGLES_DATA_KHR,
+				.vertexFormat = VK_FORMAT_R32G32B32_SFLOAT,
+				.vertexData = positions_buffer->GetDeviceOrHostAddressConstKHR(),
+				.vertexStride = sizeof(float) * 3,
+				.maxVertex = static_cast<uint32_t>(primitive.GetVertexCount()) - 1,
+				.indexType = primitive.GetIndexType(),
+				.indexData = indices_buffer->GetDeviceOrHostAddressConstKHR(),
+			}
+		}
+	};
+
+	VkAccelerationStructureBuildGeometryInfoKHR build_geom_info = {
+		.sType = VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_BUILD_GEOMETRY_INFO_KHR,
+		.type = VK_ACCELERATION_STRUCTURE_TYPE_BOTTOM_LEVEL_KHR,
+		.flags = VK_BUILD_ACCELERATION_STRUCTURE_PREFER_FAST_TRACE_BIT_KHR | VK_BUILD_ACCELERATION_STRUCTURE_ALLOW_DATA_ACCESS_KHR,
+		.mode = VK_BUILD_ACCELERATION_STRUCTURE_MODE_BUILD_KHR,
+		.geometryCount = 1,
+		.pGeometries = &geom,
+	};
+
+	VkAccelerationStructureBuildSizesInfoKHR size_info = {
+		.sType = VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_BUILD_SIZES_INFO_KHR,
+	};
+
+	uint32_t primitive_count = static_cast<uint32_t>(primitive.GetIndexCount()) / 3;
+
+	vkGetAccelerationStructureBuildSizesKHR(device, VK_ACCELERATION_STRUCTURE_BUILD_TYPE_DEVICE_KHR,
+		&build_geom_info, &primitive_count, &size_info);
+
+	mASBuffer = std::make_unique<DeviceBufferResource>(
+		device, allocator,
+		VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT | VK_BUFFER_USAGE_ACCELERATION_STRUCTURE_STORAGE_BIT_KHR,
+		size_info.accelerationStructureSize, "BLAS"
+	);
+
+	std::unique_ptr<DeviceBufferResource, decltype(device_wait_and_delete)> scratch_buffer(
+		new DeviceBufferResource(
+			device, allocator,
+			VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT | VK_BUFFER_USAGE_STORAGE_BUFFER_BIT,
+			size_info.buildScratchSize, "BLAS scratch buffer"),
+		device_wait_and_delete
+	);
+
+	const VkAccelerationStructureCreateInfoKHR ci = {
+		.sType = VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_CREATE_INFO_KHR,
+		.buffer = mASBuffer->GetVkBuffer(),
+		.size = size_info.accelerationStructureSize,
+		.type = VK_ACCELERATION_STRUCTURE_TYPE_BOTTOM_LEVEL_KHR,
+	};
+
+	VK_CHECK("create as", vkCreateAccelerationStructureKHR(device, &ci, nullptr, &mAS));
+
+	VkAccelerationStructureBuildRangeInfoKHR build_range_info = {
+		.primitiveCount = primitive_count,
+	};
+
+	std::vector<VkAccelerationStructureBuildRangeInfoKHR*> build_range_infos = {
+		&build_range_info
+	};
+
+	build_geom_info.dstAccelerationStructure = mAS;
+	build_geom_info.scratchData = scratch_buffer->GetDeviceOrHostAddressKHR();
+
+	compute_helpers->BuildAccelerationStructure(
+		std::vector<VkAccelerationStructureBuildGeometryInfoKHR>
+	{
+		build_geom_info
+	},
+		build_range_infos
+	);
+
+	compute_helpers->EndBatch();
+
+#ifdef _DEBUG
+	Utils_SetObjectName(device, VK_OBJECT_TYPE_ACCELERATION_STRUCTURE_KHR, reinterpret_cast<uint64_t>(mAS), name);
+#endif
+}
+
+BLAccelerationStructure::~BLAccelerationStructure() noexcept
+{
+	if (mDevice != VK_NULL_HANDLE)
+		vkDestroyAccelerationStructureKHR(mDevice, mAS, nullptr);
+}
+
+const VkAccelerationStructureKHR BLAccelerationStructure::GetAS() const
+{
+	return mAS;
+}
+
+DeviceBufferResource* BLAccelerationStructure::GetASBuffer() const
+{
+	return mASBuffer.get();
+}
+
+TLAccelerationStructure::TLAccelerationStructure(const VkDevice device, const VmaAllocator allocator, const std::vector<VkAccelerationStructureInstanceKHR>& instances, ComputeHelpers* compute_helpers, const std::string& name)
+	: mDevice(device)
+{
+ 	auto host_wait_and_delete = [device, compute_helpers](HostBufferResource* hbr) {
+		VkSemaphore sem = compute_helpers->GetSemaphore();
+		const uint64_t sem_value = compute_helpers->GetSemaphoreValueConst();
+
+		const VkSemaphoreWaitInfo wait_info = {
+			.sType = VK_STRUCTURE_TYPE_SEMAPHORE_WAIT_INFO,
+			.semaphoreCount = 1,
+			.pSemaphores = &sem,
+			.pValues = &sem_value,
+		};
+		VK_CHECK("wait for sem", vkWaitSemaphoresKHR(device, &wait_info, UINT64_MAX));
+
+		hbr->~HostBufferResource();
+	};
+
+ 	auto device_wait_and_delete = [device, compute_helpers](DeviceBufferResource* hbr) {
+		VkSemaphore sem = compute_helpers->GetSemaphore();
+		const uint64_t sem_value = compute_helpers->GetSemaphoreValueConst();
+
+		const VkSemaphoreWaitInfo wait_info = {
+			.sType = VK_STRUCTURE_TYPE_SEMAPHORE_WAIT_INFO,
+			.semaphoreCount = 1,
+			.pSemaphores = &sem,
+			.pValues = &sem_value,
+		};
+		VK_CHECK("wait for sem", vkWaitSemaphoresKHR(device, &wait_info, UINT64_MAX));
+
+		hbr->~DeviceBufferResource();
+	};
+
+	std::vector<uint8_t> instances_data(instances.size() * sizeof(VkAccelerationStructureInstanceKHR));
+	std::memcpy(instances_data.data(), instances.data(), instances_data.size());
+
+	std::unique_ptr<HostBufferResource, decltype(host_wait_and_delete)> instances_data_staging(
+		new HostBufferResource(
+			device, allocator, 
+			VK_BUFFER_USAGE_TRANSFER_SRC_BIT, VMA_ALLOCATION_CREATE_HOST_ACCESS_SEQUENTIAL_WRITE_BIT,
+			instances_data, "instances staging"), 
+		host_wait_and_delete
+	);
+
+	std::unique_ptr<DeviceBufferResource, decltype(device_wait_and_delete)> instances_data_buffer(
+		new DeviceBufferResource(
+			device, allocator,
+			VK_BUFFER_USAGE_2_TRANSFER_DST_BIT | VK_BUFFER_USAGE_2_SHADER_DEVICE_ADDRESS_BIT_KHR | VK_BUFFER_USAGE_ACCELERATION_STRUCTURE_BUILD_INPUT_READ_ONLY_BIT_KHR,
+			instances_data.size(), "instances"),
+		device_wait_and_delete
+	);
+
+	compute_helpers->BeginBatch();
+	compute_helpers->CopyBufferToBuffer(instances_data_staging->GetVkBuffer(), instances_data_buffer->GetVkBuffer(), instances_data.size());
+	compute_helpers->InsertMemoryBarrier(
+		VK_PIPELINE_STAGE_2_TRANSFER_BIT, VK_ACCESS_2_TRANSFER_WRITE_BIT,
+		VK_PIPELINE_STAGE_2_ACCELERATION_STRUCTURE_BUILD_BIT_KHR, VK_ACCESS_2_SHADER_READ_BIT
+	);
+
+	const VkAccelerationStructureGeometryKHR geom = {
+		.sType = VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_GEOMETRY_KHR,
+		.geometryType = VK_GEOMETRY_TYPE_INSTANCES_KHR,
+		.geometry = {
+			.instances = {
+				.sType = VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_GEOMETRY_INSTANCES_DATA_KHR,
+				.data = instances_data_buffer->GetDeviceOrHostAddressConstKHR(),
+			},
+		},
+	};
+
+	VkAccelerationStructureBuildGeometryInfoKHR build_geom_info = {
+		.sType = VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_BUILD_GEOMETRY_INFO_KHR,
+		.type = VK_ACCELERATION_STRUCTURE_TYPE_TOP_LEVEL_KHR,
+		.flags = VK_BUILD_ACCELERATION_STRUCTURE_PREFER_FAST_TRACE_BIT_KHR,
+		.mode = VK_BUILD_ACCELERATION_STRUCTURE_MODE_BUILD_KHR,
+		.geometryCount = 1,
+		.pGeometries = &geom,
+	};
+
+	uint32_t primitive_count = instances.size();
+
+	VkAccelerationStructureBuildSizesInfoKHR size_info = {
+		.sType = VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_BUILD_SIZES_INFO_KHR
+	};
+
+	vkGetAccelerationStructureBuildSizesKHR(
+		mDevice, VK_ACCELERATION_STRUCTURE_BUILD_TYPE_DEVICE_KHR, &build_geom_info,
+		&primitive_count, &size_info
+	);
+
+	mASBuffer = std::make_unique<DeviceBufferResource>(
+		device, allocator,
+		VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT | VK_BUFFER_USAGE_ACCELERATION_STRUCTURE_STORAGE_BIT_KHR,
+		size_info.accelerationStructureSize, "TLAS"
+	);
+
+	std::unique_ptr<DeviceBufferResource, decltype(device_wait_and_delete)> scratch_buffer(
+		new DeviceBufferResource(
+			device, allocator,
+			VK_BUFFER_USAGE_2_SHADER_DEVICE_ADDRESS_BIT | VK_BUFFER_USAGE_STORAGE_BUFFER_BIT,
+			size_info.buildScratchSize, "scratch"),
+		device_wait_and_delete
+	);
+
+	const VkAccelerationStructureCreateInfoKHR ci = {
+		.sType = VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_CREATE_INFO_KHR,
+		.buffer = mASBuffer->GetVkBuffer(),
+		.size = size_info.accelerationStructureSize,
+		.type = VK_ACCELERATION_STRUCTURE_TYPE_TOP_LEVEL_KHR,
+	};
+
+	VK_CHECK("create tlas", vkCreateAccelerationStructureKHR(device, &ci, nullptr, &mAS));
+
+	VkAccelerationStructureBuildRangeInfoKHR build_range_info = {
+		.primitiveCount = primitive_count,
+	};
+
+	std::vector<VkAccelerationStructureBuildRangeInfoKHR*> build_range_infos = {
+		&build_range_info
+	};
+
+	build_geom_info.dstAccelerationStructure = mAS;
+	build_geom_info.scratchData = scratch_buffer->GetDeviceOrHostAddressKHR();
+
+	compute_helpers->BuildAccelerationStructure(
+		std::vector<VkAccelerationStructureBuildGeometryInfoKHR>
+	{
+		build_geom_info
+	},
+		build_range_infos
+	);
+
+	compute_helpers->EndBatch();
+
+#ifdef _DEBUG
+	Utils_SetObjectName(device, VK_OBJECT_TYPE_ACCELERATION_STRUCTURE_KHR, reinterpret_cast<uint64_t>(mAS), name);
+#endif // _DEBUG
+}
+
+VkAccelerationStructureKHR TLAccelerationStructure::GetAS() const
+{
+	return mAS;
+	}
+
+DeviceBufferResource* TLAccelerationStructure::GetASBuffer() const
+{
+	return mASBuffer.get();
+}
+
+TLAccelerationStructure::~TLAccelerationStructure() noexcept
+{
+	if (mDevice != VK_NULL_HANDLE)
+		vkDestroyAccelerationStructureKHR(mDevice, mAS, nullptr);
+}

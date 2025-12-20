@@ -70,7 +70,15 @@ void raygen()
 [shader("miss")]
 void miss(inout Payload p)
 {
-    p.hit_value = float3(0, 0, 0.2);
+    uint3 launch_id = DispatchRaysIndex();
+    uint3 launch_size = DispatchRaysDimensions();
+
+    uint flat_index = launch_id.y * launch_size.x + launch_id.x;
+    uint4 z = rand_states[flat_index];
+
+    // p.hit_value = float3(HybridTaus(z), HybridTaus(z), HybridTaus(z));
+    p.hit_value = float3(0, 0, 0.2f);
+    rand_states[flat_index] = z;
 }
 
 struct Attributes

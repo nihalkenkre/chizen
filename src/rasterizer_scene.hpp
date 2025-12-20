@@ -108,7 +108,7 @@ private:
 	std::vector<RasterizerWorldScene::Camera> mCameras;
 	std::vector<RasterizerWorldScene::Image> mImages;
 
-	std::unique_ptr<DeviceBufferResource> mVertexData = nullptr;
+	std::unique_ptr<DeviceBufferResource> mPositionsData = nullptr;
 	std::unique_ptr<DeviceBufferResource> mUniformData = nullptr;
 
 	// All the descs in the scene

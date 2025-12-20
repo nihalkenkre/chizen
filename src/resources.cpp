@@ -166,7 +166,6 @@ HostBufferResource::HostBufferResource(const VkDevice device, const VmaAllocator
 
 	std::memcpy(mAllocationInfo.allocationInfo.pMappedData, data.data(), data.size());
 
-
 #ifdef _DEBUG
 	Utils_SetObjectName(mDevice, VK_OBJECT_TYPE_BUFFER, reinterpret_cast<uint64_t>(mDescriptorInfo.buffer), std::string(name).append(" buffer").c_str());
 #endif // _DEBUG

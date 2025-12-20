@@ -26,7 +26,7 @@ RasterizerWorldScene::RasterizerWorldScene(const Scene& scene, const VkDevice de
 
 	auto vertex_data = scene.GetVertexData();
 
-	mVertexData = std::make_unique<DeviceBufferResource>(
+	mPositionsData = std::make_unique<DeviceBufferResource>(
 		device, allocator,
 		VK_BUFFER_USAGE_VERTEX_BUFFER_BIT | VK_BUFFER_USAGE_INDEX_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT,
 		vertex_data.size(), "scene vertex data");
@@ -51,7 +51,7 @@ RasterizerWorldScene::RasterizerWorldScene(const Scene& scene, const VkDevice de
 	);
 
 	transfer_helpers->BeginBatch();
-	transfer_helpers->CopyBufferToBuffer(staging_vertex_data->GetVkBuffer(), mVertexData->GetVkBuffer(), vertex_data.size());
+	transfer_helpers->CopyBufferToBuffer(staging_vertex_data->GetVkBuffer(), mPositionsData->GetVkBuffer(), vertex_data.size());
 	transfer_helpers->CopyBufferToBuffer(staging_uniform_data->GetVkBuffer(), mUniformData->GetVkBuffer(), uniform_data.size());
 	transfer_helpers->EndBatch();
 
@@ -180,9 +180,9 @@ void RasterizerWorldScene::Render(const VkCommandBuffer cmd_buff, const VkPipeli
 			vkCmdBindDescriptorSets2KHR(cmd_buff, &bind_ds_info);
 
 			const VkBuffer buffers[] = {
-				mVertexData->GetVkBuffer(),
-				mVertexData->GetVkBuffer(),
-				mVertexData->GetVkBuffer(),
+				mPositionsData->GetVkBuffer(),
+				mPositionsData->GetVkBuffer(),
+				mPositionsData->GetVkBuffer(),
 			};
 
 			const VkDeviceSize offsets[] = {
@@ -196,7 +196,7 @@ void RasterizerWorldScene::Render(const VkCommandBuffer cmd_buff, const VkPipeli
 			if (curr_prim.GetIndexCount() != 0)
 			{
 				vkCmdBindIndexBuffer2KHR(cmd_buff,
-					mVertexData->GetVkBuffer(),
+					mPositionsData->GetVkBuffer(),
 					curr_prim.GetIndicesOffset(),
 					curr_prim.GetIndicesSize(),
 					curr_prim.GetIndexType()

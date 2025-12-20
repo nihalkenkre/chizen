@@ -122,7 +122,11 @@ void App::ProcessEvent(SDL_Event* event)
 			mVulkanInterface->GetTransferHelpers()
 		);
 
-		mVulkanRaytracerScene = std::make_unique<VulkanRaytracerScene>(scene, mVulkanInterface->GetComputeHelpers()->GetCommandBuffer(), mVulkanInterface->GetComputeHelpers()->GetQueue());
+		mVulkanRaytracerScene = std::make_unique<VulkanRaytracerScene>(
+			scene, mVulkanInterface->GetVkDevice(),
+			mVulkanInterface->GetVmaAllocator(),
+			mVulkanInterface->GetComputeHelpers()
+		);
 
 		mDisplayRender = false;
 	}

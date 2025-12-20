@@ -6,10 +6,12 @@ layout(set=0, binding=1, rgba32f) uniform writeonly image2D final_render;
 layout(set=0, binding=2) buffer RandStates {
    uvec4 states[];
 } rand_states;
+
 layout(set=0, binding=3) uniform UniformBuffer {
    mat4 view_inverse;
    mat4 proj_inverse;
 } uniform_buffer;
+
 layout(set=0, binding=4) uniform accelerationStructureEXT tlas;
 
 layout(push_constant) uniform PushConstants {
@@ -38,7 +40,6 @@ float HybridTaus(inout uvec4 z)
     LCGStep(z.w, 1664525, 1013904223)
    );
 }
-
 
 void main()
 {

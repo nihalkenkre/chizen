@@ -3,9 +3,9 @@ struct VSInput
     [[vk::location(0)]]
     float3 pos;
     [[vk::location(1)]]
-    float2 uv;
-    [[vk::location(2)]]
     float3 nrm;
+    [[vk::location(2)]]
+    float2 uv;
 }
 
 struct VSOutput
@@ -45,6 +45,13 @@ VSOutput vertex_main(VSInput in)
     return out;
 }
 
+[[vk::binding(0, 2)]]
+Sampler2D base_color_factor;
+[[vk::binding(1, 2)]]
+Sampler2D base_color_texture;
+[[vk::binding(2, 2)]]
+Sampler2D normal_texture;
+
 struct FSOutput
 {
     float4 color;
@@ -53,6 +60,17 @@ struct FSOutput
 [shader("fragment")]
 FSOutput fragment_main(VSOutput in)
 {
-    FSOutput fs_output = { float4(in.uv, 0, 1) };
+    float4 base_color = base_color_texture.Sample(in.uv);
+
+    if (all(base_color == 0.f))
+    {
+        base_color = base_color_factor.Sample(in.uv);
+    }
+    else
+    {
+        base_color *= base_color_factor.Sample(in.uv);
+    }
+
+    FSOutput fs_output = {base_color};
     return fs_output;
 }

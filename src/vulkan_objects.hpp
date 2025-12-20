@@ -1,5 +1,9 @@
 #pragma once
 
+#include "scene.hpp"
+
+class DeviceBufferResource;
+
 struct PhysicalDeviceData
 {
 	VkPhysicalDevice PhysicalDevice = VK_NULL_HANDLE;
@@ -177,11 +181,19 @@ public:
 
 	~ComputeHelpers() noexcept;
 
+	void BeginBatch();
+	void CopyBufferToBuffer(const VkBuffer src_buffer, const VkBuffer dst_buffer, const VkDeviceSize size);
+	void InsertMemoryBarrier(const VkPipelineStageFlags2 src_stage_mask, const VkAccessFlags2 src_access_mask,
+		const VkPipelineStageFlags2 dst_stage_mask, const VkAccessFlags2 dst_access_mask);
+	void BuildAccelerationStructure(const std::vector<VkAccelerationStructureBuildGeometryInfoKHR>& build_geom_infos, const std::vector<VkAccelerationStructureBuildRangeInfoKHR*>& range_infos);
+	void EndBatch();
+
 	VkCommandPool GetCommandPool() const;
 	VkCommandBuffer GetCommandBuffer() const;
 	VkQueue GetQueue() const;
 	VkSemaphore GetSemaphore() const;
 	uint64_t& GetSemaphoreValue();
+	uint64_t GetSemaphoreValueConst() const;
 	uint32_t GetQueueFamilyIndex() const;
 
 private:
@@ -195,19 +207,45 @@ private:
 	VkDevice mDevice = VK_NULL_HANDLE;
 };
 
-class AccelerationStructure
+class BLAccelerationStructure
 {
 public:
-	AccelerationStructure() = delete;
-	AccelerationStructure(const VkDevice device, const VmaAllocator allocator, const VkCommandBuffer command_buffer, const VkQueue queue);
+	BLAccelerationStructure() = delete;
+	BLAccelerationStructure(const VkDevice device, const VmaAllocator allocator, const Scene::Mesh::Primitive& primitive, const std::vector<uint8_t>& vertex_data, ComputeHelpers* compute_helpers, const std::string& name);
 
-	AccelerationStructure(const AccelerationStructure& other) = delete;
-	AccelerationStructure& operator=(const AccelerationStructure& other) = delete;
+	BLAccelerationStructure(const BLAccelerationStructure& other) = delete;
+	BLAccelerationStructure& operator=(const BLAccelerationStructure& other) = delete;
 
-	~AccelerationStructure() noexcept;
+	~BLAccelerationStructure() noexcept;
+
+	const VkAccelerationStructureKHR GetAS() const;
+	DeviceBufferResource* GetASBuffer() const;
 
 private:
-	VkAccelerationStructureKHR mAccelerationStructure = VK_NULL_HANDLE;
-	VkDeviceAddress mDeviceAddress = 0;
+	VkAccelerationStructureKHR mAS = VK_NULL_HANDLE;
+	std::unique_ptr<DeviceBufferResource> mASBuffer = nullptr;
+
 	VkDevice mDevice = VK_NULL_HANDLE;
 };
+
+class TLAccelerationStructure
+{
+public:
+	TLAccelerationStructure() = delete;
+	TLAccelerationStructure(const VkDevice device, const VmaAllocator allocator, const std::vector<VkAccelerationStructureInstanceKHR>& instances, ComputeHelpers* compute_helpers, const std::string& name);
+
+	TLAccelerationStructure(const TLAccelerationStructure& other) = delete;
+	TLAccelerationStructure& operator=(const TLAccelerationStructure& other) = delete;
+
+	~TLAccelerationStructure() noexcept;
+
+	VkAccelerationStructureKHR GetAS() const;
+	DeviceBufferResource* GetASBuffer() const;
+
+private:
+	VkAccelerationStructureKHR mAS = VK_NULL_HANDLE;
+	std::unique_ptr<DeviceBufferResource> mASBuffer = nullptr;
+
+	VkDevice mDevice = VK_NULL_HANDLE;
+};
+

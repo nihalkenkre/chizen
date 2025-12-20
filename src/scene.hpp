@@ -165,7 +165,7 @@ private:
 
 	std::vector<std::string> mCameraNames;
 
-	std::vector<uint8_t> mVertexData;
+	std::vector<uint8_t> mPositionsData;
 	std::vector<uint8_t> mUniformData;
 	std::vector<uint8_t> mImagesData;
 };

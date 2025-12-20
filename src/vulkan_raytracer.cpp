@@ -5,7 +5,7 @@
 #include "resources.hpp"
 #include "vulkan_objects.hpp"
 #include "events.hpp"
-#include "embree_raytracer.hpp"
+#include "vulkan_raytracer_scene.hpp"
 
 class RaytracerPipelineData
 {
@@ -43,140 +43,140 @@ RaytracerPipelineData::RaytracerPipelineData(const VulkanInterface* const vulkan
 
 	mDescriptorSetLayouts.resize(1);
 
-	//	Slang::ComPtr<slang::IGlobalSession> slang_global_session;
-	//	SLANG_CHECK("create global session", slang::createGlobalSession(slang_global_session.writeRef()));
-	//
-	//	const slang::TargetDesc target_descs[] = {
-	//		{
-	//			.format = SLANG_SPIRV,
-	//			.profile = slang_global_session->findProfile("spirv_1_1"),
-	//		}
-	//	};
-	//
-	//	slang::CompilerOptionEntry compiler_options[] = {
-	//		{
-	//			.name = slang::CompilerOptionName::MatrixLayoutColumn,
-	//			.value = {
-	//				.kind = slang::CompilerOptionValueKind::Int,
-	//				.intValue0 = 1,
-	//			},
-	//		},
-	//#ifdef _DEBUG
-	//		{
-	//			.name = slang::CompilerOptionName::DebugInformation,
-	//			.value = {
-	//				.kind = slang::CompilerOptionValueKind::Int,
-	//				.intValue0 = SLANG_DEBUG_INFO_LEVEL_MAXIMAL,
-	//			},
-	//		}
-	//#endif	// _DEBUG
-	//	};
-	//
-	//	slang::SessionDesc compile_session_desc = {
-	//		.targets = target_descs,
-	//		.targetCount = std::size(target_descs),
-	//		.compilerOptionEntries = compiler_options,
-	//		.compilerOptionEntryCount = std::size(compiler_options),
-	//	};
-	//
-	//	Slang::ComPtr<slang::ISession> compile_session;
-	//	SLANG_CHECK("create compile session", slang_global_session->createSession(compile_session_desc, compile_session.writeRef()));
-	//
-	//	const std::string slang_shader_path = std::string(current_path).append("/shaders/slang/raytrace.slang");
-	//
-	//	Slang::ComPtr<slang::IBlob> diagnostic_blob;
-	//	slang::IModule* slang_module = compile_session->loadModule(slang_shader_path.c_str(), diagnostic_blob.writeRef());
-	//
-	//	if (diagnostic_blob != nullptr)
-	//	{
-	//		std::println("{}", reinterpret_cast<const char*>(diagnostic_blob->getBufferPointer()));
-	//	}
-	//
-	//	Slang::ComPtr<slang::IEntryPoint> rg_entry_point;
-	//	slang_module->findEntryPointByName("raygen", rg_entry_point.writeRef());
-	//
-	//	std::array<slang::IComponentType*, 2> rg_component_types = {
-	//		slang_module, rg_entry_point
-	//	};
-	//
-	//	Slang::ComPtr<slang::IComponentType> rg_composed_program;
-	//	diagnostic_blob.setNull();
-	//	SLANG_CHECK("create program", compile_session->createCompositeComponentType(rg_component_types.data(), rg_component_types.size(), rg_composed_program.writeRef(), diagnostic_blob.writeRef()));
-	//
-	//	Slang::ComPtr<slang::IComponentType> rg_linked_program;
-	//	diagnostic_blob.setNull();
-	//	SLANG_CHECK("link program", rg_composed_program->link(rg_linked_program.writeRef(), diagnostic_blob.writeRef()));
-	//
-	//	Slang::ComPtr<slang::IBlob> rg_spirv_code;
-	//	diagnostic_blob.setNull();
-	//	SLANG_CHECK("get spirv code", rg_composed_program->getEntryPointCode(0, 0, rg_spirv_code.writeRef(), diagnostic_blob.writeRef()));
-	//
-	//	const VkShaderModuleCreateInfo rg_mod_ci = {
-	//		.sType = VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO,
-	//		.codeSize = rg_spirv_code->getBufferSize(),
-	//		.pCode = reinterpret_cast<const uint32_t*>(rg_spirv_code->getBufferPointer()),
-	//	};
-	//
-	//	VkShaderModule rg_mod = VK_NULL_HANDLE;
-	//	VK_CHECK("create shader module", vkCreateShaderModule(vulkan_interface->GetVkDevice(), &rg_mod_ci, nullptr, &rg_mod));
-	//
-	//	Slang::ComPtr<slang::IEntryPoint> ms_entry_point;
-	//	slang_module->findEntryPointByName("miss", ms_entry_point.writeRef());
-	//
-	//	std::array<slang::IComponentType*, 2> ms_component_types = {
-	//		slang_module, ms_entry_point
-	//	};
-	//
-	//	Slang::ComPtr<slang::IComponentType> ms_composed_program;
-	//	diagnostic_blob.setNull();
-	//	SLANG_CHECK("create program", compile_session->createCompositeComponentType(ms_component_types.data(), ms_component_types.size(), ms_composed_program.writeRef(), diagnostic_blob.writeRef()));
-	//
-	//	Slang::ComPtr<slang::IComponentType> ms_linked_program;
-	//	diagnostic_blob.setNull();
-	//	SLANG_CHECK("link program", ms_composed_program->link(ms_linked_program.writeRef(), diagnostic_blob.writeRef()));
-	//
-	//	Slang::ComPtr<slang::IBlob> ms_spirv_code;
-	//	diagnostic_blob.setNull();
-	//	SLANG_CHECK("get spirv code", ms_composed_program->getEntryPointCode(0, 0, ms_spirv_code.writeRef(), diagnostic_blob.writeRef()));
-	//
-	//	const VkShaderModuleCreateInfo ms_mod_ci = {
-	//		.sType = VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO,
-	//		.codeSize = ms_spirv_code->getBufferSize(),
-	//		.pCode = reinterpret_cast<const uint32_t*>(ms_spirv_code->getBufferPointer()),
-	//	};
-	//
-	//	VkShaderModule ms_mod = VK_NULL_HANDLE;
-	//	VK_CHECK("create shader module", vkCreateShaderModule(vulkan_interface->GetVkDevice(), &ms_mod_ci, nullptr, &ms_mod));
-	//
-	//	Slang::ComPtr<slang::IEntryPoint> ch_entry_point;
-	//	slang_module->findEntryPointByName("closesthit", ch_entry_point.writeRef());
-	//
-	//	std::array<slang::IComponentType*, 2> ch_component_types = {
-	//		slang_module, ch_entry_point
-	//	};
-	//
-	//	Slang::ComPtr<slang::IComponentType> ch_composed_program;
-	//	diagnostic_blob.setNull();
-	//	SLANG_CHECK("create program", compile_session->createCompositeComponentType(ch_component_types.data(), ch_component_types.size(), ch_composed_program.writeRef(), diagnostic_blob.writeRef()));
-	//
-	//	Slang::ComPtr<slang::IComponentType> ch_linked_program;
-	//	diagnostic_blob.setNull();
-	//	SLANG_CHECK("link program", ch_composed_program->link(ch_linked_program.writeRef(), diagnostic_blob.writeRef()));
-	//
-	//	Slang::ComPtr<slang::IBlob> ch_spirv_code;
-	//	diagnostic_blob.setNull();
-	//	SLANG_CHECK("get spirv code", ch_composed_program->getEntryPointCode(0, 0, ch_spirv_code.writeRef(), diagnostic_blob.writeRef()));
-	//
-	//	const VkShaderModuleCreateInfo ch_mod_ci = {
-	//		.sType = VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO,
-	//		.codeSize = ch_spirv_code->getBufferSize(),
-	//		.pCode = reinterpret_cast<const uint32_t*>(ch_spirv_code->getBufferPointer()),
-	//	};
-	//
-	//	VkShaderModule ch_mod = VK_NULL_HANDLE;
-	//	VK_CHECK("create shader module", vkCreateShaderModule(vulkan_interface->GetVkDevice(), &ch_mod_ci, nullptr, &ch_mod));
+		Slang::ComPtr<slang::IGlobalSession> slang_global_session;
+		SLANG_CHECK("create global session", slang::createGlobalSession(slang_global_session.writeRef()));
+	
+		const slang::TargetDesc target_descs[] = {
+			{
+				.format = SLANG_SPIRV,
+				.profile = slang_global_session->findProfile("spirv_1_1"),
+			}
+		};
+	
+		slang::CompilerOptionEntry compiler_options[] = {
+			{
+				.name = slang::CompilerOptionName::MatrixLayoutColumn,
+				.value = {
+					.kind = slang::CompilerOptionValueKind::Int,
+					.intValue0 = 1,
+				},
+			},
+	#ifdef _DEBUG
+			{
+				.name = slang::CompilerOptionName::DebugInformation,
+				.value = {
+					.kind = slang::CompilerOptionValueKind::Int,
+					.intValue0 = SLANG_DEBUG_INFO_LEVEL_MAXIMAL,
+				},
+			}
+	#endif	// _DEBUG
+		};
+	
+		slang::SessionDesc compile_session_desc = {
+			.targets = target_descs,
+			.targetCount = std::size(target_descs),
+			.compilerOptionEntries = compiler_options,
+			.compilerOptionEntryCount = std::size(compiler_options),
+		};
+	
+		Slang::ComPtr<slang::ISession> compile_session;
+		SLANG_CHECK("create compile session", slang_global_session->createSession(compile_session_desc, compile_session.writeRef()));
+	
+		const std::string slang_shader_path = std::string(current_path).append("/shaders/slang/raytrace.slang");
+	
+		Slang::ComPtr<slang::IBlob> diagnostic_blob;
+		slang::IModule* slang_module = compile_session->loadModule(slang_shader_path.c_str(), diagnostic_blob.writeRef());
+	
+		if (diagnostic_blob != nullptr)
+		{
+			std::println("{}", reinterpret_cast<const char*>(diagnostic_blob->getBufferPointer()));
+		}
+	
+		Slang::ComPtr<slang::IEntryPoint> rg_entry_point;
+		slang_module->findEntryPointByName("raygen", rg_entry_point.writeRef());
+	
+		std::array<slang::IComponentType*, 2> rg_component_types = {
+			slang_module, rg_entry_point
+		};
+	
+		Slang::ComPtr<slang::IComponentType> rg_composed_program;
+		diagnostic_blob.setNull();
+		SLANG_CHECK("create program", compile_session->createCompositeComponentType(rg_component_types.data(), rg_component_types.size(), rg_composed_program.writeRef(), diagnostic_blob.writeRef()));
+	
+		Slang::ComPtr<slang::IComponentType> rg_linked_program;
+		diagnostic_blob.setNull();
+		SLANG_CHECK("link program", rg_composed_program->link(rg_linked_program.writeRef(), diagnostic_blob.writeRef()));
+	
+		Slang::ComPtr<slang::IBlob> rg_spirv_code;
+		diagnostic_blob.setNull();
+		SLANG_CHECK("get spirv code", rg_composed_program->getEntryPointCode(0, 0, rg_spirv_code.writeRef(), diagnostic_blob.writeRef()));
+	
+		const VkShaderModuleCreateInfo rg_mod_ci = {
+			.sType = VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO,
+			.codeSize = rg_spirv_code->getBufferSize(),
+			.pCode = reinterpret_cast<const uint32_t*>(rg_spirv_code->getBufferPointer()),
+		};
+	
+		VkShaderModule rg_mod = VK_NULL_HANDLE;
+		VK_CHECK("create shader module", vkCreateShaderModule(vulkan_interface->GetVkDevice(), &rg_mod_ci, nullptr, &rg_mod));
+	
+		Slang::ComPtr<slang::IEntryPoint> ms_entry_point;
+		slang_module->findEntryPointByName("miss", ms_entry_point.writeRef());
+	
+		std::array<slang::IComponentType*, 2> ms_component_types = {
+			slang_module, ms_entry_point
+		};
+	
+		Slang::ComPtr<slang::IComponentType> ms_composed_program;
+		diagnostic_blob.setNull();
+		SLANG_CHECK("create program", compile_session->createCompositeComponentType(ms_component_types.data(), ms_component_types.size(), ms_composed_program.writeRef(), diagnostic_blob.writeRef()));
+	
+		Slang::ComPtr<slang::IComponentType> ms_linked_program;
+		diagnostic_blob.setNull();
+		SLANG_CHECK("link program", ms_composed_program->link(ms_linked_program.writeRef(), diagnostic_blob.writeRef()));
+	
+		Slang::ComPtr<slang::IBlob> ms_spirv_code;
+		diagnostic_blob.setNull();
+		SLANG_CHECK("get spirv code", ms_composed_program->getEntryPointCode(0, 0, ms_spirv_code.writeRef(), diagnostic_blob.writeRef()));
+	
+		const VkShaderModuleCreateInfo ms_mod_ci = {
+			.sType = VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO,
+			.codeSize = ms_spirv_code->getBufferSize(),
+			.pCode = reinterpret_cast<const uint32_t*>(ms_spirv_code->getBufferPointer()),
+		};
+	
+		VkShaderModule ms_mod = VK_NULL_HANDLE;
+		VK_CHECK("create shader module", vkCreateShaderModule(vulkan_interface->GetVkDevice(), &ms_mod_ci, nullptr, &ms_mod));
+	
+		Slang::ComPtr<slang::IEntryPoint> ch_entry_point;
+		slang_module->findEntryPointByName("closesthit", ch_entry_point.writeRef());
+	
+		std::array<slang::IComponentType*, 2> ch_component_types = {
+			slang_module, ch_entry_point
+		};
+	
+		Slang::ComPtr<slang::IComponentType> ch_composed_program;
+		diagnostic_blob.setNull();
+		SLANG_CHECK("create program", compile_session->createCompositeComponentType(ch_component_types.data(), ch_component_types.size(), ch_composed_program.writeRef(), diagnostic_blob.writeRef()));
+	
+		Slang::ComPtr<slang::IComponentType> ch_linked_program;
+		diagnostic_blob.setNull();
+		SLANG_CHECK("link program", ch_composed_program->link(ch_linked_program.writeRef(), diagnostic_blob.writeRef()));
+	
+		Slang::ComPtr<slang::IBlob> ch_spirv_code;
+		diagnostic_blob.setNull();
+		SLANG_CHECK("get spirv code", ch_composed_program->getEntryPointCode(0, 0, ch_spirv_code.writeRef(), diagnostic_blob.writeRef()));
+	
+		const VkShaderModuleCreateInfo ch_mod_ci = {
+			.sType = VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO,
+			.codeSize = ch_spirv_code->getBufferSize(),
+			.pCode = reinterpret_cast<const uint32_t*>(ch_spirv_code->getBufferPointer()),
+		};
+	
+		VkShaderModule ch_mod = VK_NULL_HANDLE;
+		VK_CHECK("create shader module", vkCreateShaderModule(vulkan_interface->GetVkDevice(), &ch_mod_ci, nullptr, &ch_mod));
 
-	std::filesystem::path rg_path = std::string(current_path).append("/shaders/glsl/raytrace.rgen.glsl.spv");
+	/*std::filesystem::path rg_path = std::string(current_path).append("/shaders/glsl/raytrace.rgen.glsl.spv");
 	VkShaderModule rg_mod = VK_NULL_HANDLE;
 	if (std::filesystem::exists(rg_path))
 	{
@@ -240,7 +240,7 @@ RaytracerPipelineData::RaytracerPipelineData(const VulkanInterface* const vulkan
 	else
 	{
 		std::println("Could not find {}", ch_path.string());
-	}
+	}*/
 
 	const VkDescriptorSetLayoutBinding bindings[] = {
 		{
@@ -571,7 +571,7 @@ void VulkanRaytracer::InitializeResources()
 	proj[1][1] *= -1;
 
 	glm::highp_mat4 mats[2] = {
-		glm::inverse(glm::lookAt(glm::vec3(0.f,0.f,1.f), glm::vec3(0,0,0), glm::vec3(0,1,0))),
+		glm::inverse(glm::lookAt(glm::vec3(10.f,10.f,10.f), glm::vec3(0,0,0), glm::vec3(0,1,0))),
 		glm::inverse(proj),
 	};
 
@@ -595,292 +595,6 @@ void VulkanRaytracer::Start(const VulkanRaytracerScene* scene, const uint32_t ma
 	VkSemaphore frame_sem = mFrameObjects->GetSemaphore();
 	uint64_t& frame_sem_value = mFrameObjects->GetFrameSemValue();
 	uint8_t frame_in_flight = mFrameObjects->GetFrameInFlight();
-
-	struct Vertex {
-		float pos[3];
-	};
-
-	const Vertex vertices[] = {
-	{{  1.0f,  1.0f, 0.0f }},
-	{{ -1.0f,  1.0f, 0.0f }},
-	{{  0.0f, -1.0f, 0.0f }}
-	};
-
-	size_t vertices_size = sizeof(vertices);
-
-	std::vector<uint8_t>vertices_data(vertices_size);
-	std::memcpy(vertices_data.data(), vertices, vertices_size);
-
-	uint32_t indices[] = { 0, 1, 2 };
-	size_t indices_size = sizeof(indices);
-
-	std::vector<uint8_t>indices_data(indices_size);
-	std::memcpy(indices_data.data(), indices, indices_size);
-
-	VkTransformMatrixKHR blas_transform = {
-		1,0,0,0,
-		0,1,0,0,
-		0,0,1,0
-	};
-	std::vector<uint8_t> blas_transform_data(sizeof(VkTransformMatrixKHR));
-	std::memcpy(blas_transform_data.data(), &blas_transform, sizeof(VkTransformMatrixKHR));
-
-	auto vertices_buffer = std::make_unique<HostBufferResource>(mDevice, mAllocator,
-		VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT_KHR | VK_BUFFER_USAGE_ACCELERATION_STRUCTURE_BUILD_INPUT_READ_ONLY_BIT_KHR,
-		VMA_ALLOCATION_CREATE_HOST_ACCESS_SEQUENTIAL_WRITE_BIT,
-		vertices_data, "vertices buffer");
-
-	auto indices_buffer = std::make_unique<HostBufferResource>(mDevice, mAllocator,
-		VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT_KHR | VK_BUFFER_USAGE_ACCELERATION_STRUCTURE_BUILD_INPUT_READ_ONLY_BIT_KHR,
-		VMA_ALLOCATION_CREATE_HOST_ACCESS_SEQUENTIAL_WRITE_BIT,
-		indices_data, "indices buffer");
-
-	auto transform_buffer = std::make_unique<HostBufferResource>(mDevice, mAllocator,
-		VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT_KHR | VK_BUFFER_USAGE_ACCELERATION_STRUCTURE_BUILD_INPUT_READ_ONLY_BIT_KHR,
-		VMA_ALLOCATION_CREATE_HOST_ACCESS_SEQUENTIAL_WRITE_BIT,
-		blas_transform_data, "blas transform buffer");
-
-	const VkAccelerationStructureGeometryKHR blas_geom = {
-		.sType = VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_GEOMETRY_KHR,
-		.geometryType = VK_GEOMETRY_TYPE_TRIANGLES_KHR,
-		.geometry = {
-			.triangles = {
-				.sType = VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_GEOMETRY_TRIANGLES_DATA_KHR,
-				.vertexFormat = VK_FORMAT_R32G32B32_SFLOAT,
-				.vertexData = vertices_buffer->GetDeviceOrHostAddressConstKHR(),
-				.vertexStride = sizeof(Vertex),
-				.maxVertex = 2,
-				.indexType = VK_INDEX_TYPE_UINT32,
-				.indexData = indices_buffer->GetDeviceOrHostAddressConstKHR(),
-				.transformData = transform_buffer->GetDeviceOrHostAddressConstKHR(),
-			},
-		},
-	};
-
-	VkAccelerationStructureBuildGeometryInfoKHR blas_build_geom_info = {
-		.sType = VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_BUILD_GEOMETRY_INFO_KHR,
-		.type = VK_ACCELERATION_STRUCTURE_TYPE_BOTTOM_LEVEL_KHR,
-		.flags = VK_BUILD_ACCELERATION_STRUCTURE_PREFER_FAST_TRACE_BIT_KHR,
-		.mode = VK_BUILD_ACCELERATION_STRUCTURE_MODE_BUILD_KHR,
-		.geometryCount = 1,
-		.pGeometries = &blas_geom,
-	};
-
-	uint32_t max_triangles = 1;
-
-	VkAccelerationStructureBuildSizesInfoKHR blas_size_info = {
-		.sType = VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_BUILD_SIZES_INFO_KHR,
-	};
-
-	vkGetAccelerationStructureBuildSizesKHR(mDevice, VK_ACCELERATION_STRUCTURE_BUILD_TYPE_DEVICE_KHR,
-		&blas_build_geom_info, &max_triangles, &blas_size_info);
-
-	std::vector<uint8_t> blas_buffer_data(blas_size_info.accelerationStructureSize);
-
-	mTransferHelpers->BeginBatch();
-	auto blas_buffer = std::make_unique<DeviceBufferResource>(
-		mDevice, mAllocator,
-		VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT_KHR | VK_BUFFER_USAGE_ACCELERATION_STRUCTURE_STORAGE_BIT_KHR,
-		blas_size_info.accelerationStructureSize, "blas buffer");
-
-	std::vector<uint8_t> blas_scratch_buffer_data(blas_size_info.buildScratchSize);
-	auto blas_scratch_buffer = std::make_unique<DeviceBufferResource>(
-		mDevice, mAllocator,
-		VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT_KHR | VK_BUFFER_USAGE_STORAGE_BUFFER_BIT,
-		blas_size_info.buildScratchSize, "blas scratch buffer");
-	mTransferHelpers->EndBatch();
-
-	VkAccelerationStructureKHR blas = VK_NULL_HANDLE;
-	const VkAccelerationStructureCreateInfoKHR blas_create_info = {
-		.sType = VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_CREATE_INFO_KHR,
-		.buffer = blas_buffer->GetDescriptorInfo().buffer,
-		.size = blas_size_info.accelerationStructureSize,
-		.type = VK_ACCELERATION_STRUCTURE_TYPE_BOTTOM_LEVEL_KHR,
-	};
-
-	VK_CHECK("create blas", vkCreateAccelerationStructureKHR(mDevice, &blas_create_info, nullptr, &blas));
-
-	const VkSemaphoreWaitInfo wait_info = {
-		.sType = VK_STRUCTURE_TYPE_SEMAPHORE_WAIT_INFO,
-		.semaphoreCount = 1,
-		.pSemaphores = &frame_sem,
-		.pValues = &frame_sem_value,
-	};
-
-	VK_CHECK("wait blas sem", vkWaitSemaphoresKHR(device, &wait_info, UINT64_MAX));
-
-	const VkCommandBufferBeginInfo blas_begin_info = {
-		.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO,
-		.flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT,
-	};
-	VK_CHECK("begin blas cmd_buff", vkBeginCommandBuffer(cmd_buff, &blas_begin_info));
-
-	VkAccelerationStructureBuildRangeInfoKHR blas_build_range_info = {
-		.primitiveCount = 1,
-	};
-
-	std::vector<VkAccelerationStructureBuildRangeInfoKHR*> blas_build_range_infos = {
-		&blas_build_range_info
-	};
-
-	blas_build_geom_info.dstAccelerationStructure = blas;
-	blas_build_geom_info.scratchData = blas_scratch_buffer->GetDeviceOrHostAddressKHR();
-
-	vkCmdBuildAccelerationStructuresKHR(cmd_buff, 1, &blas_build_geom_info, blas_build_range_infos.data());
-
-	VK_CHECK("end blas cmd_buff", vkEndCommandBuffer(cmd_buff));
-
-	const VkCommandBufferSubmitInfoKHR blas_cmd_buff_infos[] = {
-		{
-			.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_SUBMIT_INFO_KHR,
-			.commandBuffer = cmd_buff,
-		}
-	};
-
-	const VkSemaphoreSubmitInfoKHR blas_sig_sem_infos[] = {
-		{
-			.sType = VK_STRUCTURE_TYPE_SEMAPHORE_SUBMIT_INFO_KHR,
-			.semaphore = frame_sem,
-			.value = ++frame_sem_value,
-			.stageMask = VK_PIPELINE_STAGE_2_TOP_OF_PIPE_BIT_KHR,
-		}
-	};
-
-	const VkSubmitInfo2KHR blas_submit_infos[] = {
-		{
-			.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO_2_KHR,
-			.commandBufferInfoCount = std::size(blas_cmd_buff_infos),
-			.pCommandBufferInfos = blas_cmd_buff_infos,
-			.signalSemaphoreInfoCount = std::size(blas_sig_sem_infos),
-			.pSignalSemaphoreInfos = blas_sig_sem_infos,
-		},
-	};
-
-	VK_CHECK("submit blas", vkQueueSubmit2KHR(mComputeQueue, std::size(blas_submit_infos), blas_submit_infos, VK_NULL_HANDLE));
-
-	const VkAccelerationStructureDeviceAddressInfoKHR blas_addr_info = {
-		.sType = VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_DEVICE_ADDRESS_INFO_KHR,
-		.accelerationStructure = blas,
-	};
-
-	const VkTransformMatrixKHR tlas_transform = blas_transform;
-	const VkAccelerationStructureInstanceKHR tlas_instance = {
-		.transform = tlas_transform,
-		.mask = 0xFF,
-		.flags = VK_GEOMETRY_INSTANCE_TRIANGLE_FACING_CULL_DISABLE_BIT_KHR,
-		.accelerationStructureReference = vkGetAccelerationStructureDeviceAddressKHR(mDevice, &blas_addr_info),
-	};
-
-	std::vector<uint8_t>tlas_instance_data(sizeof(VkAccelerationStructureInstanceKHR));
-	std::memcpy(tlas_instance_data.data(), &tlas_instance, sizeof(VkAccelerationStructureInstanceKHR));
-
-	auto instance_buffer = std::make_unique<HostBufferResource>(mDevice, mAllocator,
-		VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT_KHR | VK_BUFFER_USAGE_ACCELERATION_STRUCTURE_BUILD_INPUT_READ_ONLY_BIT_KHR,
-		VMA_ALLOCATION_CREATE_HOST_ACCESS_SEQUENTIAL_WRITE_BIT,
-		tlas_instance_data, "instance buffer");
-
-	const VkAccelerationStructureGeometryKHR tlas_geom = {
-		.sType = VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_GEOMETRY_KHR,
-		.geometryType = VK_GEOMETRY_TYPE_INSTANCES_KHR,
-		.geometry = {
-			.instances = {
-				.sType = VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_GEOMETRY_INSTANCES_DATA_KHR,
-				.data = instance_buffer->GetDeviceOrHostAddressConstKHR(),
-			},
-		},
-	};
-
-	VkAccelerationStructureBuildGeometryInfoKHR tlas_build_geom_info = {
-		.sType = VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_BUILD_GEOMETRY_INFO_KHR,
-		.type = VK_ACCELERATION_STRUCTURE_TYPE_TOP_LEVEL_KHR,
-		.flags = VK_BUILD_ACCELERATION_STRUCTURE_PREFER_FAST_TRACE_BIT_KHR,
-		.mode = VK_BUILD_ACCELERATION_STRUCTURE_MODE_BUILD_KHR,
-		.geometryCount = 1,
-		.pGeometries = &tlas_geom,
-	};
-
-	uint32_t primitive_count = 1;
-
-	VkAccelerationStructureBuildSizesInfoKHR tlas_size_info = {
-		.sType = VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_BUILD_SIZES_INFO_KHR,
-	};
-
-	vkGetAccelerationStructureBuildSizesKHR(mDevice, VK_ACCELERATION_STRUCTURE_BUILD_TYPE_DEVICE_KHR,
-		&tlas_build_geom_info, &primitive_count, &tlas_size_info);
-
-	std::vector<uint8_t> tlas_buffer_data(tlas_size_info.accelerationStructureSize);
-	auto tlas_buffer = std::make_unique<DeviceBufferResource>(
-		mDevice, mAllocator,
-		VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT_KHR | VK_BUFFER_USAGE_ACCELERATION_STRUCTURE_STORAGE_BIT_KHR,
-		tlas_size_info.accelerationStructureSize, "tlas buffer");
-
-	std::vector<uint8_t> tlas_scratch_buffer_data(tlas_size_info.buildScratchSize);
-	auto tlas_scratch_buffer = std::make_unique<DeviceBufferResource>(
-		mDevice, mAllocator,
-		VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT_KHR | VK_BUFFER_USAGE_STORAGE_BUFFER_BIT,
-		tlas_size_info.buildScratchSize, "tlas scratch buffer");
-
-	const VkAccelerationStructureCreateInfoKHR tlas_create_info = {
-		.sType = VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_CREATE_INFO_KHR,
-		.buffer = tlas_buffer->GetDescriptorInfo().buffer,
-		.size = tlas_size_info.accelerationStructureSize,
-		.type = VK_ACCELERATION_STRUCTURE_TYPE_TOP_LEVEL_KHR,
-	};
-
-	VkAccelerationStructureKHR tlas = VK_NULL_HANDLE;
-	VK_CHECK("create tlas", vkCreateAccelerationStructureKHR(mDevice, &tlas_create_info, nullptr, &tlas));
-
-	VK_CHECK("wait tlas sem", vkWaitSemaphoresKHR(device, &wait_info, UINT64_MAX));
-
-	const VkCommandBufferBeginInfo tlas_begin_info = {
-			.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO,
-			.flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT,
-	};
-	VK_CHECK("begin tlas cmd_buff", vkBeginCommandBuffer(cmd_buff, &tlas_begin_info));
-
-	VkAccelerationStructureBuildRangeInfoKHR tlas_build_range_info = {
-		.primitiveCount = primitive_count,
-	};
-
-	std::vector<VkAccelerationStructureBuildRangeInfoKHR*> tlas_build_range_infos = {
-		&tlas_build_range_info
-	};
-
-	tlas_build_geom_info.dstAccelerationStructure = tlas;
-	tlas_build_geom_info.scratchData = tlas_scratch_buffer->GetDeviceOrHostAddressKHR();
-
-	vkCmdBuildAccelerationStructuresKHR(cmd_buff, 1, &tlas_build_geom_info, tlas_build_range_infos.data());
-
-	VK_CHECK("end tlas cmd_buff", vkEndCommandBuffer(cmd_buff));
-
-	const VkCommandBufferSubmitInfoKHR tlas_cmd_buff_infos[] = {
-		{
-			.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_SUBMIT_INFO_KHR,
-			.commandBuffer = cmd_buff,
-		}
-	};
-
-	const VkSemaphoreSubmitInfoKHR tlas_sig_sem_infos[] = {
-		{
-			.sType = VK_STRUCTURE_TYPE_SEMAPHORE_SUBMIT_INFO_KHR,
-			.semaphore = frame_sem,
-			.value = ++frame_sem_value,
-			.stageMask = VK_PIPELINE_STAGE_2_TOP_OF_PIPE_BIT_KHR,
-		}
-	};
-
-	const VkSubmitInfo2KHR tlas_submit_infos[] = {
-		{
-			.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO_2_KHR,
-			.commandBufferInfoCount = std::size(tlas_cmd_buff_infos),
-			.pCommandBufferInfos = tlas_cmd_buff_infos,
-			.signalSemaphoreInfoCount = std::size(tlas_sig_sem_infos),
-			.pSignalSemaphoreInfos = tlas_sig_sem_infos,
-		},
-	};
-
-	VK_CHECK("submit tlas", vkQueueSubmit2KHR(mComputeQueue, std::size(tlas_submit_infos), tlas_submit_infos, VK_NULL_HANDLE));
-
 	uint32_t s = 1;
 
 	do {
@@ -934,6 +648,8 @@ void VulkanRaytracer::Start(const VulkanRaytracerScene* scene, const uint32_t ma
 		const VkDescriptorImageInfo final_render_desc_info = mFinalRenderTarget->GetDescriptorInfo();
 		const VkDescriptorBufferInfo rand_states_desc_info = mRandomStates->GetDescriptorInfo();
 		const VkDescriptorBufferInfo uniform_buff_desc_info = mUniformBuffer->GetDescriptorInfo();
+		const VkAccelerationStructureKHR tlas = scene->GetTLAS();
+
 		const VkWriteDescriptorSetAccelerationStructureKHR tlas_desc_info = {
 			.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET_ACCELERATION_STRUCTURE_KHR,
 			.accelerationStructureCount = 1,
@@ -1066,9 +782,6 @@ void VulkanRaytracer::Start(const VulkanRaytracerScene* scene, const uint32_t ma
 	VK_CHECK("raytrace queue wait idle", vkQueueWaitIdle(mComputeQueue));
 
 	mStopRendering = false;
-
-	vkDestroyAccelerationStructureKHR(mDevice, tlas, nullptr);
-	vkDestroyAccelerationStructureKHR(mDevice, blas, nullptr);
 
 	SDL_CHECK(SDL_PushEvent(&events.RaytraceStopped));
 }

@@ -100,7 +100,7 @@ const std::vector<std::string> Scene::GetCameraNames() const
 
 const std::vector<uint8_t> Scene::GetVertexData() const
 {
-	return mVertexData;
+	return mPositionsData;
 }
 
 const std::vector<uint8_t> Scene::GetUniformData() const
@@ -192,23 +192,23 @@ void Scene::AddMesh(const cgltf_data* gltf, const cgltf_mesh* mesh, const size_t
 
 			if (std::string(curr_attr->name) == std::string("POSITION"))
 			{
-				positions_offset = mVertexData.size();
-				mVertexData.append_range(attr_data);
+				positions_offset = mPositionsData.size();
+				mPositionsData.append_range(attr_data);
 
 				vertex_count = curr_attr->data->count;
 				positions_size = curr_attr->data->buffer_view->size;
 			}
 			else if (std::string(curr_attr->name) == std::string("NORMAL"))
 			{
-				normals_offset = mVertexData.size();
-				mVertexData.append_range(attr_data);
+				normals_offset = mPositionsData.size();
+				mPositionsData.append_range(attr_data);
 
 				normals_size = curr_attr->data->buffer_view->size;
 			}
 			else if (std::string(curr_attr->name) == std::string("TEXCOORD_0"))
 			{
-				texcoords_offset = mVertexData.size();
-				mVertexData.append_range(attr_data);
+				texcoords_offset = mPositionsData.size();
+				mPositionsData.append_range(attr_data);
 
 				texcoords_size = curr_attr->data->buffer_view->size;
 			}
@@ -219,11 +219,11 @@ void Scene::AddMesh(const cgltf_data* gltf, const cgltf_mesh* mesh, const size_t
 		{
 			index_type = VK_INDEX_TYPE_UINT32;
 
-			mVertexData.resize(ALIGNED_SIZE(mVertexData.size(), sizeof(uint32_t)));
+			mPositionsData.resize(ALIGNED_SIZE(mPositionsData.size(), sizeof(uint32_t)));
 		}
 
 		indices_size = curr_prim->indices->buffer_view->size;
-		indices_offset = mVertexData.size();
+		indices_offset = mPositionsData.size();
 		index_count = curr_prim->indices->count;
 
 		std::vector<uint8_t> index_data(indices_size);
@@ -232,21 +232,24 @@ void Scene::AddMesh(const cgltf_data* gltf, const cgltf_mesh* mesh, const size_t
 			reinterpret_cast<uint8_t*>(curr_prim->indices->buffer_view->buffer->data) + curr_prim->indices->buffer_view->offset + curr_prim->indices->offset,
 			curr_prim->indices->buffer_view->size
 		);
-		mVertexData.append_range(index_data);
+		mPositionsData.append_range(index_data);
 
 		int32_t base_tex_index = -1;
 		int32_t normal_tex_index = -1;
-		glm::vec4 base_color_factor = glm::vec4(0.f);
+		glm::vec4 base_color_factor = glm::vec4(1.f);
 
-		if (curr_prim->material->has_pbr_metallic_roughness)
+		if (curr_prim->material != nullptr)
 		{
-			if (curr_prim->material->pbr_metallic_roughness.base_color_texture.texture != nullptr)
-				base_tex_index = static_cast<int32_t>(cgltf_image_index(gltf, curr_prim->material->pbr_metallic_roughness.base_color_texture.texture->image));
+			if (curr_prim->material->has_pbr_metallic_roughness)
+			{
+				if (curr_prim->material->pbr_metallic_roughness.base_color_texture.texture != nullptr)
+					base_tex_index = static_cast<int32_t>(cgltf_image_index(gltf, curr_prim->material->pbr_metallic_roughness.base_color_texture.texture->image));
 
-			if (curr_prim->material->normal_texture.texture != nullptr)
-				normal_tex_index = static_cast<int32_t>(cgltf_image_index(gltf, curr_prim->material->normal_texture.texture->image));
+				if (curr_prim->material->normal_texture.texture != nullptr)
+					normal_tex_index = static_cast<int32_t>(cgltf_image_index(gltf, curr_prim->material->normal_texture.texture->image));
 
-			base_color_factor = glm::make_vec4(curr_prim->material->pbr_metallic_roughness.base_color_factor);
+				base_color_factor = glm::make_vec4(curr_prim->material->pbr_metallic_roughness.base_color_factor);
+			}
 		}
 
 		primitives.push_back(
