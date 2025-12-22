@@ -12,9 +12,9 @@ struct VSOutput
 {
     float4 pos : SV_Position;
     [[vk::location(0)]]
-    float2 uv;
-    [[vk::location(1)]]
     float3 nrm;
+    [[vk::location(1)]]
+    float2 uv;
 }
 
 struct ViewProj
@@ -38,12 +38,26 @@ VSOutput vertex_main(VSInput in)
 {
     VSOutput out = {
         mul(view_proj.proj, mul(view_proj.view, mul(model.model, float4(in.pos, 1)))),
-        in.uv,
         in.nrm,
+        in.uv,
     };
 
     return out;
 }
+
+struct Material
+{
+    float4 base_color_factor;
+    int4 base_color_index;
+};
+
+struct PushConstants
+{
+    int material_index;
+}
+
+[[vk::push_constant]]
+ConstantBuffer<PushConstants> pc;
 
 [[vk::binding(0, 2)]]
 Sampler2D base_color_factor;
@@ -51,6 +65,11 @@ Sampler2D base_color_factor;
 Sampler2D base_color_texture;
 [[vk::binding(2, 2)]]
 Sampler2D normal_texture;
+[[vk::binding(3, 2)]]
+layout(std140)
+    StructuredBuffer<Material> materials;
+[[vk::binding(4, 2)]]
+Sampler2D textures[];
 
 struct FSOutput
 {
@@ -60,17 +79,19 @@ struct FSOutput
 [shader("fragment")]
 FSOutput fragment_main(VSOutput in)
 {
-    float4 base_color = base_color_texture.Sample(in.uv);
-
-    if (all(base_color == 0.f))
+    float4 base_color = float4(1.f);
+    if (pc.material_index >= 0)
     {
-        base_color = base_color_factor.Sample(in.uv);
-    }
-    else
-    {
-        base_color *= base_color_factor.Sample(in.uv);
+        if (materials[pc.material_index].base_color_index.x >= 0)
+        {
+            base_color *= textures[NonUniformResourceIndex(materials[pc.material_index].base_color_index.x)].Sample(in.uv) * materials[pc.material_index].base_color_factor;
+        }
+        else
+        {
+            base_color *= materials[pc.material_index].base_color_factor;
+        }
     }
 
-    FSOutput fs_output = {base_color};
+    FSOutput fs_output = { base_color };
     return fs_output;
 }

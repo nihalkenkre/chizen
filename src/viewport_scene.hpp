@@ -4,27 +4,28 @@
 
 class DeviceBufferResource;
 class ImageResource;
+class ScenePipelineData;
 class TransferHelpers;
 
 class ViewportScene
 {
 public:
-	virtual void Render(const VkCommandBuffer cmd_buff, const VkPipelineLayout pipeline_layout, const uint32_t cam_index) const = 0;
+	virtual void Render(const VkCommandBuffer cmd_buff, const uint32_t cam_index) const = 0;
 	virtual ~ViewportScene() noexcept {}
 };
 
 class ViewportEmptyScene : public ViewportScene
 {
 public:
-	void Render(const VkCommandBuffer cmd_buff, const VkPipelineLayout pipeline_layout, const uint32_t cam_index) const override {}
+	void Render(const VkCommandBuffer cmd_buff, const uint32_t cam_index) const override {}
 };
 
 class ViewportWorldScene : public ViewportScene
 {
 public:
-	ViewportWorldScene(const Scene& scene, const VkDevice device, const VmaAllocator allocator, const std::vector<VkDescriptorSetLayout>& desc_set_layouts, const std::vector<uint32_t>& queue_family_indices, TransferHelpers* transfer_objects);
+	ViewportWorldScene(const Scene& scene, const VkDevice device, const VmaAllocator allocator, const std::vector<uint32_t>& queue_family_indices, const std::string& current_path, TransferHelpers* transfer_objects);
 
-	void Render(const VkCommandBuffer cmd_buff, const VkPipelineLayout pipeline_layout, const uint32_t cam_index) const override;
+	void Render(const VkCommandBuffer cmd_buff, const uint32_t cam_index) const override;
 
 	class MeshInstance : public Scene::MeshInstance
 	{
@@ -39,9 +40,17 @@ public:
 		VkDescriptorSet mModelMatDescSet = VK_NULL_HANDLE;
 	};
 
+	class Material : public Scene::Material
+	{
+	public:
+		Material() {}
+		Material(const Scene::Material& material) : Scene::Material(material) {}
+	};
+
 	class Image : public Scene::Image
 	{
 	public:
+		Image(const char* image_path, const VkDevice device, const VmaAllocator allocator, const std::vector<uint32_t>& queue_family_indices, TransferHelpers* transfer_helpers);
 		Image(const Scene::Image& image, const std::vector<uint8_t>& images_data, const VkDevice device, const VmaAllocator allocator, const std::vector<uint32_t>& queue_family_indices, TransferHelpers* transfer_helpers);
 
 		ImageResource* GetImageResource() const;
@@ -107,12 +116,17 @@ private:
 	std::vector<ViewportWorldScene::CameraInstance> mCameraInstances;
 	std::vector<ViewportWorldScene::Camera> mCameras;
 	std::vector<ViewportWorldScene::Image> mImages;
+	std::vector<ViewportWorldScene::Material> mMaterials;
 
 	std::unique_ptr<DeviceBufferResource> mPositionsData = nullptr;
 	std::unique_ptr<DeviceBufferResource> mUniformData = nullptr;
 
+	std::unique_ptr<ScenePipelineData> mPipelineData = nullptr;
+
+	std::unique_ptr<DeviceBufferResource> mMaterialsBuffer = nullptr;
 	// All the descs in the scene
 	VkDescriptorPool mDescriptorPool = VK_NULL_HANDLE;
+	VkDescriptorSet mMaterialTexturesDescSet = VK_NULL_HANDLE;
 	VkSampler mNullSampler = VK_NULL_HANDLE;
 	VkDevice mDevice = VK_NULL_HANDLE;
 };

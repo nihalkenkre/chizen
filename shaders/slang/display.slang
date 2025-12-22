@@ -13,11 +13,20 @@ struct VSOutput
     float2 uv;
 }
 
+struct PushConstants
+{
+    float2 pos_offset;
+    float zoom_level;
+}
+
+[[vk::push_constant]]
+ConstantBuffer<PushConstants> pc;
+
 [shader("vertex")]
-VSOutput vertex_main(VSInput in, uniform float2 pos_offset, uniform float zoom_level)
+VSOutput vertex_main(VSInput in)
 {
     VSOutput out;
-    out.pos = float4((in.pos * zoom_level) - pos_offset, 0, 1);
+    out.pos = float4((in.pos * pc.zoom_level) - pc.pos_offset, 0, 1);
     out.uv = in.uv;
 
     return out;

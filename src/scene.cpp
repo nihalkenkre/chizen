@@ -59,6 +59,12 @@ Scene::Scene(const std::string& path, const VkDeviceSize uniform_buffer_alignmen
 	std::vector<float> uniform_debug(mUniformData.size() / sizeof(float));
 	std::memcpy(uniform_debug.data(), mUniformData.data(), mUniformData.size());
 
+	mMaterials.reserve(gltf->materials_count);
+	for (size_t m = 0; m < gltf->materials_count; ++m)
+	{
+		AddMaterial(gltf, gltf->materials + m);
+	}
+
 	mImages.reserve(gltf->images_count);
 	for (size_t i = 0; i < gltf->images_count; ++i)
 	{
@@ -91,6 +97,11 @@ const std::vector<Scene::Camera> Scene::GetCameras() const
 const std::vector<Scene::Image> Scene::GetImages() const
 {
 	return mImages;
+}
+
+const std::vector<Scene::Material> Scene::GetMaterials() const
+{
+	return mMaterials;
 }
 
 const std::vector<std::string> Scene::GetCameraNames() const
@@ -180,6 +191,7 @@ void Scene::AddMesh(const cgltf_data* gltf, const cgltf_mesh* mesh, const size_t
 		size_t indices_offset = 0;
 		size_t vertex_count = 0;
 		size_t index_count = 0;
+		int32_t material_index = -1;
 
 		for (size_t a = 0; a < curr_prim->attributes_count; ++a)
 		{
@@ -234,22 +246,9 @@ void Scene::AddMesh(const cgltf_data* gltf, const cgltf_mesh* mesh, const size_t
 		);
 		mPositionsData.append_range(index_data);
 
-		int32_t base_tex_index = -1;
-		int32_t normal_tex_index = -1;
-		glm::vec4 base_color_factor = glm::vec4(1.f);
-
 		if (curr_prim->material != nullptr)
 		{
-			if (curr_prim->material->has_pbr_metallic_roughness)
-			{
-				if (curr_prim->material->pbr_metallic_roughness.base_color_texture.texture != nullptr)
-					base_tex_index = static_cast<int32_t>(cgltf_image_index(gltf, curr_prim->material->pbr_metallic_roughness.base_color_texture.texture->image));
-
-				if (curr_prim->material->normal_texture.texture != nullptr)
-					normal_tex_index = static_cast<int32_t>(cgltf_image_index(gltf, curr_prim->material->normal_texture.texture->image));
-
-				base_color_factor = glm::make_vec4(curr_prim->material->pbr_metallic_roughness.base_color_factor);
-			}
+			material_index = static_cast<int32_t>(cgltf_material_index(gltf, curr_prim->material));
 		}
 
 		primitives.push_back(
@@ -259,7 +258,7 @@ void Scene::AddMesh(const cgltf_data* gltf, const cgltf_mesh* mesh, const size_t
 				texcoords_size, texcoords_offset,
 				vertex_count,
 				indices_size, indices_offset, index_count, index_type,
-				Scene::Mesh::Primitive::Material(base_tex_index, normal_tex_index, base_color_factor)
+				material_index
 			)
 		);
 	}
@@ -301,6 +300,28 @@ void Scene::AddCamera(const cgltf_camera* camera, const size_t camera_index, con
 
 		mUniformData.append_range(mat_data);
 	}
+}
+
+void Scene::AddMaterial(const cgltf_data* gltf, const cgltf_material* material)
+{
+	int32_t base_color_index = -1;
+	int32_t normal_color_index = -1;
+	glm::vec4 base_color_factor = glm::vec4(1.f);
+
+	if (material->has_pbr_metallic_roughness)
+	{
+		if (material->pbr_metallic_roughness.base_color_texture.texture != nullptr)
+		{
+			base_color_index = static_cast<int32_t>(cgltf_image_index(gltf, material->pbr_metallic_roughness.base_color_texture.texture->image));
+		}
+		std::memcpy(&base_color_factor, material->pbr_metallic_roughness.base_color_factor, sizeof(glm::vec4));
+	}
+	if (material->normal_texture.texture != nullptr)
+	{
+		normal_color_index = static_cast<int32_t>(cgltf_image_index(gltf, material->normal_texture.texture->image));
+	}
+
+	mMaterials.push_back(Scene::Material(base_color_index, normal_color_index, base_color_factor));
 }
 
 void Scene::AddImage(const cgltf_image* image)
@@ -380,7 +401,7 @@ Scene::Mesh::Primitive::Primitive(
 	const size_t texcoords_size, const size_t texcoords_offset, 
 	const size_t vertex_count, 
 	const size_t indices_size, const size_t indices_offset, const size_t index_count, const VkIndexType index_type,
-	const Scene::Mesh::Primitive::Material material
+	const int32_t material_index
 )
 	: mPositionsSize(positions_size),
 	mPositionsOffset(positions_offset),
@@ -393,7 +414,7 @@ Scene::Mesh::Primitive::Primitive(
 	mIndicesOffset(indices_offset),
 	mIndexCount(index_count),
 	mIndexType(index_type),
-	mMaterial(material)
+	mMaterialIndex(material_index)
 {
 
 }
@@ -453,22 +474,7 @@ size_t Scene::Mesh::Primitive::GetIndexCount() const
 	return mIndexCount;
 }
 
-Scene::Mesh::Primitive::Material Scene::Mesh::Primitive::GetMaterial() const
+int32_t Scene::Mesh::Primitive::GetMaterialIndex() const
 {
-	return mMaterial;
-}
-
-int32_t Scene::Mesh::Primitive::Material::GetBaseImageIndex() const
-{
-	return mBaseImageIndex;
-}
-
-int32_t Scene::Mesh::Primitive::Material::GetNormalImageIndex() const
-{
-	return mNormalImageIndex;
-}
-
-glm::vec4 Scene::Mesh::Primitive::Material::GetBaseColorFactor() const
-{
-	return mBaseColorFactor;
+	return mMaterialIndex;
 }

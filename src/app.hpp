@@ -55,6 +55,7 @@ private:
 	float mLastMousePosition[2] = {};
 	float mZoomLevel = 1.f;
 	uint32_t mMaxSamples = 1024;
+	std::string mCurrentPath;
 	std::unique_ptr<VulkanInterface> mVulkanInterface = nullptr;
 	std::unique_ptr<Viewport> mRasterizer = nullptr;
 	std::unique_ptr<Display> mDisplay = nullptr;

@@ -249,7 +249,7 @@ Allocator::Allocator(const VkInstance& instance, const VkPhysicalDevice& physica
 		.physicalDevice = physical_device,
 		.device = device,
 		.instance = instance,
-		.vulkanApiVersion = VK_MAKE_API_VERSION(0, 1, 4, 328),
+		.vulkanApiVersion = VK_MAKE_API_VERSION(0, 1, 2, 0),
 	};
 
 	VK_CHECK("create vma allocator", vmaCreateAllocator(&allocator_create_info, &mAllocator));
@@ -611,6 +611,7 @@ Device::Device(const PhysicalDeviceData* physical_device_data)
 		VK_KHR_TIMELINE_SEMAPHORE_EXTENSION_NAME,
 		VK_KHR_COPY_COMMANDS_2_EXTENSION_NAME,
 		VK_KHR_RAY_TRACING_POSITION_FETCH_EXTENSION_NAME,
+		VK_KHR_SEPARATE_DEPTH_STENCIL_LAYOUTS_EXTENSION_NAME,
 		"VK_KHR_maintenance5",
 		"VK_KHR_maintenance6",
 		VK_EXT_DESCRIPTOR_INDEXING_EXTENSION_NAME,
@@ -679,6 +680,10 @@ Device::Device(const PhysicalDeviceData* physical_device_data)
 			d_q_ci.pQueuePriorities = priorities[d_q_ci_idx].data();
 		}
 	}
+
+	VkPhysicalDeviceDescriptorIndexingFeaturesEXT desc_indx_feats = {
+		.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_DESCRIPTOR_INDEXING_FEATURES_EXT,
+	};
 
 	VkPhysicalDeviceRobustness2FeaturesEXT rob2_feats = {
 		.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_ROBUSTNESS_2_FEATURES_EXT,
@@ -1266,7 +1271,7 @@ TLAccelerationStructure::TLAccelerationStructure(const VkDevice device, const Vm
 		.pGeometries = &geom,
 	};
 
-	uint32_t primitive_count = instances.size();
+	uint32_t primitive_count = static_cast<uint32_t>(instances.size());
 
 	VkAccelerationStructureBuildSizesInfoKHR size_info = {
 		.sType = VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_BUILD_SIZES_INFO_KHR

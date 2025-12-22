@@ -19,6 +19,7 @@ App::App(SDL_Window* window, const std::string& current_path) : mWindow(window)
 	mVulkanInterface = std::make_unique<VulkanInterface>(window);
 	mImGUIState = std::make_unique<ImGUIState>(mVulkanInterface.get());
 	mRasterizerScene = std::make_unique<ViewportEmptyScene>();
+	mCurrentPath = current_path;
 
 	VkExtent3D extent = VkExtent3D{ mFinalRenderTargetExtent.width, mFinalRenderTargetExtent.height, 1 };
 	mFinalRenderTarget = std::make_unique<ImageResource>(mVulkanInterface->GetVkDevice(),
@@ -115,10 +116,10 @@ void App::ProcessEvent(SDL_Event* event)
 			scene,
 			mVulkanInterface->GetVkDevice(),
 			mVulkanInterface->GetVmaAllocator(),
-			mRasterizer->GetDescriptorSetLayouts(),
 			std::vector<uint32_t>{mVulkanInterface->GetPhysicalDeviceData()->GraphicsQueueFamilyIndex,
 			mVulkanInterface->GetPhysicalDeviceData()->ComputeQueueFamilyIndex,
 			mVulkanInterface->GetPhysicalDeviceData()->TransferQueueFamilyIndex},
+			mCurrentPath,
 			mVulkanInterface->GetTransferHelpers()
 		);
 

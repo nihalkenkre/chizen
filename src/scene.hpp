@@ -31,28 +31,13 @@ public:
 		class Primitive
 		{
 		public:
-			class Material
-			{
-			public:
-				Material(int32_t base_index, int32_t normal_index, glm::vec4 diffuse_color) : mBaseImageIndex(base_index), mNormalImageIndex(normal_index), mBaseColorFactor(diffuse_color){}
-
-				int32_t GetBaseImageIndex() const;
-				int32_t GetNormalImageIndex() const;
-				glm::vec4 GetBaseColorFactor() const;
-
-			private:
-				int32_t mBaseImageIndex = -1;
-				int32_t mNormalImageIndex = -1;
-				glm::vec4 mBaseColorFactor = glm::vec4(0.f);
-			};
-
 			Primitive(
 				const size_t positions_size, const size_t positions_offset,
 				const size_t normals_size, const size_t normals_offset,
 				const size_t texcoords_size, const size_t texcoords_offset,
 				const size_t vertex_count,
 				const size_t indices_size, const size_t indices_offset, const size_t index_count, const VkIndexType index_type,
-				const Material material
+				const int32_t material_index
 			);
 
 			size_t GetPositionsSize() const;
@@ -68,7 +53,7 @@ public:
 			size_t GetVertexCount() const;
 			size_t GetIndexCount() const;
 
-			Material GetMaterial() const;
+			int32_t GetMaterialIndex() const;
 
 		private:
 			size_t mPositionsSize = 0;
@@ -83,8 +68,7 @@ public:
 			VkIndexType mIndexType = VK_INDEX_TYPE_UINT16;
 			size_t mVertexCount = 0;
 			size_t mIndexCount = 0;
-
-			Material mMaterial;
+			int32_t mMaterialIndex = -1;
 		};
 
 		Mesh(std::vector<Scene::Mesh::Primitive> primitives);
@@ -122,6 +106,21 @@ public:
 		size_t mProjMatrixOffset = 0;
 	};
 
+	class Material
+	{
+	public:
+		Material() {}
+		Material(int32_t base_index, int32_t normal_index, glm::vec4 base_color_factor) : mBaseImageIndex(base_index, normal_index, 0, 0), mBaseColorFactor(base_color_factor) {}
+
+		//int32_t GetBaseImageIndex() const;
+		//int32_t GetNormalImageIndex() const;
+		//glm::vec4 GetBaseColorFactor() const;
+
+	private:
+		glm::vec4 mBaseColorFactor = glm::vec4(1.f);
+		glm::ivec4 mBaseImageIndex = glm::ivec4(-1);
+	};
+
 	class Image
 	{
 	public:
@@ -143,6 +142,7 @@ public:
 	const std::vector<CameraInstance> GetCameraInstances() const;
 	const std::vector<Camera> GetCameras() const;
 	const std::vector<Image> GetImages() const;
+	const std::vector<Material> GetMaterials() const;
 
 	const std::vector<std::string> GetCameraNames() const;
 
@@ -155,12 +155,14 @@ private:
 	void AddCameraInstance(const cgltf_data* gltf, const cgltf_node* node, const VkDeviceSize uniform_buffer_alignment);
 	void AddMesh(const cgltf_data* gltf, const cgltf_mesh* mesh, const size_t mesh_index);
 	void AddCamera(const cgltf_camera* camera, const size_t camera_index, const VkDeviceSize uniform_buffer_alignment);
+	void AddMaterial(const cgltf_data* gltf, const cgltf_material* material);
 	void AddImage(const cgltf_image* image);
 
 	std::vector<MeshInstance> mMeshInstances;
 	std::vector<Mesh> mMeshes;
 	std::vector<CameraInstance> mCameraInstances;
 	std::vector<Camera> mCameras;
+	std::vector<Material> mMaterials;
 	std::vector<Image> mImages;
 
 	std::vector<std::string> mCameraNames;

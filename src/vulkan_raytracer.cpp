@@ -43,138 +43,153 @@ RaytracerPipelineData::RaytracerPipelineData(const VulkanInterface* const vulkan
 
 	mDescriptorSetLayouts.resize(1);
 
-		Slang::ComPtr<slang::IGlobalSession> slang_global_session;
-		SLANG_CHECK("create global session", slang::createGlobalSession(slang_global_session.writeRef()));
-	
-		const slang::TargetDesc target_descs[] = {
-			{
-				.format = SLANG_SPIRV,
-				.profile = slang_global_session->findProfile("spirv_1_1"),
-			}
-		};
-	
-		slang::CompilerOptionEntry compiler_options[] = {
-			{
-				.name = slang::CompilerOptionName::MatrixLayoutColumn,
-				.value = {
-					.kind = slang::CompilerOptionValueKind::Int,
-					.intValue0 = 1,
-				},
-			},
-	#ifdef _DEBUG
-			{
-				.name = slang::CompilerOptionName::DebugInformation,
-				.value = {
-					.kind = slang::CompilerOptionValueKind::Int,
-					.intValue0 = SLANG_DEBUG_INFO_LEVEL_MAXIMAL,
-				},
-			}
-	#endif	// _DEBUG
-		};
-	
-		slang::SessionDesc compile_session_desc = {
-			.targets = target_descs,
-			.targetCount = std::size(target_descs),
-			.compilerOptionEntries = compiler_options,
-			.compilerOptionEntryCount = std::size(compiler_options),
-		};
-	
-		Slang::ComPtr<slang::ISession> compile_session;
-		SLANG_CHECK("create compile session", slang_global_session->createSession(compile_session_desc, compile_session.writeRef()));
-	
-		const std::string slang_shader_path = std::string(current_path).append("/shaders/slang/raytrace.slang");
-	
-		Slang::ComPtr<slang::IBlob> diagnostic_blob;
-		slang::IModule* slang_module = compile_session->loadModule(slang_shader_path.c_str(), diagnostic_blob.writeRef());
-	
-		if (diagnostic_blob != nullptr)
+	Slang::ComPtr<slang::IGlobalSession> slang_global_session;
+	SLANG_CHECK("create global session", slang::createGlobalSession(slang_global_session.writeRef()));
+
+	const slang::TargetDesc target_descs[] = {
 		{
-			std::println("{}", reinterpret_cast<const char*>(diagnostic_blob->getBufferPointer()));
+			.format = SLANG_SPIRV,
+			.profile = slang_global_session->findProfile("spirv_1_5"),
 		}
-	
-		Slang::ComPtr<slang::IEntryPoint> rg_entry_point;
-		slang_module->findEntryPointByName("raygen", rg_entry_point.writeRef());
-	
-		std::array<slang::IComponentType*, 2> rg_component_types = {
-			slang_module, rg_entry_point
-		};
-	
-		Slang::ComPtr<slang::IComponentType> rg_composed_program;
-		diagnostic_blob.setNull();
-		SLANG_CHECK("create program", compile_session->createCompositeComponentType(rg_component_types.data(), rg_component_types.size(), rg_composed_program.writeRef(), diagnostic_blob.writeRef()));
-	
-		Slang::ComPtr<slang::IComponentType> rg_linked_program;
-		diagnostic_blob.setNull();
-		SLANG_CHECK("link program", rg_composed_program->link(rg_linked_program.writeRef(), diagnostic_blob.writeRef()));
-	
-		Slang::ComPtr<slang::IBlob> rg_spirv_code;
-		diagnostic_blob.setNull();
-		SLANG_CHECK("get spirv code", rg_composed_program->getEntryPointCode(0, 0, rg_spirv_code.writeRef(), diagnostic_blob.writeRef()));
-	
-		const VkShaderModuleCreateInfo rg_mod_ci = {
-			.sType = VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO,
-			.codeSize = rg_spirv_code->getBufferSize(),
-			.pCode = reinterpret_cast<const uint32_t*>(rg_spirv_code->getBufferPointer()),
-		};
-	
-		VkShaderModule rg_mod = VK_NULL_HANDLE;
-		VK_CHECK("create shader module", vkCreateShaderModule(vulkan_interface->GetVkDevice(), &rg_mod_ci, nullptr, &rg_mod));
-	
-		Slang::ComPtr<slang::IEntryPoint> ms_entry_point;
-		slang_module->findEntryPointByName("miss", ms_entry_point.writeRef());
-	
-		std::array<slang::IComponentType*, 2> ms_component_types = {
-			slang_module, ms_entry_point
-		};
-	
-		Slang::ComPtr<slang::IComponentType> ms_composed_program;
-		diagnostic_blob.setNull();
-		SLANG_CHECK("create program", compile_session->createCompositeComponentType(ms_component_types.data(), ms_component_types.size(), ms_composed_program.writeRef(), diagnostic_blob.writeRef()));
-	
-		Slang::ComPtr<slang::IComponentType> ms_linked_program;
-		diagnostic_blob.setNull();
-		SLANG_CHECK("link program", ms_composed_program->link(ms_linked_program.writeRef(), diagnostic_blob.writeRef()));
-	
-		Slang::ComPtr<slang::IBlob> ms_spirv_code;
-		diagnostic_blob.setNull();
-		SLANG_CHECK("get spirv code", ms_composed_program->getEntryPointCode(0, 0, ms_spirv_code.writeRef(), diagnostic_blob.writeRef()));
-	
-		const VkShaderModuleCreateInfo ms_mod_ci = {
-			.sType = VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO,
-			.codeSize = ms_spirv_code->getBufferSize(),
-			.pCode = reinterpret_cast<const uint32_t*>(ms_spirv_code->getBufferPointer()),
-		};
-	
-		VkShaderModule ms_mod = VK_NULL_HANDLE;
-		VK_CHECK("create shader module", vkCreateShaderModule(vulkan_interface->GetVkDevice(), &ms_mod_ci, nullptr, &ms_mod));
-	
-		Slang::ComPtr<slang::IEntryPoint> ch_entry_point;
-		slang_module->findEntryPointByName("closesthit", ch_entry_point.writeRef());
-	
-		std::array<slang::IComponentType*, 2> ch_component_types = {
-			slang_module, ch_entry_point
-		};
-	
-		Slang::ComPtr<slang::IComponentType> ch_composed_program;
-		diagnostic_blob.setNull();
-		SLANG_CHECK("create program", compile_session->createCompositeComponentType(ch_component_types.data(), ch_component_types.size(), ch_composed_program.writeRef(), diagnostic_blob.writeRef()));
-	
-		Slang::ComPtr<slang::IComponentType> ch_linked_program;
-		diagnostic_blob.setNull();
-		SLANG_CHECK("link program", ch_composed_program->link(ch_linked_program.writeRef(), diagnostic_blob.writeRef()));
-	
-		Slang::ComPtr<slang::IBlob> ch_spirv_code;
-		diagnostic_blob.setNull();
-		SLANG_CHECK("get spirv code", ch_composed_program->getEntryPointCode(0, 0, ch_spirv_code.writeRef(), diagnostic_blob.writeRef()));
-	
-		const VkShaderModuleCreateInfo ch_mod_ci = {
-			.sType = VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO,
-			.codeSize = ch_spirv_code->getBufferSize(),
-			.pCode = reinterpret_cast<const uint32_t*>(ch_spirv_code->getBufferPointer()),
-		};
-	
-		VkShaderModule ch_mod = VK_NULL_HANDLE;
-		VK_CHECK("create shader module", vkCreateShaderModule(vulkan_interface->GetVkDevice(), &ch_mod_ci, nullptr, &ch_mod));
+	};
+
+	slang::CompilerOptionEntry compiler_options[] = {
+		{
+			.name = slang::CompilerOptionName::MatrixLayoutColumn,
+			.value = {
+				.kind = slang::CompilerOptionValueKind::Int,
+				.intValue0 = 1,
+			},
+		},
+		{
+			.name = slang::CompilerOptionName::DisableWarnings,
+			.value = {
+				.kind = slang::CompilerOptionValueKind::String,
+				.stringValue0 = "41012"
+			},
+		},
+#ifdef _DEBUG
+		{
+			.name = slang::CompilerOptionName::DebugInformation,
+			.value = {
+				.kind = slang::CompilerOptionValueKind::Int,
+				.intValue0 = SLANG_DEBUG_INFO_LEVEL_MAXIMAL,
+			}
+		},
+#else	// _DEBUG
+		{
+			.name = slang::CompilerOptionName::Optimization,
+			.value = {
+				.kind = slang::CompilerOptionValueKind::Int,
+				.intValue0 = SLANG_OPTIMIZATION_LEVEL_MAXIMAL
+			},
+		},
+#endif // _DEBUG
+	};
+
+	slang::SessionDesc compile_session_desc = {
+		.targets = target_descs,
+		.targetCount = std::size(target_descs),
+		.compilerOptionEntries = compiler_options,
+		.compilerOptionEntryCount = std::size(compiler_options),
+	};
+
+	Slang::ComPtr<slang::ISession> compile_session;
+	SLANG_CHECK("create compile session", slang_global_session->createSession(compile_session_desc, compile_session.writeRef()));
+
+	const std::string slang_shader_path = std::string(current_path).append("/shaders/slang/raytrace.slang");
+
+	Slang::ComPtr<slang::IBlob> diagnostic_blob;
+	slang::IModule* slang_module = compile_session->loadModule(slang_shader_path.c_str(), diagnostic_blob.writeRef());
+
+	if (diagnostic_blob != nullptr)
+	{
+		std::println("{}", reinterpret_cast<const char*>(diagnostic_blob->getBufferPointer()));
+	}
+
+	Slang::ComPtr<slang::IEntryPoint> rg_entry_point;
+	slang_module->findEntryPointByName("raygen", rg_entry_point.writeRef());
+
+	std::array<slang::IComponentType*, 2> rg_component_types = {
+		slang_module, rg_entry_point
+	};
+
+	Slang::ComPtr<slang::IComponentType> rg_composed_program;
+	diagnostic_blob.setNull();
+	SLANG_CHECK("create program", compile_session->createCompositeComponentType(rg_component_types.data(), rg_component_types.size(), rg_composed_program.writeRef(), diagnostic_blob.writeRef()));
+
+	Slang::ComPtr<slang::IComponentType> rg_linked_program;
+	diagnostic_blob.setNull();
+	SLANG_CHECK("link program", rg_composed_program->link(rg_linked_program.writeRef(), diagnostic_blob.writeRef()));
+
+	Slang::ComPtr<slang::IBlob> rg_spirv_code;
+	diagnostic_blob.setNull();
+	SLANG_CHECK("get spirv code", rg_composed_program->getEntryPointCode(0, 0, rg_spirv_code.writeRef(), diagnostic_blob.writeRef()));
+
+	const VkShaderModuleCreateInfo rg_mod_ci = {
+		.sType = VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO,
+		.codeSize = rg_spirv_code->getBufferSize(),
+		.pCode = reinterpret_cast<const uint32_t*>(rg_spirv_code->getBufferPointer()),
+	};
+
+	VkShaderModule rg_mod = VK_NULL_HANDLE;
+	VK_CHECK("create shader module", vkCreateShaderModule(vulkan_interface->GetVkDevice(), &rg_mod_ci, nullptr, &rg_mod));
+
+	Slang::ComPtr<slang::IEntryPoint> ms_entry_point;
+	slang_module->findEntryPointByName("miss", ms_entry_point.writeRef());
+
+	std::array<slang::IComponentType*, 2> ms_component_types = {
+		slang_module, ms_entry_point
+	};
+
+	Slang::ComPtr<slang::IComponentType> ms_composed_program;
+	diagnostic_blob.setNull();
+	SLANG_CHECK("create program", compile_session->createCompositeComponentType(ms_component_types.data(), ms_component_types.size(), ms_composed_program.writeRef(), diagnostic_blob.writeRef()));
+
+	Slang::ComPtr<slang::IComponentType> ms_linked_program;
+	diagnostic_blob.setNull();
+	SLANG_CHECK("link program", ms_composed_program->link(ms_linked_program.writeRef(), diagnostic_blob.writeRef()));
+
+	Slang::ComPtr<slang::IBlob> ms_spirv_code;
+	diagnostic_blob.setNull();
+	SLANG_CHECK("get spirv code", ms_composed_program->getEntryPointCode(0, 0, ms_spirv_code.writeRef(), diagnostic_blob.writeRef()));
+
+	const VkShaderModuleCreateInfo ms_mod_ci = {
+		.sType = VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO,
+		.codeSize = ms_spirv_code->getBufferSize(),
+		.pCode = reinterpret_cast<const uint32_t*>(ms_spirv_code->getBufferPointer()),
+	};
+
+	VkShaderModule ms_mod = VK_NULL_HANDLE;
+	VK_CHECK("create shader module", vkCreateShaderModule(vulkan_interface->GetVkDevice(), &ms_mod_ci, nullptr, &ms_mod));
+
+	Slang::ComPtr<slang::IEntryPoint> ch_entry_point;
+	slang_module->findEntryPointByName("closesthit", ch_entry_point.writeRef());
+
+	std::array<slang::IComponentType*, 2> ch_component_types = {
+		slang_module, ch_entry_point
+	};
+
+	Slang::ComPtr<slang::IComponentType> ch_composed_program;
+	diagnostic_blob.setNull();
+	SLANG_CHECK("create program", compile_session->createCompositeComponentType(ch_component_types.data(), ch_component_types.size(), ch_composed_program.writeRef(), diagnostic_blob.writeRef()));
+
+	Slang::ComPtr<slang::IComponentType> ch_linked_program;
+	diagnostic_blob.setNull();
+	SLANG_CHECK("link program", ch_composed_program->link(ch_linked_program.writeRef(), diagnostic_blob.writeRef()));
+
+	Slang::ComPtr<slang::IBlob> ch_spirv_code;
+	diagnostic_blob.setNull();
+	SLANG_CHECK("get spirv code", ch_composed_program->getEntryPointCode(0, 0, ch_spirv_code.writeRef(), diagnostic_blob.writeRef()));
+
+	const VkShaderModuleCreateInfo ch_mod_ci = {
+		.sType = VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO,
+		.codeSize = ch_spirv_code->getBufferSize(),
+		.pCode = reinterpret_cast<const uint32_t*>(ch_spirv_code->getBufferPointer()),
+	};
+
+	VkShaderModule ch_mod = VK_NULL_HANDLE;
+	VK_CHECK("create shader module", vkCreateShaderModule(vulkan_interface->GetVkDevice(), &ch_mod_ci, nullptr, &ch_mod));
 
 	/*std::filesystem::path rg_path = std::string(current_path).append("/shaders/glsl/raytrace.rgen.glsl.spv");
 	VkShaderModule rg_mod = VK_NULL_HANDLE;
@@ -515,7 +530,7 @@ void VulkanRaytracer::InitializeResources()
 		VK_CHECK("wait for sem", vkWaitSemaphoresKHR(mDevice, &wait_info, UINT64_MAX));
 
 		hbr->~HostBufferResource();
-	};
+		};
 
 	mTransferHelpers->BeginBatch();
 	mTransferHelpers->ChangeImageLayout(
@@ -547,7 +562,7 @@ void VulkanRaytracer::InitializeResources()
 		rand_states_data.size(), "rand states"
 	);
 
-	std::unique_ptr<HostBufferResource, decltype(wait_and_delete)> rand_states_staging (new HostBufferResource(
+	std::unique_ptr<HostBufferResource, decltype(wait_and_delete)> rand_states_staging(new HostBufferResource(
 		mDevice, mAllocator, VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
 		VMA_ALLOCATION_CREATE_HOST_ACCESS_SEQUENTIAL_WRITE_BIT,
 		rand_states_data, "random states staging"), wait_and_delete

@@ -3,7 +3,7 @@
 class VulkanInterface;
 class Swapchain;
 class FrameObjects;
-class RasterizerPipelineData;
+class ScenePipelineData;
 class ImGUIState;
 class ViewportScene;
 class ImageResource;
@@ -25,15 +25,12 @@ public:
 	void Render(const ViewportScene* scene, const Swapchain* swapchain, const VkExtent2D extent, ImGUIState* imgui_state);
 	void RecreateDepthTexture(const VkExtent2D extent);
 
-	const std::vector<VkDescriptorSetLayout>& GetDescriptorSetLayouts() const;
-
 private:
 	std::unique_ptr<FrameObjects> mFrameObjects;
 	std::vector<VkSemaphore> mPresentWaitSemaphores;
 	std::vector<VkSemaphore> mAcquireSignalSemaphores;
 	std::unique_ptr<ImageResource> mDepthTexture;
 	
-	std::unique_ptr<RasterizerPipelineData> mPipelineData;
 	std::vector<uint32_t> mQueueFamilyIndices;
 
 	VkDescriptorPool mDescriptorPool = VK_NULL_HANDLE;
