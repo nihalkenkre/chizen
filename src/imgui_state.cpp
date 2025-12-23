@@ -70,7 +70,7 @@ ImGUIState::~ImGUIState() noexcept
 
 void ImGUIState::ProcessEvent(SDL_Event* event)
 {
-	if (event->type == events.RaytraceStarted.type)
+	if (event->type == events.RenderStarted.type)
 	{
 		mRaytracingStarted = true;
 	}
@@ -154,7 +154,7 @@ void ImGUIState::Render(const VkCommandBuffer cmd_buff)
 		ImGui::Spacing();
 	}
 
-	const char* renderer_names[] = { "Vulkan", "Embree" };
+	const char* renderer_names[] = { "Vulkan", "Embree", "SW Raster" };
 	const char* selected_renderer_name = renderer_names[mSelectedRendererIndex];
 	if (ImGui::BeginCombo("Renderer", selected_renderer_name))
 	{

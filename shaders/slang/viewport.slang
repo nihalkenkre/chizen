@@ -60,15 +60,8 @@ struct PushConstants
 ConstantBuffer<PushConstants> pc;
 
 [[vk::binding(0, 2)]]
-Sampler2D base_color_factor;
+StructuredBuffer<Material> materials;
 [[vk::binding(1, 2)]]
-Sampler2D base_color_texture;
-[[vk::binding(2, 2)]]
-Sampler2D normal_texture;
-[[vk::binding(3, 2)]]
-layout(std140)
-    StructuredBuffer<Material> materials;
-[[vk::binding(4, 2)]]
 Sampler2D textures[];
 
 struct FSOutput

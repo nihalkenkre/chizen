@@ -30,7 +30,7 @@ public:
 	VkDevice GetVkDevice() const;
 	VmaAllocator GetVmaAllocator() const;
 
-	void RecreateRasterSwapchain();
+	void RecreateViewportSwapchain();
 
 private:
 	std::unique_ptr<Instance> mInstance;

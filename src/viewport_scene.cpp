@@ -31,119 +31,119 @@ private:
 
 ScenePipelineData::ScenePipelineData(const VkDevice device, const std::string& current_path, const size_t num_images, const std::string& name) : mDevice(device)
 {
-	Slang::ComPtr<slang::IGlobalSession> slang_global_session;
-	SLANG_CHECK("create global session", slang::createGlobalSession(slang_global_session.writeRef()));
+ 	Slang::ComPtr<slang::IGlobalSession> slang_global_session;
+ 	SLANG_CHECK("create global session", slang::createGlobalSession(slang_global_session.writeRef()));
 
-	const slang::TargetDesc target_descs[] = {
-		{
-			.format = SLANG_SPIRV,
-			.profile = slang_global_session->findProfile("spirv_1_5"),
-		}
-	};
+ 	const slang::TargetDesc target_descs[] = {
+ 		{
+ 			.format = SLANG_SPIRV,
+ 			.profile = slang_global_session->findProfile("spirv_1_5"),
+ 		}
+ 	};
 
-	slang::CompilerOptionEntry compiler_options[] = {
-		{
-			.name = slang::CompilerOptionName::MatrixLayoutColumn,
-			.value = {
-				.kind = slang::CompilerOptionValueKind::Int,
-				.intValue0 = 1,
-			},
-		},
-		{
-			.name = slang::CompilerOptionName::DisableWarnings,
-			.value = {
-				.kind = slang::CompilerOptionValueKind::String,
-				.stringValue0 = "41012"
-			},
-		},
-#ifdef _DEBUG
-		{
-			.name = slang::CompilerOptionName::DebugInformation,
-			.value = {
-				.kind = slang::CompilerOptionValueKind::Int,
-				.intValue0 = SLANG_DEBUG_INFO_LEVEL_MAXIMAL,
-			}
-		},
-#else	// _DEBUG
-		{
-			.name = slang::CompilerOptionName::Optimization,
-			.value = {
-				.kind = slang::CompilerOptionValueKind::Int,
-				.intValue0 = SLANG_OPTIMIZATION_LEVEL_MAXIMAL
-			},
-		},
-#endif // _DEBUG
-	};
+ 	slang::CompilerOptionEntry compiler_options[] = {
+ 		{
+ 			.name = slang::CompilerOptionName::MatrixLayoutColumn,
+ 			.value = {
+ 				.kind = slang::CompilerOptionValueKind::Int,
+ 				.intValue0 = 1,
+ 			},
+ 		},
+ 		{
+ 			.name = slang::CompilerOptionName::DisableWarnings,
+ 			.value = {
+ 				.kind = slang::CompilerOptionValueKind::String,
+ 				.stringValue0 = "41012"
+ 			},
+ 		},
+ #ifdef _DEBUG
+ 		{
+ 			.name = slang::CompilerOptionName::DebugInformation,
+ 			.value = {
+ 				.kind = slang::CompilerOptionValueKind::Int,
+ 				.intValue0 = SLANG_DEBUG_INFO_LEVEL_MAXIMAL,
+ 			}
+ 		},
+ #else	// _DEBUG
+ 		{
+ 			.name = slang::CompilerOptionName::Optimization,
+ 			.value = {
+ 				.kind = slang::CompilerOptionValueKind::Int,
+ 				.intValue0 = SLANG_OPTIMIZATION_LEVEL_MAXIMAL
+ 			},
+ 		},
+ #endif // _DEBUG
+ 	};
 
-	slang::SessionDesc session_desc = {
-		.targets = target_descs,
-		.targetCount = std::size(target_descs),
-		.compilerOptionEntries = compiler_options,
-		.compilerOptionEntryCount = std::size(compiler_options),
-	};
+ 	slang::SessionDesc session_desc = {
+ 		.targets = target_descs,
+ 		.targetCount = std::size(target_descs),
+ 		.compilerOptionEntries = compiler_options,
+ 		.compilerOptionEntryCount = std::size(compiler_options),
+ 	};
 
-	Slang::ComPtr<slang::ISession> compile_session;
-	SLANG_CHECK("create compile session", slang_global_session->createSession(session_desc, compile_session.writeRef()));
+ 	Slang::ComPtr<slang::ISession> compile_session;
+ 	SLANG_CHECK("create compile session", slang_global_session->createSession(session_desc, compile_session.writeRef()));
 
-	const std::string slang_shader_path = std::string(current_path).append("/shaders/slang/viewport.slang");
+ 	const std::string slang_shader_path = std::string(current_path).append("/shaders/slang/viewport.slang");
 
-	Slang::ComPtr<slang::IBlob> diagnostic_blob;
-	slang::IModule* slang_module = compile_session->loadModule(slang_shader_path.c_str(), diagnostic_blob.writeRef());
+ 	Slang::ComPtr<slang::IBlob> diagnostic_blob;
+ 	slang::IModule* slang_module = compile_session->loadModule(slang_shader_path.c_str(), diagnostic_blob.writeRef());
 
-	if (diagnostic_blob != nullptr)
-	{
-		std::println("{}", reinterpret_cast<const char*>(diagnostic_blob->getBufferPointer()));
-	}
+ 	if (diagnostic_blob != nullptr)
+ 	{
+ 		std::println("{}", reinterpret_cast<const char*>(diagnostic_blob->getBufferPointer()));
+ 	}
 
-	Slang::ComPtr<slang::IEntryPoint> vert_entry_point;
-	slang_module->findEntryPointByName("vertex_main", vert_entry_point.writeRef());
+ 	Slang::ComPtr<slang::IEntryPoint> vert_entry_point;
+ 	slang_module->findEntryPointByName("vertex_main", vert_entry_point.writeRef());
 
-	std::array<slang::IComponentType*, 2> vert_component_types = { slang_module, vert_entry_point };
-	Slang::ComPtr<slang::IComponentType> vert_composed_program;
-	diagnostic_blob.setNull();
-	SLANG_CHECK("create program", compile_session->createCompositeComponentType(vert_component_types.data(), vert_component_types.size(), vert_composed_program.writeRef(), diagnostic_blob.writeRef()));
+ 	std::array<slang::IComponentType*, 2> vert_component_types = { slang_module, vert_entry_point };
+ 	Slang::ComPtr<slang::IComponentType> vert_composed_program;
+ 	diagnostic_blob.setNull();
+ 	SLANG_CHECK("create program", compile_session->createCompositeComponentType(vert_component_types.data(), vert_component_types.size(), vert_composed_program.writeRef(), diagnostic_blob.writeRef()));
 
-	Slang::ComPtr<slang::IComponentType> vert_linked_program;
-	diagnostic_blob.setNull();
-	SLANG_CHECK("link program", vert_composed_program->link(vert_linked_program.writeRef(), diagnostic_blob.writeRef()));
+ 	Slang::ComPtr<slang::IComponentType> vert_linked_program;
+ 	diagnostic_blob.setNull();
+ 	SLANG_CHECK("link program", vert_composed_program->link(vert_linked_program.writeRef(), diagnostic_blob.writeRef()));
 
-	Slang::ComPtr<slang::IBlob> vert_spirv_code;
-	diagnostic_blob.setNull();
-	SLANG_CHECK("get spirv code", vert_composed_program->getEntryPointCode(0, 0, vert_spirv_code.writeRef(), diagnostic_blob.writeRef()));
+ 	Slang::ComPtr<slang::IBlob> vert_spirv_code;
+ 	diagnostic_blob.setNull();
+ 	SLANG_CHECK("get spirv code", vert_composed_program->getEntryPointCode(0, 0, vert_spirv_code.writeRef(), diagnostic_blob.writeRef()));
 
-	const VkShaderModuleCreateInfo vert_mod_ci = {
-		.sType = VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO,
-		.codeSize = vert_spirv_code->getBufferSize(),
-		.pCode = reinterpret_cast<const uint32_t*>(vert_spirv_code->getBufferPointer()),
-	};
+ 	const VkShaderModuleCreateInfo vert_mod_ci = {
+ 		.sType = VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO,
+ 		.codeSize = vert_spirv_code->getBufferSize(),
+ 		.pCode = reinterpret_cast<const uint32_t*>(vert_spirv_code->getBufferPointer()),
+ 	};
 
-	VkShaderModule vert_mod = VK_NULL_HANDLE;
-	VK_CHECK("create vert shader module", vkCreateShaderModule(mDevice, &vert_mod_ci, nullptr, &vert_mod));
+ 	VkShaderModule vert_mod = VK_NULL_HANDLE;
+ 	VK_CHECK("create vert shader module", vkCreateShaderModule(mDevice, &vert_mod_ci, nullptr, &vert_mod));
 
-	Slang::ComPtr<slang::IEntryPoint> frag_entry_point;
-	slang_module->findEntryPointByName("fragment_main", frag_entry_point.writeRef());
+ 	Slang::ComPtr<slang::IEntryPoint> frag_entry_point;
+ 	slang_module->findEntryPointByName("fragment_main", frag_entry_point.writeRef());
 
-	std::array<slang::IComponentType*, 2> frag_component_types = { slang_module, frag_entry_point };
-	Slang::ComPtr<slang::IComponentType> frag_composed_program;
-	diagnostic_blob.setNull();
-	SLANG_CHECK("create program", compile_session->createCompositeComponentType(frag_component_types.data(), frag_component_types.size(), frag_composed_program.writeRef(), diagnostic_blob.writeRef()));
+ 	std::array<slang::IComponentType*, 2> frag_component_types = { slang_module, frag_entry_point };
+ 	Slang::ComPtr<slang::IComponentType> frag_composed_program;
+ 	diagnostic_blob.setNull();
+ 	SLANG_CHECK("create program", compile_session->createCompositeComponentType(frag_component_types.data(), frag_component_types.size(), frag_composed_program.writeRef(), diagnostic_blob.writeRef()));
 
-	Slang::ComPtr<slang::IComponentType> frag_linked_program;
-	diagnostic_blob.setNull();
-	SLANG_CHECK("link program", frag_composed_program->link(frag_linked_program.writeRef(), diagnostic_blob.writeRef()));
+ 	Slang::ComPtr<slang::IComponentType> frag_linked_program;
+ 	diagnostic_blob.setNull();
+ 	SLANG_CHECK("link program", frag_composed_program->link(frag_linked_program.writeRef(), diagnostic_blob.writeRef()));
 
-	Slang::ComPtr<slang::IBlob> frag_spirv_code;
-	diagnostic_blob.setNull();
-	SLANG_CHECK("get spirv code", frag_composed_program->getEntryPointCode(0, 0, frag_spirv_code.writeRef(), diagnostic_blob.writeRef()));
+ 	Slang::ComPtr<slang::IBlob> frag_spirv_code;
+ 	diagnostic_blob.setNull();
+ 	SLANG_CHECK("get spirv code", frag_composed_program->getEntryPointCode(0, 0, frag_spirv_code.writeRef(), diagnostic_blob.writeRef()));
 
-	const VkShaderModuleCreateInfo frag_mod_ci = {
-		.sType = VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO,
-		.codeSize = frag_spirv_code->getBufferSize(),
-		.pCode = reinterpret_cast<const uint32_t*>(frag_spirv_code->getBufferPointer()),
-	};
+ 	const VkShaderModuleCreateInfo frag_mod_ci = {
+ 		.sType = VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO,
+ 		.codeSize = frag_spirv_code->getBufferSize(),
+ 		.pCode = reinterpret_cast<const uint32_t*>(frag_spirv_code->getBufferPointer()),
+ 	};
 
-	VkShaderModule frag_mod = VK_NULL_HANDLE;
-	VK_CHECK("create frag shader module", vkCreateShaderModule(mDevice, &frag_mod_ci, nullptr, &frag_mod));
+ 	VkShaderModule frag_mod = VK_NULL_HANDLE;
+ 	VK_CHECK("create frag shader module", vkCreateShaderModule(mDevice, &frag_mod_ci, nullptr, &frag_mod));
 
 	//std::filesystem::path vert_path = std::string(current_path).append("/shaders/glsl/viewport.vert.glsl.spv");
 	//VkShaderModule vert_mod = VK_NULL_HANDLE;
@@ -342,30 +342,12 @@ ScenePipelineData::ScenePipelineData(const VkDevice device, const std::string& c
 	const std::vector<VkDescriptorSetLayoutBinding> dsl_2_binds = {
 		{
 			.binding = 0,
-			.descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
-			.descriptorCount = 1,
-			.stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT,
-		},
-		{
-			.binding = 1,
-			.descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
-			.descriptorCount = 1,
-			.stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT,
-		},
-		{
-			.binding = 2,
-			.descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
-			.descriptorCount = 1,
-			.stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT,
-		},
-		{
-			.binding = 3,
 			.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,
 			.descriptorCount = 1,
 			.stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT,
 		},
 		{
-			.binding = 4,
+			.binding = 1,
 			.descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
 			.descriptorCount = static_cast<uint32_t>(num_images),
 			.stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT,
@@ -373,7 +355,7 @@ ScenePipelineData::ScenePipelineData(const VkDevice device, const std::string& c
 	};
 
 	const VkDescriptorBindingFlagsEXT binding_flags[] = {
-		0, 0, 0, 0, VK_DESCRIPTOR_BINDING_VARIABLE_DESCRIPTOR_COUNT_BIT | VK_DESCRIPTOR_BINDING_PARTIALLY_BOUND_BIT,
+		0, VK_DESCRIPTOR_BINDING_VARIABLE_DESCRIPTOR_COUNT_BIT | VK_DESCRIPTOR_BINDING_PARTIALLY_BOUND_BIT,
 	};
 
 	const VkDescriptorSetLayoutBindingFlagsCreateInfo dsl_2_binds_flags_ci = {
@@ -599,6 +581,10 @@ ViewportWorldScene::ViewportWorldScene(const Scene& scene, const VkDevice device
 
 	VK_CHECK("create mat tex desc set", vkAllocateDescriptorSets(device, &ds_ai, &mMaterialTexturesDescSet));
 
+#ifdef _DEBUG
+	Utils_SetObjectName(mDevice, VK_OBJECT_TYPE_DESCRIPTOR_SET, reinterpret_cast<uint64_t>(mMaterialTexturesDescSet), "material textures desc set");
+#endif // _DEBUG
+
 	mCameraInstances.reserve(scene.GetCameraInstances().size());
 	for (const auto& cam_instance : scene.GetCameraInstances())
 	{
@@ -636,11 +622,11 @@ ViewportWorldScene::ViewportWorldScene(const Scene& scene, const VkDevice device
 		mMaterials.size() * sizeof(Material), "materials"
 	);
 
-	transfer_helpers->BeginBatch();
+	transfer_helpers->RecordBatch();
 	transfer_helpers->CopyBufferToBuffer(staging_vertex_data->GetVkBuffer(), mPositionsData->GetVkBuffer(), vertex_data.size());
 	transfer_helpers->CopyBufferToBuffer(staging_uniform_data->GetVkBuffer(), mUniformData->GetVkBuffer(), uniform_data.size());
 	transfer_helpers->CopyBufferToBuffer(staging_materials_data->GetVkBuffer(), mMaterialsBuffer->GetVkBuffer(), mMaterials.size() * sizeof(Material));
-	transfer_helpers->EndBatch();
+	transfer_helpers->SubmitBatch();
 
 	const VkDescriptorBufferInfo mat_desc_buff = {
 		.buffer = mMaterialsBuffer->GetVkBuffer(),
@@ -670,7 +656,7 @@ ViewportWorldScene::ViewportWorldScene(const Scene& scene, const VkDevice device
 		{
 			.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
 			.dstSet = mMaterialTexturesDescSet,
-			.dstBinding = 3,
+			.dstBinding = 0,
 			.descriptorCount = 1,
 			.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,
 			.pBufferInfo = &mat_desc_buff,
@@ -678,7 +664,7 @@ ViewportWorldScene::ViewportWorldScene(const Scene& scene, const VkDevice device
 		{
 			.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
 			.dstSet = mMaterialTexturesDescSet,
-			.dstBinding = 4,
+			.dstBinding = 1,
 			.descriptorCount = static_cast<uint32_t>(image_descs.size()),
 			.descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
 			.pImageInfo = image_descs.data(),
@@ -692,6 +678,10 @@ ViewportWorldScene::ViewportWorldScene(const Scene& scene, const VkDevice device
 	};
 
 	VK_CHECK("create null sampler", vkCreateSampler(device, &s_ci, nullptr, &mNullSampler));
+
+#ifdef DEBUG
+	Utils_SetObjectName(mDevice, VK_OBJECT_TYPE_SAMPLER, reinterpret_cast<uint64_t>(mNullSampler), "null sampler");
+#endif // _DEBUG
 
 	mMeshes.reserve(scene.GetMeshes().size());
 	for (const auto& mesh : scene.GetMeshes())
@@ -1090,7 +1080,7 @@ ViewportWorldScene::Image::Image(const char* image_path, const VkDevice device, 
 		w * h * 4
 	);
 
-	transfer_helpers->BeginBatch();
+	transfer_helpers->RecordBatch();
 	transfer_helpers->ChangeImageLayout(
 		VK_PIPELINE_STAGE_2_TOP_OF_PIPE_BIT, 0,
 		VK_PIPELINE_STAGE_2_COPY_BIT, VK_ACCESS_2_TRANSFER_WRITE_BIT,
@@ -1099,7 +1089,7 @@ ViewportWorldScene::Image::Image(const char* image_path, const VkDevice device, 
 		VK_IMAGE_ASPECT_COLOR_BIT, mImageResource->GetImage()
 	);
 	transfer_helpers->CopyBufferToImage(staging_buffer->GetVkBuffer(), mImageResource->GetImage(), VkExtent2D{ w,h });
-	transfer_helpers->EndBatch();
+	transfer_helpers->SubmitBatch();
 }
 
 ViewportWorldScene::Image::Image(const Scene::Image& image, const std::vector<uint8_t>& images_data, const VkDevice device, const VmaAllocator allocator, const std::vector<uint32_t>& queue_family_indices, TransferHelpers* transfer_helpers)
@@ -1145,7 +1135,7 @@ ViewportWorldScene::Image::Image(const Scene::Image& image, const std::vector<ui
 		w * h * 4
 	);
 
-	transfer_helpers->BeginBatch();
+	transfer_helpers->RecordBatch();
 	transfer_helpers->ChangeImageLayout(
 		VK_PIPELINE_STAGE_2_TOP_OF_PIPE_BIT, 0,
 		VK_PIPELINE_STAGE_2_COPY_BIT, VK_ACCESS_2_TRANSFER_WRITE_BIT,
@@ -1154,7 +1144,7 @@ ViewportWorldScene::Image::Image(const Scene::Image& image, const std::vector<ui
 		VK_IMAGE_ASPECT_COLOR_BIT, mImageResource->GetImage()
 	);
 	transfer_helpers->CopyBufferToImage(staging_buffer->GetVkBuffer(), mImageResource->GetImage(), VkExtent2D{ w,h });
-	transfer_helpers->EndBatch();
+	transfer_helpers->SubmitBatch();
 }
 
 ImageResource* ViewportWorldScene::Image::GetImageResource() const

@@ -137,7 +137,7 @@ public:
 
 	~TransferHelpers() noexcept;
 
-	void BeginBatch();
+	void RecordBatch();
 	void ChangeImageLayout(
 		const VkPipelineStageFlags2 src_stage_mask, const VkAccessFlags2 src_access_mask,
 		const VkPipelineStageFlags2 dst_stage_mask, const VkAccessFlags2 dst_access_mask,
@@ -149,7 +149,7 @@ public:
 	void CopyBufferToImage(const VkBuffer src_buffer, const VkImage dst_image, const VkExtent2D extent);
 	void InsertMemoryBarrier(const VkPipelineStageFlags2 src_stage_mask, const VkAccessFlags2 src_access_mask,
 		const VkPipelineStageFlags2 dst_stage_mask, const VkAccessFlags2 dst_access_mask);
-	void EndBatch();
+	void SubmitBatch();
 
 	VkCommandPool GetCommandPool() const;
 	VkCommandBuffer GetCommandBuffer() const;
@@ -181,12 +181,12 @@ public:
 
 	~ComputeHelpers() noexcept;
 
-	void BeginBatch();
+	void RecordBatch();
 	void CopyBufferToBuffer(const VkBuffer src_buffer, const VkBuffer dst_buffer, const VkDeviceSize size);
 	void InsertMemoryBarrier(const VkPipelineStageFlags2 src_stage_mask, const VkAccessFlags2 src_access_mask,
 		const VkPipelineStageFlags2 dst_stage_mask, const VkAccessFlags2 dst_access_mask);
 	void BuildAccelerationStructure(const std::vector<VkAccelerationStructureBuildGeometryInfoKHR>& build_geom_infos, const std::vector<VkAccelerationStructureBuildRangeInfoKHR*>& range_infos);
-	void EndBatch();
+	void SubmitBatch();
 
 	VkCommandPool GetCommandPool() const;
 	VkCommandBuffer GetCommandBuffer() const;

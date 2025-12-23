@@ -73,7 +73,7 @@ VmaAllocator VulkanInterface::GetVmaAllocator() const
 	return mAllocator->GetAllocator();
 }
 
-void VulkanInterface::RecreateRasterSwapchain()
+void VulkanInterface::RecreateViewportSwapchain()
 {
 	VK_CHECK("queue wait idle", vkQueueWaitIdle(mDevice->GetGraphicsQueue()));
 

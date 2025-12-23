@@ -400,7 +400,7 @@ TransferHelpers::~TransferHelpers() noexcept
 	}
 }
 
-void TransferHelpers::BeginBatch()
+void TransferHelpers::RecordBatch()
 {
 	const VkSemaphoreWaitInfo  wait_info = {
 		.sType = VK_STRUCTURE_TYPE_SEMAPHORE_WAIT_INFO,
@@ -514,7 +514,7 @@ void TransferHelpers::InsertMemoryBarrier(const VkPipelineStageFlags2 src_stage_
 	vkCmdPipelineBarrier2KHR(mCommandBuffer, &dep_info);
 }
 
-void TransferHelpers::EndBatch()
+void TransferHelpers::SubmitBatch()
 {
 	VK_CHECK("end xfer cmd buff", vkEndCommandBuffer(mCommandBuffer));
 
@@ -876,7 +876,7 @@ ComputeHelpers::~ComputeHelpers() noexcept
 		vkDestroySemaphore(mDevice, mSemaphore, nullptr);
 	}
 }
-void ComputeHelpers::BeginBatch()
+void ComputeHelpers::RecordBatch()
 {
 	const VkSemaphoreWaitInfo  wait_info = {
 		.sType = VK_STRUCTURE_TYPE_SEMAPHORE_WAIT_INFO,
@@ -937,7 +937,7 @@ void ComputeHelpers::BuildAccelerationStructure(const std::vector<VkAcceleration
 	vkCmdBuildAccelerationStructuresKHR(mCommandBuffer, static_cast<uint32_t>(std::size(build_geom_infos)), build_geom_infos.data(), range_infos.data());
 }
 
-void ComputeHelpers::EndBatch()
+void ComputeHelpers::SubmitBatch()
 {
 	VK_CHECK("end cmpt cmd buff", vkEndCommandBuffer(mCommandBuffer));
 
@@ -1054,9 +1054,9 @@ BLAccelerationStructure::BLAccelerationStructure(const VkDevice device, const Vm
 
 	std::unique_ptr<HostBufferResource, decltype(host_wait_and_delete)> staging_positions_data(
 		new HostBufferResource(
-			device, allocator, 
+			device, allocator,
 			VK_BUFFER_USAGE_TRANSFER_SRC_BIT, VMA_ALLOCATION_CREATE_HOST_ACCESS_SEQUENTIAL_WRITE_BIT,
-			positions_data, "staging positions data"), 
+			positions_data, "staging positions data"),
 		host_wait_and_delete
 	);
 
@@ -1072,9 +1072,9 @@ BLAccelerationStructure::BLAccelerationStructure(const VkDevice device, const Vm
 
 	std::unique_ptr<HostBufferResource, decltype(host_wait_and_delete)> staging_indices_data(
 		new HostBufferResource(
-			device, allocator, 
+			device, allocator,
 			VK_BUFFER_USAGE_TRANSFER_SRC_BIT, VMA_ALLOCATION_CREATE_HOST_ACCESS_SEQUENTIAL_WRITE_BIT,
-			indices_data, "staging index data"), 
+			indices_data, "staging index data"),
 		host_wait_and_delete
 	);
 
@@ -1083,14 +1083,6 @@ BLAccelerationStructure::BLAccelerationStructure(const VkDevice device, const Vm
 			device, allocator,
 			VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_ACCELERATION_STRUCTURE_BUILD_INPUT_READ_ONLY_BIT_KHR,
 			indices_data.size(), "index data"), device_wait_and_delete
-	);
-
-	compute_helpers->BeginBatch();
-	compute_helpers->CopyBufferToBuffer(staging_positions_data->GetVkBuffer(), positions_buffer->GetVkBuffer(), positions_data.size());
-	compute_helpers->CopyBufferToBuffer(staging_indices_data->GetVkBuffer(), indices_buffer->GetVkBuffer(), indices_data.size());
-	compute_helpers->InsertMemoryBarrier(
-		VK_PIPELINE_STAGE_2_TRANSFER_BIT, VK_ACCESS_2_TRANSFER_WRITE_BIT,
-		VK_PIPELINE_STAGE_2_ACCELERATION_STRUCTURE_BUILD_BIT_KHR, VK_ACCESS_2_SHADER_READ_BIT
 	);
 
 	const VkAccelerationStructureGeometryKHR geom = {
@@ -1161,6 +1153,13 @@ BLAccelerationStructure::BLAccelerationStructure(const VkDevice device, const Vm
 	build_geom_info.dstAccelerationStructure = mAS;
 	build_geom_info.scratchData = scratch_buffer->GetDeviceOrHostAddressKHR();
 
+	compute_helpers->RecordBatch();
+	compute_helpers->CopyBufferToBuffer(staging_positions_data->GetVkBuffer(), positions_buffer->GetVkBuffer(), positions_data.size());
+	compute_helpers->CopyBufferToBuffer(staging_indices_data->GetVkBuffer(), indices_buffer->GetVkBuffer(), indices_data.size());
+	compute_helpers->InsertMemoryBarrier(
+		VK_PIPELINE_STAGE_2_TRANSFER_BIT, VK_ACCESS_2_TRANSFER_WRITE_BIT,
+		VK_PIPELINE_STAGE_2_ACCELERATION_STRUCTURE_BUILD_BIT_KHR, VK_ACCESS_2_SHADER_READ_BIT
+	);
 	compute_helpers->BuildAccelerationStructure(
 		std::vector<VkAccelerationStructureBuildGeometryInfoKHR>
 	{
@@ -1169,7 +1168,7 @@ BLAccelerationStructure::BLAccelerationStructure(const VkDevice device, const Vm
 		build_range_infos
 	);
 
-	compute_helpers->EndBatch();
+	compute_helpers->SubmitBatch();
 
 #ifdef _DEBUG
 	Utils_SetObjectName(device, VK_OBJECT_TYPE_ACCELERATION_STRUCTURE_KHR, reinterpret_cast<uint64_t>(mAS), name);
@@ -1195,7 +1194,7 @@ DeviceBufferResource* BLAccelerationStructure::GetASBuffer() const
 TLAccelerationStructure::TLAccelerationStructure(const VkDevice device, const VmaAllocator allocator, const std::vector<VkAccelerationStructureInstanceKHR>& instances, ComputeHelpers* compute_helpers, const std::string& name)
 	: mDevice(device)
 {
- 	auto host_wait_and_delete = [device, compute_helpers](HostBufferResource* hbr) {
+	auto host_wait_and_delete = [device, compute_helpers](HostBufferResource* hbr) {
 		VkSemaphore sem = compute_helpers->GetSemaphore();
 		const uint64_t sem_value = compute_helpers->GetSemaphoreValueConst();
 
@@ -1208,9 +1207,9 @@ TLAccelerationStructure::TLAccelerationStructure(const VkDevice device, const Vm
 		VK_CHECK("wait for sem", vkWaitSemaphoresKHR(device, &wait_info, UINT64_MAX));
 
 		hbr->~HostBufferResource();
-	};
+		};
 
- 	auto device_wait_and_delete = [device, compute_helpers](DeviceBufferResource* hbr) {
+	auto device_wait_and_delete = [device, compute_helpers](DeviceBufferResource* hbr) {
 		VkSemaphore sem = compute_helpers->GetSemaphore();
 		const uint64_t sem_value = compute_helpers->GetSemaphoreValueConst();
 
@@ -1223,16 +1222,16 @@ TLAccelerationStructure::TLAccelerationStructure(const VkDevice device, const Vm
 		VK_CHECK("wait for sem", vkWaitSemaphoresKHR(device, &wait_info, UINT64_MAX));
 
 		hbr->~DeviceBufferResource();
-	};
+		};
 
 	std::vector<uint8_t> instances_data(instances.size() * sizeof(VkAccelerationStructureInstanceKHR));
 	std::memcpy(instances_data.data(), instances.data(), instances_data.size());
 
 	std::unique_ptr<HostBufferResource, decltype(host_wait_and_delete)> instances_data_staging(
 		new HostBufferResource(
-			device, allocator, 
+			device, allocator,
 			VK_BUFFER_USAGE_TRANSFER_SRC_BIT, VMA_ALLOCATION_CREATE_HOST_ACCESS_SEQUENTIAL_WRITE_BIT,
-			instances_data, "instances staging"), 
+			instances_data, "instances staging"),
 		host_wait_and_delete
 	);
 
@@ -1244,7 +1243,7 @@ TLAccelerationStructure::TLAccelerationStructure(const VkDevice device, const Vm
 		device_wait_and_delete
 	);
 
-	compute_helpers->BeginBatch();
+	compute_helpers->RecordBatch();
 	compute_helpers->CopyBufferToBuffer(instances_data_staging->GetVkBuffer(), instances_data_buffer->GetVkBuffer(), instances_data.size());
 	compute_helpers->InsertMemoryBarrier(
 		VK_PIPELINE_STAGE_2_TRANSFER_BIT, VK_ACCESS_2_TRANSFER_WRITE_BIT,
@@ -1324,7 +1323,7 @@ TLAccelerationStructure::TLAccelerationStructure(const VkDevice device, const Vm
 		build_range_infos
 	);
 
-	compute_helpers->EndBatch();
+	compute_helpers->SubmitBatch();
 
 #ifdef _DEBUG
 	Utils_SetObjectName(device, VK_OBJECT_TYPE_ACCELERATION_STRUCTURE_KHR, reinterpret_cast<uint64_t>(mAS), name);
@@ -1334,7 +1333,7 @@ TLAccelerationStructure::TLAccelerationStructure(const VkDevice device, const Vm
 VkAccelerationStructureKHR TLAccelerationStructure::GetAS() const
 {
 	return mAS;
-	}
+}
 
 DeviceBufferResource* TLAccelerationStructure::GetASBuffer() const
 {

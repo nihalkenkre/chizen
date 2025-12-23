@@ -52,7 +52,7 @@ Viewport::Viewport(const VulkanInterface* vulkan_interface, const std::string& c
 #endif // _DEBUG
 	}
 
-	mTransferHelpers->BeginBatch();
+	mTransferHelpers->RecordBatch();
 	mTransferHelpers->ChangeImageLayout(
 		VK_PIPELINE_STAGE_2_TOP_OF_PIPE_BIT, 0,
 		VK_PIPELINE_STAGE_2_BOTTOM_OF_PIPE_BIT, 0,
@@ -61,7 +61,7 @@ Viewport::Viewport(const VulkanInterface* vulkan_interface, const std::string& c
 		VK_IMAGE_ASPECT_DEPTH_BIT,
 		mDepthTexture->GetImage()
 	);
-	mTransferHelpers->EndBatch();
+	mTransferHelpers->SubmitBatch();
 }
 
 void Viewport::Render(const ViewportScene* scene, const Swapchain* swapchain, const VkExtent2D extent, ImGUIState* imgui_state)

@@ -412,7 +412,7 @@ const std::vector<VkDescriptorSetLayout>& DisplayPipelineData::GetDescriptorSetL
 	return mDescriptorSetLayouts;
 }
 
-Display::Display(const VulkanInterface* vulkan_interface, const std::string& current_path)
+Display::Display(const VulkanInterface* vulkan_interface, const ImageResource* final_render_target, const std::string& current_path)
 {
 	mMaxFramesInFlight = static_cast<uint8_t>(vulkan_interface->GetSwapchain()->GetImagesCount());
 	mTransferHelpers = vulkan_interface->GetTransferHelpers();
@@ -423,7 +423,6 @@ Display::Display(const VulkanInterface* vulkan_interface, const std::string& cur
 
 	mAcquireSignalSemaphores.resize(mMaxFramesInFlight, VK_NULL_HANDLE);
 	mPresentWaitSemaphores.resize(mMaxFramesInFlight, VK_NULL_HANDLE);
-	mDescriptorSets.resize(mMaxFramesInFlight, VK_NULL_HANDLE);
 
 	const VkSemaphoreCreateInfo bin_sem_ci = {
 		.sType = VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO,
@@ -445,6 +444,10 @@ Display::Display(const VulkanInterface* vulkan_interface, const std::string& cur
 
 	VK_CHECK("create dsp", vkCreateDescriptorPool(vulkan_interface->GetVkDevice(), &dp_ci, nullptr, &mDescriptorPool));
 
+#ifdef _DEBUG
+	Utils_SetObjectName(mDevice, VK_OBJECT_TYPE_DESCRIPTOR_POOL, reinterpret_cast<uint64_t>(mDescriptorPool), "display desc pool");
+#endif // _DEBUG
+
 	auto dsls = mPipelineData->GetDescriptorSetLayouts();
 
 	const VkDescriptorSetAllocateInfo ds_ai = {
@@ -453,12 +456,16 @@ Display::Display(const VulkanInterface* vulkan_interface, const std::string& cur
 		.descriptorSetCount = 1,
 		.pSetLayouts = dsls.data(),
 	};
+	VK_CHECK("allocate display desc sets", vkAllocateDescriptorSets(mDevice, &ds_ai, &mDescriptorSet));
+
+#ifdef _DEBUG
+	Utils_SetObjectName(mDevice, VK_OBJECT_TYPE_DESCRIPTOR_SET, reinterpret_cast<uint64_t>(mDescriptorSet), "display desc set");
+#endif // _DEBUG
 
 	for (uint8_t fr = 0; fr < mMaxFramesInFlight; ++fr)
 	{
 		VK_CHECK("create acq sig semaphore", vkCreateSemaphore(mDevice, &bin_sem_ci, nullptr, mAcquireSignalSemaphores.data() + fr));
 		VK_CHECK("create present wait semaphore", vkCreateSemaphore(mDevice, &bin_sem_ci, nullptr, mPresentWaitSemaphores.data() + fr));
-		VK_CHECK("allocate display desc sets", vkAllocateDescriptorSets(mDevice, &ds_ai, mDescriptorSets.data() + fr));
 	}
 
 	float verts[] = {
@@ -501,9 +508,11 @@ Display::Display(const VulkanInterface* vulkan_interface, const std::string& cur
 		VK_BUFFER_USAGE_TRANSFER_SRC_BIT, VMA_ALLOCATION_CREATE_HOST_ACCESS_SEQUENTIAL_WRITE_BIT, verts_data,
 		"staging geometry"), wait_and_delete);
 
-	mTransferHelpers->BeginBatch();
+	mTransferHelpers->RecordBatch();
 	mTransferHelpers->CopyBufferToBuffer(staging_buffer->GetVkBuffer(), mGeometryBuffer->GetVkBuffer(), verts_size);
-	mTransferHelpers->EndBatch();
+	mTransferHelpers->SubmitBatch();
+
+	UpdateFinalRenderTargetDesc(final_render_target);
 }
 
 Display::~Display() noexcept
@@ -520,8 +529,23 @@ Display::~Display() noexcept
 	vkDestroyDescriptorPool(mDevice, mDescriptorPool, nullptr);
 }
 
+void Display::UpdateFinalRenderTargetDesc(const ImageResource* final_render_target)
+{
+	VkDescriptorImageInfo descriptor_info = final_render_target->GetDescriptorInfo();
+	const VkWriteDescriptorSet desc_writes[] = {
+		{
+			.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
+			.dstSet = mDescriptorSet,
+			.descriptorCount = 1,
+			.descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
+			.pImageInfo = &descriptor_info,
+		},
+	};
+
+	vkUpdateDescriptorSets(mDevice, std::size(desc_writes), desc_writes, 0, nullptr);
+}
+
 void Display::Render(
-	const ImageResource* final_render_target,
 	const Swapchain* swapchain, const VkExtent2D extent,
 	const float position_offset[], const float zoom_level, ImGUIState* imgui_state)
 {
@@ -600,25 +624,12 @@ void Display::Render(
 
 	vkCmdBindPipeline(cmd_buff, VK_PIPELINE_BIND_POINT_GRAPHICS, mPipelineData->GetPipeline());
 
-	VkDescriptorImageInfo descriptor_info = final_render_target->GetDescriptorInfo();
-	const VkWriteDescriptorSet desc_writes[] = {
-		{
-			.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
-			.dstSet = mDescriptorSets[frame_in_flight],
-			.descriptorCount = 1,
-			.descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
-			.pImageInfo = &descriptor_info,
-		},
-	};
-
-	vkUpdateDescriptorSets(device, std::size(desc_writes), desc_writes, 0, nullptr);
-
 	const VkBindDescriptorSetsInfo bind_desc_sets_info = {
 		.sType = VK_STRUCTURE_TYPE_BIND_DESCRIPTOR_SETS_INFO,
 		.stageFlags = VK_SHADER_STAGE_VERTEX_BIT,
 		.layout = mPipelineData->GetPipelineLayout(),
 		.descriptorSetCount = 1,
-		.pDescriptorSets = &mDescriptorSets[frame_in_flight],
+		.pDescriptorSets = &mDescriptorSet,
 	};
 
 	vkCmdBindDescriptorSets2KHR(cmd_buff, &bind_desc_sets_info);

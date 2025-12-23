@@ -532,7 +532,7 @@ void VulkanRaytracer::InitializeResources()
 		hbr->~HostBufferResource();
 		};
 
-	mTransferHelpers->BeginBatch();
+	mTransferHelpers->RecordBatch();
 	mTransferHelpers->ChangeImageLayout(
 		VK_PIPELINE_STAGE_2_TOP_OF_PIPE_BIT, 0,
 		VK_PIPELINE_STAGE_2_BOTTOM_OF_PIPE_BIT, 0,
@@ -569,7 +569,7 @@ void VulkanRaytracer::InitializeResources()
 	);
 
 	mTransferHelpers->CopyBufferToBuffer(rand_states_staging->GetVkBuffer(), mRandomStates->GetVkBuffer(), rand_states_data.size());
-	mTransferHelpers->EndBatch();
+	mTransferHelpers->SubmitBatch();
 
 	const uint32_t aligned_handle_size = static_cast<uint32_t>(ALIGNED_SIZE(mRayTracingProperties.shaderGroupHandleSize, mRayTracingProperties.shaderGroupHandleAlignment));
 	const uint32_t sbt_size = aligned_handle_size * static_cast<uint32_t>(std::size(mPipelineData->GetShaderGroups()));

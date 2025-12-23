@@ -4,6 +4,7 @@
 #include "display.hpp"
 #include "vulkan_raytracer.hpp"
 #include "embree_raytracer.hpp"
+#include "sw_rasterizer.hpp"
 #include "imgui_state.hpp"
 #include "utils.hpp"
 #include "vulkan_objects.hpp"
@@ -12,13 +13,14 @@
 #include "viewport_scene.hpp"
 #include "embree_raytracer_scene.hpp"
 #include "vulkan_raytracer_scene.hpp"
+#include "sw_rasterizer_scene.hpp"
 #include "events.hpp"
 
 App::App(SDL_Window* window, const std::string& current_path) : mWindow(window)
 {
 	mVulkanInterface = std::make_unique<VulkanInterface>(window);
 	mImGUIState = std::make_unique<ImGUIState>(mVulkanInterface.get());
-	mRasterizerScene = std::make_unique<ViewportEmptyScene>();
+	mViewportScene = std::make_unique<ViewportEmptyScene>();
 	mCurrentPath = current_path;
 
 	VkExtent3D extent = VkExtent3D{ mFinalRenderTargetExtent.width, mFinalRenderTargetExtent.height, 1 };
@@ -28,26 +30,27 @@ App::App(SDL_Window* window, const std::string& current_path) : mWindow(window)
 		std::vector<uint32_t>{ mVulkanInterface->GetPhysicalDeviceData()->GraphicsQueueFamilyIndex, mVulkanInterface->GetPhysicalDeviceData()->ComputeQueueFamilyIndex, mVulkanInterface->GetPhysicalDeviceData()->TransferQueueFamilyIndex },
 		"final render target");
 
-	mEmbreeRenderTarget = std::make_unique<HostBufferResource>(
+	mStagingRenderTarget = std::make_unique<HostBufferResource>(
 		mVulkanInterface->GetVkDevice(), mVulkanInterface->GetVmaAllocator(),
 		VK_BUFFER_USAGE_TRANSFER_SRC_BIT, VMA_ALLOCATION_CREATE_HOST_ACCESS_RANDOM_BIT,
 		mFinalRenderTargetExtent.width * mFinalRenderTargetExtent.height * 4 * sizeof(float), "embree render target"
 	);
 
 	auto transfer_objects = mVulkanInterface->GetTransferHelpers();
-	transfer_objects->BeginBatch();
+	transfer_objects->RecordBatch();
 	transfer_objects->ChangeImageLayout(
 		VK_PIPELINE_STAGE_2_TOP_OF_PIPE_BIT, 0,
 		VK_PIPELINE_STAGE_2_BOTTOM_OF_PIPE_BIT, 0,
 		VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_GENERAL,
 		VK_QUEUE_FAMILY_IGNORED, VK_QUEUE_FAMILY_IGNORED, VK_IMAGE_ASPECT_COLOR_BIT,
 		mFinalRenderTarget->GetImage());
-	transfer_objects->EndBatch();
+	transfer_objects->SubmitBatch();
 
-	mRasterizer = std::make_unique<Viewport>(mVulkanInterface.get(), current_path, "rasterizer");
-	mDisplay = std::make_unique<Display>(mVulkanInterface.get(), current_path);
+	mViewport = std::make_unique<Viewport>(mVulkanInterface.get(), current_path, "rasterizer");
+	mDisplay = std::make_unique<Display>(mVulkanInterface.get(), mFinalRenderTarget.get(), current_path);
 	mVulkanRaytracer = std::make_unique<VulkanRaytracer>(mVulkanInterface.get(), extent, current_path, "vulkan raytracer");
 	mEmbreeRaytracer = std::make_unique<EmbreeRaytracer>();
+	mSWRasterizer = std::make_unique<SWRasterizer>();
 }
 
 void App::ProcessEvent(SDL_Event* event)
@@ -94,7 +97,7 @@ void App::ProcessEvent(SDL_Event* event)
 	}
 	else if (event->type == SDL_EVENT_WINDOW_RESIZED)
 	{
-		RecreateRasterSwapchain();
+		RecreateViewportSwapchain();
 	}
 	else if (event->type == SDL_EVENT_KEY_DOWN)
 	{
@@ -112,7 +115,7 @@ void App::ProcessEvent(SDL_Event* event)
 
 		mImGUIState->SetCameraNames(scene.GetCameraNames());
 
-		mRasterizerScene = std::make_unique<ViewportWorldScene>(
+		mViewportScene = std::make_unique<ViewportWorldScene>(
 			scene,
 			mVulkanInterface->GetVkDevice(),
 			mVulkanInterface->GetVmaAllocator(),
@@ -134,9 +137,9 @@ void App::ProcessEvent(SDL_Event* event)
 	}
 	else if (event->type == events.StartRaytrace.type)
 	{
-		mRaytracerType = events.StartRaytrace.user.code;
+		mRenderType = events.StartRaytrace.user.code;
 
-		if (mRaytracerType == 0)
+		if (mRenderType == 0)
 		{
 			if (mVulkanRaytracerScene != nullptr)
 			{
@@ -156,12 +159,12 @@ void App::ProcessEvent(SDL_Event* event)
 					mMaxSamples = tmp_max_samples;
 				}
 
-				mRaytraceThread = std::thread(&VulkanRaytracer::Start, mVulkanRaytracer.get(), mVulkanRaytracerScene.get(), mFinalRenderTarget.get(), mMaxSamples);
-				mRaytraceThread.detach();
-				SDL_CHECK(SDL_PushEvent(&events.RaytraceStarted));
+				mRenderThread = std::thread(&VulkanRaytracer::Start, mVulkanRaytracer.get(), mVulkanRaytracerScene.get(), mFinalRenderTarget.get(), mMaxSamples);
+				mRenderThread.detach();
+				SDL_CHECK(SDL_PushEvent(&events.RenderStarted));
 			}
 		}
-		else if (mRaytracerType == 1)
+		else if (mRenderType == 1)
 		{
 			if (mEmbreeRaytacerScene != nullptr)
 			{
@@ -181,40 +184,65 @@ void App::ProcessEvent(SDL_Event* event)
 					mMaxSamples = tmp_max_samples;
 				}
 
-				mRaytraceThread = std::thread(&EmbreeRaytracer::Start, mEmbreeRaytracer.get(), mEmbreeRaytacerScene.get(), mMaxSamples, reinterpret_cast<float*>(mEmbreeRenderTarget->GetAllocationInfo2().allocationInfo.pMappedData));
-				mRaytraceThread.detach();
-				SDL_CHECK(SDL_PushEvent(&events.RaytraceStarted));
+				mRenderThread = std::thread(&EmbreeRaytracer::Start, mEmbreeRaytracer.get(), mEmbreeRaytacerScene.get(), mFinalRenderTargetExtent.width, mFinalRenderTargetExtent.height, mMaxSamples, reinterpret_cast<float*>(mStagingRenderTarget->GetAllocationInfo2().allocationInfo.pMappedData));
+				mRenderThread.detach();
+				SDL_CHECK(SDL_PushEvent(&events.RenderStarted));
+			}
+		}
+		else if (mRenderType == 2)
+		{
+			if (mSWRasterizerScene != nullptr)
+			{
+				int* tmp_render_target_extent = mImGUIState->GetFinalRenderTargetExtent();
+
+				if (mFinalRenderTargetExtent.width != tmp_render_target_extent[0] ||
+					mFinalRenderTargetExtent.height != tmp_render_target_extent[1])
+				{
+					mFinalRenderTargetExtent.width = tmp_render_target_extent[0];
+					mFinalRenderTargetExtent.height = tmp_render_target_extent[1];
+					RecreateRenderTarget();
+				}
+
+				int& tmp_max_samples = mImGUIState->GetMaxSamples();
+				if (mMaxSamples != tmp_max_samples)
+				{
+					mMaxSamples = tmp_max_samples;
+				}
+
+				mRenderThread = std::thread(&SWRasterizer::Start, mSWRasterizer.get(), mSWRasterizerScene.get(), mFinalRenderTargetExtent.width, mFinalRenderTargetExtent.height, mMaxSamples, reinterpret_cast<float*>(mStagingRenderTarget->GetAllocationInfo2().allocationInfo.pMappedData));
+				mRenderThread.detach();
+				SDL_CHECK(SDL_PushEvent(&events.RenderStarted));
 			}
 		}
 	}
-	else if (event->type == events.StopRaytrace.type)
+	else if (event->type == events.StopRender.type)
 	{
 		StopRaytracing();
 	}
-	else if (event->type == events.RaytraceStarted.type)
+	else if (event->type == events.RenderStarted.type)
 	{
 		mDisplayRender = true;
 	}
 	else if (event->type == events.RaytraceStopped.type)
 	{
-		if (mRaytracerType == 1)
+		if (mRenderType == 1 || mRenderType == 2)
 		{
-			mVulkanInterface->GetTransferHelpers()->BeginBatch();
+			mVulkanInterface->GetTransferHelpers()->RecordBatch();
 			mVulkanInterface->GetTransferHelpers()->CopyBufferToImage(
-				mEmbreeRenderTarget->GetVkBuffer(), mFinalRenderTarget->GetImage(), mFinalRenderTargetExtent
+				mStagingRenderTarget->GetVkBuffer(), mFinalRenderTarget->GetImage(), mFinalRenderTargetExtent
 			);
-			mVulkanInterface->GetTransferHelpers()->EndBatch();
+			mVulkanInterface->GetTransferHelpers()->SubmitBatch();
 		}
 	}
-	else if (event->type == events.RaytraceSampleDone.type)
+	else if (event->type == events.RenderSampleDone.type)
 	{
-		if (mRaytracerType == 1)
+		if (mRenderType == 1 || mRenderType == 2)
 		{
-			mVulkanInterface->GetTransferHelpers()->BeginBatch();
+			mVulkanInterface->GetTransferHelpers()->RecordBatch();
 			mVulkanInterface->GetTransferHelpers()->CopyBufferToImage(
-				mEmbreeRenderTarget->GetVkBuffer(), mFinalRenderTarget->GetImage(), mFinalRenderTargetExtent
+				mStagingRenderTarget->GetVkBuffer(), mFinalRenderTarget->GetImage(), mFinalRenderTargetExtent
 			);
-			mVulkanInterface->GetTransferHelpers()->EndBatch();
+			mVulkanInterface->GetTransferHelpers()->SubmitBatch();
 		}
 	}
 
@@ -231,14 +259,14 @@ void App::Iterate()
 
 void App::RunRasterizer()
 {
-	mRasterizer->Render(mRasterizerScene.get(), mVulkanInterface->GetSwapchain(),
+	mViewport->Render(mViewportScene.get(), mVulkanInterface->GetSwapchain(),
 		mVulkanInterface->GetSurfaceKHR()->GetSurfaceCapabilities().surfaceCapabilities.currentExtent,
 		mImGUIState.get());
 }
 
 void App::RunDisplay()
 {
-	mDisplay->Render(mFinalRenderTarget.get(), mVulkanInterface->GetSwapchain(), 
+	mDisplay->Render(mVulkanInterface->GetSwapchain(), 
 		mVulkanInterface->GetSurfaceKHR()->GetSurfaceCapabilities().surfaceCapabilities.currentExtent,
 		mDeltaMousePosition, mZoomLevel, mImGUIState.get()
 	);
@@ -256,44 +284,44 @@ void App::RecreateRenderTarget()
 		queue_family_indices,
 		"final render target");
 
-	mEmbreeRenderTarget = std::make_unique<HostBufferResource>(
+	mStagingRenderTarget = std::make_unique<HostBufferResource>(
 		mVulkanInterface->GetVkDevice(), mVulkanInterface->GetVmaAllocator(),
 		VK_BUFFER_USAGE_TRANSFER_SRC_BIT, VMA_ALLOCATION_CREATE_HOST_ACCESS_RANDOM_BIT,
 		mFinalRenderTargetExtent.width * mFinalRenderTargetExtent.height * 4 * sizeof(float),
-		"embree render target"
+		"staging render target"
 	);
 
 	auto transfer_objects = mVulkanInterface->GetTransferHelpers();
-	transfer_objects->BeginBatch();
+	transfer_objects->RecordBatch();
 	transfer_objects->ChangeImageLayout(
 		VK_PIPELINE_STAGE_2_TOP_OF_PIPE_BIT, 0,
 		VK_PIPELINE_STAGE_2_BOTTOM_OF_PIPE_BIT, 0,
 		VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_GENERAL,
 		VK_QUEUE_FAMILY_IGNORED, VK_QUEUE_FAMILY_IGNORED, VK_IMAGE_ASPECT_COLOR_BIT,
 		mFinalRenderTarget->GetImage());
-	transfer_objects->EndBatch();
+	transfer_objects->SubmitBatch();
 
-	mEmbreeRaytracer->RecreateRenderResources(extent.width, extent.height);
+	mDisplay->UpdateFinalRenderTargetDesc(mFinalRenderTarget.get());
 	mVulkanRaytracer->RecreateRenderResources(mFinalRenderTargetExtent);
 }
 
 void App::StopRaytracing()
 {
-	if (mRaytracerType == 0)
+	if (mRenderType == 0)
 	{
 		mVulkanRaytracer->Stop();
 
 	}
-	else if (mRaytracerType == 1)
+	else if (mRenderType == 1)
 	{
 		mEmbreeRaytracer->Stop();
 	}
 }
 
-void App::RecreateRasterSwapchain()
+void App::RecreateViewportSwapchain()
 {
-	mVulkanInterface->RecreateRasterSwapchain();
-	mRasterizer->RecreateDepthTexture(mVulkanInterface->GetSurfaceKHR()->GetSurfaceCapabilities().surfaceCapabilities.currentExtent);
+	mVulkanInterface->RecreateViewportSwapchain();
+	mViewport->RecreateDepthTexture(mVulkanInterface->GetSurfaceKHR()->GetSurfaceCapabilities().surfaceCapabilities.currentExtent);
 }
 
 VulkanInterface* App::GetVulkanInterface() const
@@ -303,7 +331,7 @@ VulkanInterface* App::GetVulkanInterface() const
 
 Viewport* App::GetRasterizer() const
 {
-	return mRasterizer.get();
+	return mViewport.get();
 }
 
 Display* App::GetDisplay() const

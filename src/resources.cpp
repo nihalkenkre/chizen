@@ -2,7 +2,7 @@
 #include "utils.hpp"
 
 ImageResource::ImageResource(const VkDevice device, const VkExtent3D& extent, const VkFormat format, const VkImageUsageFlags usage, const VmaAllocator allocator, const std::vector<uint32_t>& queue_family_indices, const std::string& name)
-	:mExtent(extent), mAllocator(allocator), mDevice(device)
+	: mExtent(extent), mAllocator(allocator), mDevice(device)
 {
 	mDescriptorInfo = {
 		.imageLayout = VK_IMAGE_LAYOUT_GENERAL,

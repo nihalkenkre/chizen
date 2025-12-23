@@ -3,7 +3,7 @@
 #include "events.hpp"
 #include "utils.hpp"
 
-void EmbreeRaytracer::Start(const EmbreeRaytracerScene* scene, const uint32_t max_samples, float* pixels)
+void EmbreeRaytracer::Start(const EmbreeRaytracerScene* scene, const uint32_t width, const uint32_t height, const uint32_t max_samples, float* pixels)
 {
 	for (uint32_t s = 1; s <= max_samples; ++s)
 	{
@@ -65,7 +65,7 @@ void EmbreeRaytracer::Start(const EmbreeRaytracerScene* scene, const uint32_t ma
 				}
 			});
 
-		SDL_PushEvent(&events.RaytraceSampleDone);
+		SDL_PushEvent(&events.RenderSampleDone);
 		if (mStopRendering) break;
 	}
 
@@ -80,10 +80,4 @@ void EmbreeRaytracer::Stop()
 
 EmbreeRaytracer::~EmbreeRaytracer() noexcept
 {
-}
-
-void EmbreeRaytracer::RecreateRenderResources(const uint32_t width, const uint32_t height)
-{
-	mWidth = width;
-	mHeight = height;
 }

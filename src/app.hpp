@@ -5,12 +5,14 @@ class Viewport;
 class Display;
 class VulkanRaytracer;
 class EmbreeRaytracer;
+class SWRasterizer;
 class ImGUIState;
 class ImageResource;
 class HostBufferResource;
 class ViewportScene;
 class VulkanRaytracerScene;
 class EmbreeRaytracerScene;
+class SWRasterizerScene;
 
 class App
 {
@@ -30,7 +32,7 @@ public:
 	void RecreateRenderTarget();
 	void StopRaytracing();
 
-	void RecreateRasterSwapchain();
+	void RecreateViewportSwapchain();
 
 	VulkanInterface* GetVulkanInterface() const;
 	Viewport* GetRasterizer() const;
@@ -57,20 +59,22 @@ private:
 	uint32_t mMaxSamples = 1024;
 	std::string mCurrentPath;
 	std::unique_ptr<VulkanInterface> mVulkanInterface = nullptr;
-	std::unique_ptr<Viewport> mRasterizer = nullptr;
+	std::unique_ptr<Viewport> mViewport = nullptr;
 	std::unique_ptr<Display> mDisplay = nullptr;
 	std::unique_ptr<VulkanRaytracer> mVulkanRaytracer = nullptr;
 	std::unique_ptr<EmbreeRaytracer> mEmbreeRaytracer = nullptr;
 	std::unique_ptr<ImGUIState> mImGUIState = nullptr;
-	std::unique_ptr<ViewportScene> mRasterizerScene = nullptr;
+	std::unique_ptr<ViewportScene> mViewportScene = nullptr;
 	std::unique_ptr<VulkanRaytracerScene> mVulkanRaytracerScene = nullptr;
 	std::unique_ptr<EmbreeRaytracerScene> mEmbreeRaytacerScene = nullptr;
+	std::unique_ptr<SWRasterizerScene> mSWRasterizerScene = nullptr;
+	std::unique_ptr<SWRasterizer> mSWRasterizer = nullptr;
 	std::unique_ptr<ImageResource> mFinalRenderTarget = nullptr;
-	std::unique_ptr<HostBufferResource> mEmbreeRenderTarget = nullptr;
+	std::unique_ptr<HostBufferResource> mStagingRenderTarget = nullptr;
 	SDL_Window* mWindow = nullptr;
 	VkExtent2D mFinalRenderTargetExtent = { 1280, 720 };
-	std::thread mRaytraceThread = {};
+	std::thread mRenderThread = {};
 	bool mIsTrackingMouse = false;
 	bool mDisplayRender = false;
-	uint8_t mRaytracerType = 0;
+	uint8_t mRenderType = 0;
 };
