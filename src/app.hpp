@@ -27,10 +27,10 @@ public:
 
 	void ProcessEvent(SDL_Event* event);
 	void Iterate();
-	void RunRasterizer();
+	void RunViewport();
 	void RunDisplay();
 	void RecreateRenderTarget();
-	void StopRaytracing();
+	void StopRendering();
 
 	void RecreateViewportSwapchain();
 

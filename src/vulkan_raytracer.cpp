@@ -602,7 +602,7 @@ void VulkanRaytracer::RecreateRenderResources(const VkExtent2D& extent)
 	InitializeResources();
 }
 
-void VulkanRaytracer::Start(const VulkanRaytracerScene* scene, const ImageResource* final_render_target, const uint32_t max_samples)
+void VulkanRaytracer::Start(const VulkanRaytracerScene* scene, const ImageResource* final_render_target, const uint32_t max_samples, const uint32_t cam_index)
 {
 	VkDevice device = mDevice;
 	VkCommandBuffer cmd_buff = mFrameObjects->GetCommandBuffer();
@@ -797,7 +797,7 @@ void VulkanRaytracer::Start(const VulkanRaytracerScene* scene, const ImageResour
 
 	mStopRendering = false;
 
-	SDL_CHECK(SDL_PushEvent(&events.RaytraceStopped));
+	SDL_CHECK(SDL_PushEvent(&events.RenderStopped));
 }
 
 void VulkanRaytracer::Stop()

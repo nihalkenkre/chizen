@@ -74,7 +74,7 @@ void ImGUIState::ProcessEvent(SDL_Event* event)
 	{
 		mRaytracingStarted = true;
 	}
-	else if (event->type == events.RaytraceStopped.type)
+	else if (event->type == events.RenderStopped.type)
 	{
 		mRaytracingStarted = false;
 	}
@@ -173,8 +173,8 @@ void ImGUIState::Render(const VkCommandBuffer cmd_buff)
 
 	if (ImGui::Button("Render"))
 	{
-		events.StartRaytrace.user.code = mSelectedRendererIndex;
-		SDL_CHECK(SDL_PushEvent(&events.StartRaytrace));
+		events.StartRender.user.code = mSelectedRendererIndex;
+		SDL_CHECK(SDL_PushEvent(&events.StartRender));
 	}
 
 	ImGui::EndDisabled();

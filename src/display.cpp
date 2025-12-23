@@ -704,7 +704,7 @@ void Display::Render(
 		{
 			.sType = VK_STRUCTURE_TYPE_SEMAPHORE_SUBMIT_INFO,
 			.semaphore = mTransferHelpers->GetSemaphore(),
-			.value = mTransferHelpers->GetSemaphoreValue(),
+			.value = mTransferHelpers->GetSemaphoreValueConst(),
 			.stageMask = VK_PIPELINE_STAGE_2_FRAGMENT_SHADER_BIT,
 		}
 	};

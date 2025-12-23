@@ -21,7 +21,7 @@ public:
 	~VulkanRaytracer() noexcept;
 
 	void RecreateRenderResources(const VkExtent2D& extent);
-	void Start(const VulkanRaytracerScene* scene, const ImageResource* final_render_target, const uint32_t max_samples);
+	void Start(const VulkanRaytracerScene* scene, const ImageResource* final_render_target, const uint32_t max_samples, const uint32_t cam_index);
 	void Stop();
 
 	FrameObjects* GetFrameObjects() const;

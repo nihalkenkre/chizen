@@ -497,7 +497,7 @@ ViewportWorldScene::ViewportWorldScene(const Scene& scene, const VkDevice device
 		VK_CHECK("wait for sem", vkWaitSemaphoresKHR(device, &wait_info, UINT64_MAX));
 
 		hbr->~HostBufferResource();
-		};
+	};
 
 	auto vertex_data = scene.GetVertexData();
 

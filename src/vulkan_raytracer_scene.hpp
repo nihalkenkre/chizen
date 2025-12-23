@@ -1,7 +1,6 @@
 #pragma once
 
-#include "scene.hpp"
-
+class Scene;
 class ComputeHelpers;
 class DeviceBufferResource;
 class BLAccelerationStructure;
@@ -21,10 +20,11 @@ public:
 
 	VkAccelerationStructureKHR GetTLAS() const;
 
-
 private:
 	std::unique_ptr<TLAccelerationStructure> mTLAS;
 	std::vector<std::unique_ptr<BLAccelerationStructure>> mBLASes;
+
+	std::unique_ptr<DeviceBufferResource> mUniformData = nullptr;
 
 	VkDescriptorPool mDescPool = VK_NULL_HANDLE;
 	VkDevice mDevice = VK_NULL_HANDLE;

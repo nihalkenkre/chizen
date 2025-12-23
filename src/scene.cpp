@@ -79,47 +79,47 @@ const std::vector<Scene::MeshInstance>& Scene::GetMeshInstances() const
 	return mMeshInstances;
 }
 
-const std::vector<Scene::Mesh> Scene::GetMeshes() const
+const std::vector<Scene::Mesh>& Scene::GetMeshes() const
 {
 	return mMeshes;
 }
 
-const std::vector<Scene::CameraInstance> Scene::GetCameraInstances() const
+const std::vector<Scene::CameraInstance>& Scene::GetCameraInstances() const
 {
 	return mCameraInstances;
 }
 
-const std::vector<Scene::Camera> Scene::GetCameras() const
+const std::vector<Scene::Camera>& Scene::GetCameras() const
 {
 	return mCameras;
 }
 
-const std::vector<Scene::Image> Scene::GetImages() const
+const std::vector<Scene::Image>& Scene::GetImages() const
 {
 	return mImages;
 }
 
-const std::vector<Scene::Material> Scene::GetMaterials() const
+const std::vector<Scene::Material>& Scene::GetMaterials() const
 {
 	return mMaterials;
 }
 
-const std::vector<std::string> Scene::GetCameraNames() const
+const std::vector<std::string>& Scene::GetCameraNames() const
 {
 	return mCameraNames;
 }
 
-const std::vector<uint8_t> Scene::GetVertexData() const
+const std::vector<uint8_t>& Scene::GetVertexData() const
 {
 	return mPositionsData;
 }
 
-const std::vector<uint8_t> Scene::GetUniformData() const
+const std::vector<uint8_t>& Scene::GetUniformData() const
 {
 	return mUniformData;
 }
 
-const std::vector<uint8_t> Scene::GetImagesData() const
+const std::vector<uint8_t>& Scene::GetImagesData() const
 {
 	return mImagesData;
 }
@@ -380,7 +380,7 @@ Scene::Camera::Camera(const size_t proj_mat_offset)
 {
 }
 
-size_t Scene::Camera::GetProjMatOffset() const
+size_t Scene::Camera::GetProjectionMatrixOffset() const
 {
 	return mProjMatrixOffset;
 }

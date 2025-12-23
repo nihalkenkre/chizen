@@ -51,7 +51,7 @@ SDL_AppResult SDL_AppEvent(void* appstate, SDL_Event* event)
 
 	if (event->type == SDL_EVENT_QUIT)
 	{
-		app->StopRaytracing();
+		app->StopRendering();
 		return SDL_APP_SUCCESS;
 	}
 	else {

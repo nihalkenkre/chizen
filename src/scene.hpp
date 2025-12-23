@@ -100,7 +100,7 @@ public:
 		Camera() {}
 		Camera(const size_t proj_mat_offset);
 
-		size_t GetProjMatOffset() const;
+		size_t GetProjectionMatrixOffset() const;
 
 	private:
 		size_t mProjMatrixOffset = 0;
@@ -138,17 +138,17 @@ public:
 	};
 
 	const std::vector<MeshInstance>& GetMeshInstances() const;
-	const std::vector<Mesh> GetMeshes() const;
-	const std::vector<CameraInstance> GetCameraInstances() const;
-	const std::vector<Camera> GetCameras() const;
-	const std::vector<Image> GetImages() const;
-	const std::vector<Material> GetMaterials() const;
+	const std::vector<Scene::Mesh>& GetMeshes() const;
+	const std::vector<Scene::CameraInstance>& GetCameraInstances() const;
+	const std::vector<Scene::Camera>& GetCameras() const;
+	const std::vector<Image>& GetImages() const;
+	const std::vector<Material>& GetMaterials() const;
 
-	const std::vector<std::string> GetCameraNames() const;
+	const std::vector<std::string>& GetCameraNames() const;
 
-	const std::vector<uint8_t> GetVertexData() const;
-	const std::vector<uint8_t> GetUniformData() const;
-	const std::vector<uint8_t> GetImagesData() const;
+	const std::vector<uint8_t>& GetVertexData() const;
+	const std::vector<uint8_t>& GetUniformData() const;
+	const std::vector<uint8_t>& GetImagesData() const;
 
 private:
 	void AddMeshInstance(const cgltf_data* gltf, const cgltf_node* node, const VkDeviceSize uniform_buffer_alignment);
