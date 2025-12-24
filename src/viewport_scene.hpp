@@ -30,7 +30,7 @@ public:
 	class MeshInstance : public Scene::MeshInstance
 	{
 	public:
-		MeshInstance(const Scene::MeshInstance& mesh_instance, const DeviceBufferResource* scene_data, const VkDevice device, const VkDescriptorPool desc_pool, const VkDescriptorSetLayout desc_set_layout);
+		MeshInstance(const Scene::MeshInstance& mesh_instance, const DeviceBufferResource* uniform_data, const VkDevice device, const VkDescriptorPool desc_pool, const VkDescriptorSetLayout desc_set_layout);
 
 		~MeshInstance() noexcept;
 
@@ -94,7 +94,7 @@ public:
 	class CameraInstance : public Scene::CameraInstance
 	{
 	public:
-		CameraInstance(const Scene::CameraInstance& camera_instance, const DeviceBufferResource* scene_data, const VkDevice device, const VkDescriptorPool desc_pool, const VkDescriptorSetLayout desc_set_layout);
+		CameraInstance(const Scene::CameraInstance& camera_instance, const DeviceBufferResource* uniform_data, const VkDevice device, const VkDescriptorPool desc_pool, const VkDescriptorSetLayout desc_set_layout);
 
 		VkDescriptorSet GetViewProjDescSet() const;
 
@@ -127,6 +127,9 @@ private:
 	// All the descs in the scene
 	VkDescriptorPool mDescriptorPool = VK_NULL_HANDLE;
 	VkDescriptorSet mMaterialTexturesDescSet = VK_NULL_HANDLE;
+	VkDescriptorBufferInfo mMatricesDescBufferInfo = {};
+	VkDescriptorSet mCameraMatrixDescSet = VK_NULL_HANDLE;
+	VkDescriptorSet mModelMatrixDescSet = VK_NULL_HANDLE;
 	VkSampler mNullSampler = VK_NULL_HANDLE;
 	VkDevice mDevice = VK_NULL_HANDLE;
 };

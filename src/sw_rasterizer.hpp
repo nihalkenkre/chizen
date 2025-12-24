@@ -30,7 +30,7 @@ public:
 			pixels[pixel_offset] = static_cast<uint8_t>(mColor.b);
 			pixels[pixel_offset + 1] = static_cast<uint8_t>(mColor.g);
 			pixels[pixel_offset + 2] = static_cast<uint8_t>(mColor.r);
-			pixels[pixel_offset + 3] = 1;// static_cast<uint8_t>(mColor.r);
+			pixels[pixel_offset + 3] = 1;
 		}
 
 		glm::vec3 mPosition = glm::vec3(0.f);
@@ -94,6 +94,7 @@ public:
 				}
 			}
 		}
+
 		void Draw(float* pixels, const size_t width, const size_t height) const
 		{
 			for (const auto& point : mPoints)

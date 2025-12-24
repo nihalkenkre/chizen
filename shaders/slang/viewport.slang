@@ -14,8 +14,7 @@ struct VSOutput
 
 struct ViewProj
 {
-    float4x4 view;
-    float4x4 proj;
+    float4x4 view_proj;
 }
 
 struct Model
@@ -32,7 +31,7 @@ ConstantBuffer<Model> model;
 VSOutput vertex_main(VSInput in)
 {
     VSOutput out = {
-        mul(view_proj.proj, mul(view_proj.view, mul(model.model, float4(in.pos, 1)))),
+        mul(view_proj.view_proj, mul(model.model, float4(in.pos, 1))),
         in.nrm,
         in.uv,
     };

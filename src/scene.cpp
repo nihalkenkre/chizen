@@ -31,7 +31,6 @@ Scene::Scene(const std::string& path, const VkDeviceSize uniform_buffer_alignmen
 		else if (curr_node->camera != nullptr)
 		{
 			AddCameraInstance(gltf, curr_node, uniform_buffer_alignment);
-			AddCamera(curr_node->camera, cgltf_camera_index(gltf, curr_node->camera), uniform_buffer_alignment);
 		}
 	}
 
@@ -159,15 +158,41 @@ void Scene::AddMeshInstance(const cgltf_data* gltf, const cgltf_node* node, cons
 
 void Scene::AddCameraInstance(const cgltf_data* gltf, const cgltf_node* node, const VkDeviceSize uniform_buffer_alignments)
 {
-	glm::mat4 xform_matrix = glm::inverse(Utils_GetTransformForGLTFNode(node));
+	glm::mat4 view_proj_matrix = glm::inverse(Utils_GetTransformForGLTFNode(node));
 	size_t camera_index = cgltf_camera_index(gltf, node->camera);
+
+	cgltf_camera* camera = node->camera;
+
+	if (camera->type == cgltf_camera_type_perspective)
+	{
+		cgltf_camera_perspective persp_data = camera->data.perspective;
+		auto proj_mat = glm::perspective(
+			persp_data.yfov,
+			persp_data.has_aspect_ratio ? persp_data.aspect_ratio : 1.777f,
+			persp_data.znear,
+			persp_data.zfar
+		);
+		proj_mat[1][1] *= -1;
+
+		view_proj_matrix = proj_mat * view_proj_matrix;
+	}
+	else if (camera->type == cgltf_camera_type_orthographic)
+	{
+		cgltf_camera_orthographic ortho_data = camera->data.orthographic;
+		auto proj_mat = glm::ortho(
+			-ortho_data.xmag / 2.f, ortho_data.xmag / 2.f,
+			-ortho_data.ymag / 2.f, ortho_data.ymag / 2.f,
+			ortho_data.znear, ortho_data.zfar);
+		proj_mat[1][1] *= -1;
+		view_proj_matrix = proj_mat * view_proj_matrix;
+	}
 
 	mCameraInstances.push_back(CameraInstance(camera_index, mUniformData.size(), node->name == nullptr ? "scene cam" : node->name));
 
-	std::vector<uint8_t> xform_data(ALIGNED_SIZE(sizeof(glm::mat4), uniform_buffer_alignments));
-	std::memcpy(xform_data.data(), &xform_matrix, sizeof(glm::mat4));
+	std::vector<uint8_t> view_proj_data(ALIGNED_SIZE(sizeof(glm::mat4), uniform_buffer_alignments));
+	std::memcpy(view_proj_data.data(), &view_proj_matrix, sizeof(glm::mat4));
 
-	mUniformData.append_range(xform_data);
+	mUniformData.append_range(view_proj_data);
 
 	mCameraNames.push_back(node->name == nullptr ? "scene cam" : node->name);
 }
@@ -316,12 +341,8 @@ void Scene::AddMaterial(const cgltf_data* gltf, const cgltf_material* material)
 		}
 		std::memcpy(&base_color_factor, material->pbr_metallic_roughness.base_color_factor, sizeof(glm::vec4));
 	}
-	if (material->normal_texture.texture != nullptr)
-	{
-		normal_color_index = static_cast<int32_t>(cgltf_image_index(gltf, material->normal_texture.texture->image));
-	}
 
-	mMaterials.push_back(Scene::Material(base_color_index, normal_color_index, base_color_factor));
+	mMaterials.push_back(Scene::Material(base_color_index, base_color_factor));
 }
 
 void Scene::AddImage(const cgltf_image* image)
