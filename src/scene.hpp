@@ -85,12 +85,16 @@ public:
 		CameraInstance(const size_t camera_index, const size_t view_matrix_offset, const char* name = "scene cam");
 
 		size_t GetCameraIndex() const;
+		size_t GetViewProjMatrixOffset() const;
 		size_t GetViewMatrixOffset() const;
+		size_t GetProjMatrixOffset() const;
 		const std::string& GetName() const;
 
 	private:
 		size_t mCameraIndex = 0;
+		size_t mViewProjMatrixOffset = 0;
 		size_t mViewMatrixOffset = 0;
+		size_t mProjMatrixOffset = 0;
 		std::string mName = "scene cam";
 	};
 
@@ -150,7 +154,7 @@ private:
 	void AddMeshInstance(const cgltf_data* gltf, const cgltf_node* node, const VkDeviceSize uniform_buffer_alignment);
 	void AddCameraInstance(const cgltf_data* gltf, const cgltf_node* node, const VkDeviceSize uniform_buffer_alignment);
 	void AddMesh(const cgltf_data* gltf, const cgltf_mesh* mesh, const size_t mesh_index);
-	void AddCamera(const cgltf_camera* camera, const size_t camera_index, const VkDeviceSize uniform_buffer_alignment);
+	void AddCamera(const cgltf_camera* camera, const VkDeviceSize uniform_buffer_alignment);
 	void AddMaterial(const cgltf_data* gltf, const cgltf_material* material);
 	void AddImage(const cgltf_image* image);
 

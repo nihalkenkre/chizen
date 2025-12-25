@@ -389,7 +389,6 @@ RaytracerPipelineData::RaytracerPipelineData(const VulkanInterface* const vulkan
 	{
 		Utils_SetObjectName(mDevice, VK_OBJECT_TYPE_DESCRIPTOR_SET_LAYOUT, reinterpret_cast<uint64_t>(mDescriptorSetLayouts[dsl]), std::string(name).append(" descriptor set layout ").append(std::to_string(dsl)).c_str());
 	}
-
 #endif	// _DEBUG
 }
 
@@ -458,17 +457,17 @@ VulkanRaytracer::VulkanRaytracer(const VulkanInterface* const vulkan_interface, 
 		VK_BUFFER_USAGE_SHADER_BINDING_TABLE_BIT_KHR | VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT,
 		VMA_ALLOCATION_CREATE_HOST_ACCESS_SEQUENTIAL_WRITE_BIT,
 		sbt_handle_data,
-		"rb sbt");
+		"rg sbt");
 	mMissSBT = std::make_unique<HostBufferResource>(
 		mDevice, mAllocator,
 		VK_BUFFER_USAGE_SHADER_BINDING_TABLE_BIT_KHR | VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT,
 		VMA_ALLOCATION_CREATE_HOST_ACCESS_SEQUENTIAL_WRITE_BIT,
-		sbt_handle_data, "rb sbt");
+		sbt_handle_data, "ms sbt");
 	mCHSBT = std::make_unique<HostBufferResource>(
 		mDevice, mAllocator,
 		VK_BUFFER_USAGE_SHADER_BINDING_TABLE_BIT_KHR | VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT,
 		VMA_ALLOCATION_CREATE_HOST_ACCESS_SEQUENTIAL_WRITE_BIT,
-		sbt_handle_data, "rb sbt");
+		sbt_handle_data, "ch sbt");
 
 	const VkDescriptorPoolSize pool_sizes[] = {
 		{

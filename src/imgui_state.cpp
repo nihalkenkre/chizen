@@ -101,11 +101,11 @@ void ImGUIState::Render(const VkCommandBuffer cmd_buff)
 	ImGui::Begin("Awesome Panel");
 
 	ImGui::BeginDisabled(mRaytracingStarted);
-	if (ImGui::Button("Load GLTF"))
+	if (ImGui::Button("Load GLTF Binary"))
 	{
 		IGFD::FileDialogConfig config;
 		config.path = ".";
-		ImGuiFileDialog::Instance()->OpenDialog("GLTFDlg", "Choose GLTF File", ".glb,.gltf", config);
+		ImGuiFileDialog::Instance()->OpenDialog("GLTFDlg", "Choose GLTF Binary File", ".glb", config);
 	}
 
 	if (ImGuiFileDialog::Instance()->Display("GLTFDlg"))

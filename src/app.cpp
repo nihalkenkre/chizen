@@ -188,6 +188,16 @@ void App::ProcessEvent(SDL_Event* event)
 				}
 
 				std::memset(mStagingRenderTarget->GetAllocationInfo2().allocationInfo.pMappedData, 0, mStagingRenderTarget->GetAllocationInfo2().allocationInfo.size);
+				const VkMappedMemoryRange mem_ranges[] = {
+					{
+						.sType = VK_STRUCTURE_TYPE_MAPPED_MEMORY_RANGE,
+						.memory = mStagingRenderTarget->GetAllocationInfo2().allocationInfo.deviceMemory,
+						.offset = mStagingRenderTarget->GetAllocationInfo2().allocationInfo.offset,
+						.size = mStagingRenderTarget->GetAllocationInfo2().allocationInfo.size,
+					}
+				};
+				VK_CHECK("flush staging render target", vkFlushMappedMemoryRanges(mVulkanInterface->GetVkDevice(), std::size(mem_ranges), mem_ranges));
+
 				mRenderThread = std::thread(&EmbreeRaytracer::Start, mEmbreeRaytracer.get(), mEmbreeRaytacerScene.get(), mFinalRenderTargetExtent.width, mFinalRenderTargetExtent.height, mMaxSamples, mImGUIState->GetSelectedCameraIndex(), reinterpret_cast<float*>(mStagingRenderTarget->GetAllocationInfo2().allocationInfo.pMappedData));
 				mRenderThread.detach();
 
@@ -215,6 +225,20 @@ void App::ProcessEvent(SDL_Event* event)
 				}
 
 				std::memset(mStagingRenderTarget->GetAllocationInfo2().allocationInfo.pMappedData, 0, mStagingRenderTarget->GetAllocationInfo2().allocationInfo.size);
+				const VkMappedMemoryRange mem_ranges[] = {
+				{
+					.sType = VK_STRUCTURE_TYPE_MAPPED_MEMORY_RANGE,
+					.memory = mStagingRenderTarget->GetAllocationInfo2().allocationInfo.deviceMemory,
+					.offset = mStagingRenderTarget->GetAllocationInfo2().allocationInfo.offset,
+					.size = mStagingRenderTarget->GetAllocationInfo2().allocationInfo.size,
+				}
+				};
+				VK_CHECK("flush staging render target", vkFlushMappedMemoryRanges(mVulkanInterface->GetVkDevice(), std::size(mem_ranges), mem_ranges));
+
+				mVulkanInterface->GetTransferHelpers()->RecordBatch();
+				mVulkanInterface->GetTransferHelpers()->CopyBufferToImage(mStagingRenderTarget->GetVkBuffer(), mFinalRenderTarget->GetImage(), mFinalRenderTargetExtent);
+				mVulkanInterface->GetTransferHelpers()->SubmitBatch();
+
 				mRenderThread = std::thread(&SWRasterizer::Start, mSWRasterizer.get(), mSWRasterizerScene.get(), mFinalRenderTargetExtent.width, mFinalRenderTargetExtent.height, mMaxSamples, mImGUIState->GetSelectedCameraIndex(), reinterpret_cast<float*>(mStagingRenderTarget->GetAllocationInfo2().allocationInfo.pMappedData));
 				mRenderThread.detach();
 

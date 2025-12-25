@@ -43,54 +43,52 @@ public:
 		Line() {}
 		Line(Point p0, Point p1)
 		{
+			if (abs(p1.mPosition.x - p0.mPosition.x) >= abs(p1.mPosition.y - p0.mPosition.y))
 			{
-				if (abs(p1.mPosition.x - p0.mPosition.x) >= abs(p1.mPosition.y - p0.mPosition.y))
+				if (p1.mPosition.x < p0.mPosition.x)
 				{
-					if (p1.mPosition.x < p0.mPosition.x)
-					{
-						Point tmp = p1;
+					Point tmp = p1;
 
-						p1 = p0;
-						p0 = tmp;
-					}
-
-					mPoints.reserve(std::lroundf(p1.mPosition.x) - std::lroundf(p0.mPosition.x));
-
-					for (float x = p0.mPosition.x; x < p1.mPosition.x; ++x)
-					{
-						float t = (x - p0.mPosition.x) / (p1.mPosition.x - p0.mPosition.x);
-
-						mPoints.push_back(
-							Point(
-								p0.mPosition + (t * (p1.mPosition - p0.mPosition)),
-								p0.mColor + (t * (p1.mColor - p0.mColor))
-							)
-						);
-					}
+					p1 = p0;
+					p0 = tmp;
 				}
-				else
+
+				mPoints.reserve(std::lroundf(p1.mPosition.x) - std::lroundf(p0.mPosition.x));
+
+				for (float x = p0.mPosition.x; x < p1.mPosition.x; ++x)
 				{
-					if (p1.mPosition.y < p0.mPosition.y)
-					{
-						Point tmp = p1;
+					float t = (x - p0.mPosition.x) / (p1.mPosition.x - p0.mPosition.x);
 
-						p1 = p0;
-						p0 = tmp;
-					}
+					mPoints.push_back(
+						Point(
+							p0.mPosition + (t * (p1.mPosition - p0.mPosition)),
+							p0.mColor + (t * (p1.mColor - p0.mColor))
+						)
+					);
+				}
+			}
+			else
+			{
+				if (p1.mPosition.y < p0.mPosition.y)
+				{
+					Point tmp = p1;
 
-					mPoints.reserve(std::lroundf(p1.mPosition.y) - std::lroundf(p0.mPosition.y));
+					p1 = p0;
+					p0 = tmp;
+				}
 
-					for (float y = p0.mPosition.y; y < p1.mPosition.y; ++y)
-					{
-						float t = (y - p0.mPosition.y) / (p1.mPosition.y - p0.mPosition.y);
+				mPoints.reserve(std::lroundf(p1.mPosition.y) - std::lroundf(p0.mPosition.y));
 
-						mPoints.push_back(
-							Point(
-								p0.mPosition + (t * (p1.mPosition - p0.mPosition)),
-								p0.mColor + (t * (p1.mColor - p0.mColor))
-							)
-						);
-					}
+				for (float y = p0.mPosition.y; y < p1.mPosition.y; ++y)
+				{
+					float t = (y - p0.mPosition.y) / (p1.mPosition.y - p0.mPosition.y);
+
+					mPoints.push_back(
+						Point(
+							p0.mPosition + (t * (p1.mPosition - p0.mPosition)),
+							p0.mColor + (t * (p1.mColor - p0.mColor))
+						)
+					);
 				}
 			}
 		}
@@ -110,9 +108,9 @@ public:
 	public:
 		Triangle(const Point _p0, const Point _p1, const Point _p2, const size_t width, const size_t height)
 		{
-			Point p0(glm::vec3((_p0.mPosition.x + 1.f * 0.5f) * width, (_p0.mPosition.y + 1.f * 0.5f) * height, (_p0.mPosition.z + 1.f * 0.5f)), glm::vec3(1.f));
-			Point p1(glm::vec3((_p1.mPosition.x + 1.f * 0.5f) * width, (_p1.mPosition.y + 1.f * 0.5f) * height, (_p1.mPosition.z + 1.f * 0.5f)), glm::vec3(1.f));
-			Point p2(glm::vec3((_p2.mPosition.x + 1.f * 0.5f) * width, (_p2.mPosition.y + 1.f * 0.5f) * height, (_p2.mPosition.z + 1.f * 0.5f)), glm::vec3(1.f));
+			Point p0(glm::vec3(((_p0.mPosition.x + 1.f) * 0.5f) * (width - 1), (((_p0.mPosition.y + 1.f)) * 0.5f) * (height - 1), ((_p0.mPosition.z + 1.f) * 0.5f)), _p0.mColor);
+			Point p1(glm::vec3(((_p1.mPosition.x + 1.f) * 0.5f) * (width - 1), (((_p1.mPosition.y + 1.f)) * 0.5f) * (height - 1), ((_p1.mPosition.z + 1.f) * 0.5f)), _p1.mColor);
+			Point p2(glm::vec3(((_p2.mPosition.x + 1.f) * 0.5f) * (width - 1), (((_p2.mPosition.y + 1.f)) * 0.5f) * (height - 1), ((_p2.mPosition.z + 1.f) * 0.5f)), _p2.mColor);
 
 			mLines[0] = Line(p0, p1);
 			mLines[1] = Line(p2, p1);
@@ -129,7 +127,9 @@ public:
 		Line mLines[3];
 	};
 
+	bool ArePointsToBeClipped(const glm::vec4 p0, const glm::vec4 p1, const glm::vec4 p2) const;
+
 private:
 	bool mStopRendering = false;
-	std::vector<std::vector<Triangle>> mTriangles;
+	std::vector<std::vector<Triangle>> mMeshInstanceTriangles;
 };

@@ -64,8 +64,7 @@ public:
 	public:
 		Mesh(const Scene::Mesh& mesh, const std::vector<ViewportWorldScene::Image>& images,
 			const VkDevice device, const VmaAllocator allocator, const VkDescriptorPool desc_pool, const VkDescriptorSetLayout desc_set_layout,
-			const std::vector<uint32_t>& queue_family_indices, const VkSampler null_sampler,
-			TransferHelpers* transfer_helpers);
+			const std::vector<uint32_t>& queue_family_indices, TransferHelpers* transfer_helpers);
 
 		class Primitive : public Scene::Mesh::Primitive
 		{
@@ -73,8 +72,7 @@ public:
 			Primitive(const Scene::Mesh::Primitive& primitive, const std::vector<ViewportWorldScene::Image>& images,
 				const VkDevice device, const VmaAllocator allocator,
 				const VkDescriptorPool desc_pool, const VkDescriptorSetLayout desc_set_layout,
-				const std::vector<uint32_t>& queue_family_indices,
-				const VkSampler null_sampler, TransferHelpers* transfer_helpers
+				const std::vector<uint32_t>& queue_family_indices, TransferHelpers* transfer_helpers
 			);
 
 			VkDescriptorSet GetTexDescSet() const;
@@ -130,6 +128,5 @@ private:
 	VkDescriptorBufferInfo mMatricesDescBufferInfo = {};
 	VkDescriptorSet mCameraMatrixDescSet = VK_NULL_HANDLE;
 	VkDescriptorSet mModelMatrixDescSet = VK_NULL_HANDLE;
-	VkSampler mNullSampler = VK_NULL_HANDLE;
 	VkDevice mDevice = VK_NULL_HANDLE;
 };

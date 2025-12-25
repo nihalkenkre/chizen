@@ -717,21 +717,12 @@ ViewportWorldScene::ViewportWorldScene(const Scene& scene, const VkDevice device
 
 	vkUpdateDescriptorSets(device, std::size(write_descs), write_descs, 0, nullptr);
 
-	const VkSamplerCreateInfo s_ci = {
-		.sType = VK_STRUCTURE_TYPE_SAMPLER_CREATE_INFO,
-	};
-
-	VK_CHECK("create null sampler", vkCreateSampler(device, &s_ci, nullptr, &mNullSampler));
-
-#ifdef _DEBUG
-	Utils_SetObjectName(mDevice, VK_OBJECT_TYPE_SAMPLER, reinterpret_cast<uint64_t>(mNullSampler), "null sampler");
-#endif // _DEBUG
-
 	mMeshes.reserve(scene.GetMeshes().size());
 	for (const auto& mesh : scene.GetMeshes())
 	{
-		mMeshes.push_back(ViewportWorldScene::Mesh(mesh, mImages, device, allocator, mDescriptorPool, desc_set_layouts[2],
-			queue_family_indices, mNullSampler, transfer_helpers
+		mMeshes.push_back(ViewportWorldScene::Mesh(
+			mesh, mImages, device, allocator, mDescriptorPool, desc_set_layouts[2],
+			queue_family_indices, transfer_helpers
 		));
 	}
 }
@@ -740,7 +731,7 @@ void ViewportWorldScene::Render(const VkCommandBuffer cmd_buff, const uint32_t c
 {
 	vkCmdBindPipeline(cmd_buff, VK_PIPELINE_BIND_POINT_GRAPHICS, mPipelineData->GetPipeline());
 
-	const uint32_t offset = static_cast<uint32_t>(mCameraInstances[cam_index].GetViewMatrixOffset());
+	const uint32_t offset = static_cast<uint32_t>(mCameraInstances[cam_index].GetViewProjMatrixOffset());
 	const VkBindDescriptorSetsInfoKHR bind_ds_info = {
 		.sType = VK_STRUCTURE_TYPE_BIND_DESCRIPTOR_SETS_INFO_KHR,
 		.stageFlags = VK_SHADER_STAGE_VERTEX_BIT,
@@ -834,7 +825,6 @@ ViewportWorldScene::~ViewportWorldScene() noexcept
 	if (mDevice != VK_NULL_HANDLE)
 	{
 		vkDestroyDescriptorPool(mDevice, mDescriptorPool, nullptr);
-		vkDestroySampler(mDevice, mNullSampler, nullptr);
 	}
 }
 
@@ -854,8 +844,7 @@ VkDescriptorSet ViewportWorldScene::MeshInstance::GetModelMatDescSet() const
 
 ViewportWorldScene::Mesh::Mesh(const Scene::Mesh& mesh, const std::vector<ViewportWorldScene::Image>& images,
 	const VkDevice device, const VmaAllocator allocator, const VkDescriptorPool desc_pool, const VkDescriptorSetLayout desc_set_layout,
-	const std::vector<uint32_t>& queue_family_indices, const VkSampler null_sampler,
-	TransferHelpers* transfer_helpers)
+	const std::vector<uint32_t>& queue_family_indices,	TransferHelpers* transfer_helpers)
 	: Scene::Mesh(mesh)
 {
 	mPrimitives.reserve(mesh.GetPrimitives().size());
@@ -864,7 +853,7 @@ ViewportWorldScene::Mesh::Mesh(const Scene::Mesh& mesh, const std::vector<Viewpo
 		mPrimitives.push_back(
 			ViewportWorldScene::Mesh::Primitive(
 				prim, images, device, allocator, desc_pool, desc_set_layout,
-				queue_family_indices, null_sampler, transfer_helpers
+				queue_family_indices, transfer_helpers
 			)
 		);
 	}
@@ -880,7 +869,7 @@ ViewportWorldScene::Mesh::Primitive::Primitive(
 	const VkDevice device, const VmaAllocator allocator,
 	const VkDescriptorPool desc_pool, const VkDescriptorSetLayout desc_set_layout,
 	const std::vector<uint32_t>& queue_family_indices,
-	const VkSampler null_sampler, TransferHelpers* transfer_helpers
+	TransferHelpers* transfer_helpers
 )
 	: Scene::Mesh::Primitive(primitive)
 {

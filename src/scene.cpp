@@ -19,7 +19,6 @@ Scene::Scene(const std::string& path, const VkDeviceSize uniform_buffer_alignmen
 	}
 
 	mMeshes.resize(gltf->meshes_count);
-	mCameras.resize(gltf->cameras_count);
 	for (size_t n = 0; n < gltf->nodes_count; ++n)
 	{
 		cgltf_node* curr_node = gltf->nodes + n;
@@ -32,6 +31,12 @@ Scene::Scene(const std::string& path, const VkDeviceSize uniform_buffer_alignmen
 		{
 			AddCameraInstance(gltf, curr_node, uniform_buffer_alignment);
 		}
+	}
+
+	mCameras.reserve(gltf->cameras_count);
+	for (size_t c = 0; c < gltf->cameras_count; ++c)
+	{
+		AddCamera(gltf->cameras + c, uniform_buffer_alignment);
 	}
 
 	if (mCameraInstances.size() == 0)
@@ -158,7 +163,10 @@ void Scene::AddMeshInstance(const cgltf_data* gltf, const cgltf_node* node, cons
 
 void Scene::AddCameraInstance(const cgltf_data* gltf, const cgltf_node* node, const VkDeviceSize uniform_buffer_alignments)
 {
-	glm::mat4 view_proj_matrix = glm::inverse(Utils_GetTransformForGLTFNode(node));
+	glm::mat4 view_matrix = glm::inverse(Utils_GetTransformForGLTFNode(node));
+	glm::mat4 proj_matrix = glm::mat4(1.f);
+	glm::mat4 view_proj_matrix = glm::mat4(1.f);
+
 	size_t camera_index = cgltf_camera_index(gltf, node->camera);
 
 	cgltf_camera* camera = node->camera;
@@ -166,33 +174,41 @@ void Scene::AddCameraInstance(const cgltf_data* gltf, const cgltf_node* node, co
 	if (camera->type == cgltf_camera_type_perspective)
 	{
 		cgltf_camera_perspective persp_data = camera->data.perspective;
-		auto proj_mat = glm::perspective(
+		proj_matrix = glm::perspective(
 			persp_data.yfov,
 			persp_data.has_aspect_ratio ? persp_data.aspect_ratio : 1.777f,
 			persp_data.znear,
 			persp_data.zfar
 		);
-		proj_mat[1][1] *= -1;
-
-		view_proj_matrix = proj_mat * view_proj_matrix;
+		proj_matrix[1][1] *= -1;
+		view_proj_matrix = proj_matrix * view_matrix;
 	}
 	else if (camera->type == cgltf_camera_type_orthographic)
 	{
 		cgltf_camera_orthographic ortho_data = camera->data.orthographic;
-		auto proj_mat = glm::ortho(
+		proj_matrix = glm::ortho(
 			-ortho_data.xmag / 2.f, ortho_data.xmag / 2.f,
 			-ortho_data.ymag / 2.f, ortho_data.ymag / 2.f,
-			ortho_data.znear, ortho_data.zfar);
-		proj_mat[1][1] *= -1;
-		view_proj_matrix = proj_mat * view_proj_matrix;
+			ortho_data.znear,
+			ortho_data.zfar
+		);
+		proj_matrix[1][1] *= -1;
+		view_proj_matrix = proj_matrix * view_matrix;
 	}
 
 	mCameraInstances.push_back(CameraInstance(camera_index, mUniformData.size(), node->name == nullptr ? "scene cam" : node->name));
 
 	std::vector<uint8_t> view_proj_data(ALIGNED_SIZE(sizeof(glm::mat4), uniform_buffer_alignments));
 	std::memcpy(view_proj_data.data(), &view_proj_matrix, sizeof(glm::mat4));
-
 	mUniformData.append_range(view_proj_data);
+
+	std::vector<uint8_t> view_data(ALIGNED_SIZE(sizeof(glm::mat4), uniform_buffer_alignments));
+	std::memcpy(view_data.data(), &view_matrix, sizeof(glm::mat4));
+	mUniformData.append_range(view_data);
+
+	std::vector<uint8_t> proj_data(ALIGNED_SIZE(sizeof(glm::mat4), uniform_buffer_alignments));
+	std::memcpy(proj_data.data(), &proj_matrix, sizeof(glm::mat4));
+	mUniformData.append_range(proj_data);
 
 	mCameraNames.push_back(node->name == nullptr ? "scene cam" : node->name);
 }
@@ -291,8 +307,10 @@ void Scene::AddMesh(const cgltf_data* gltf, const cgltf_mesh* mesh, const size_t
 	mMeshes[mesh_index] = Mesh(primitives);
 }
 
-void Scene::AddCamera(const cgltf_camera* camera, const size_t camera_index, const VkDeviceSize uniform_buffer_alignment)
+void Scene::AddCamera(const cgltf_camera* camera, const VkDeviceSize uniform_buffer_alignment)
 {
+	auto proj_matrix = glm::mat4(1.f);
+
 	if (camera->type == cgltf_camera_type_perspective)
 	{
 		cgltf_camera_perspective persp_data = camera->data.perspective;
@@ -303,12 +321,6 @@ void Scene::AddCamera(const cgltf_camera* camera, const size_t camera_index, con
 			persp_data.zfar
 		);
 		proj_mat[1][1] *= -1;
-		mCameras[camera_index] = Camera(mUniformData.size());
-
-		std::vector<uint8_t> mat_data(ALIGNED_SIZE(sizeof(glm::mat4), uniform_buffer_alignment));
-		std::memcpy(mat_data.data(), &proj_mat, sizeof(glm::mat4));
-
-		mUniformData.append_range(mat_data);
 	}
 	else if (camera->type == cgltf_camera_type_orthographic)
 	{
@@ -318,13 +330,13 @@ void Scene::AddCamera(const cgltf_camera* camera, const size_t camera_index, con
 			-ortho_data.ymag / 2.f, ortho_data.ymag / 2.f,
 			ortho_data.znear, ortho_data.zfar);
 		proj_mat[1][1] *= -1;
-		mCameras[camera_index] = Camera(mUniformData.size());
-
-		std::vector<uint8_t> mat_data(ALIGNED_SIZE(sizeof(glm::mat4), uniform_buffer_alignment));
-		std::memcpy(mat_data.data(), &proj_mat, sizeof(glm::mat4));
-
-		mUniformData.append_range(mat_data);
 	}
+
+	mCameras.push_back(Camera(mUniformData.size()));
+	std::vector<uint8_t> mat_data(ALIGNED_SIZE(sizeof(glm::mat4), uniform_buffer_alignment));
+	std::memcpy(mat_data.data(), &proj_matrix, sizeof(glm::mat4));
+
+	mUniformData.append_range(mat_data);
 }
 
 void Scene::AddMaterial(const cgltf_data* gltf, const cgltf_material* material)
@@ -347,10 +359,11 @@ void Scene::AddMaterial(const cgltf_data* gltf, const cgltf_material* material)
 
 void Scene::AddImage(const cgltf_image* image)
 {
-	mImages.push_back(Scene::Image(mImagesData.size(), image->buffer_view->size, image->name));
+	mImages.push_back(Scene::Image(mImagesData.size(), image->buffer_view->size, image->name == nullptr ? "image" : image->name));
 
 	std::vector<uint8_t> image_data(image->buffer_view->size);
-	std::memcpy(image_data.data(),
+	std::memcpy(
+		image_data.data(),
 		reinterpret_cast<uint8_t*>(image->buffer_view->buffer->data) + image->buffer_view->offset,
 		image_data.size()
 	);
@@ -376,7 +389,9 @@ size_t Scene::MeshInstance::GetModelMatrixOffset() const
 
 Scene::CameraInstance::CameraInstance(const size_t camera_index, const size_t view_matrix_offset, const char* name)
 	:mCameraIndex(camera_index),
-	mViewMatrixOffset(view_matrix_offset),
+	mViewProjMatrixOffset(view_matrix_offset),
+	mViewMatrixOffset(view_matrix_offset + sizeof(glm::mat4)),
+	mProjMatrixOffset(view_matrix_offset + sizeof(glm::mat4) * 2),
 	mName(name)
 {
 }
@@ -386,9 +401,19 @@ size_t Scene::CameraInstance::GetCameraIndex() const
 	return mCameraIndex;
 }
 
+size_t Scene::CameraInstance::GetViewProjMatrixOffset() const
+{
+	return mViewProjMatrixOffset;
+}
+
 size_t Scene::CameraInstance::GetViewMatrixOffset() const
 {
 	return mViewMatrixOffset;
+}
+
+size_t Scene::CameraInstance::GetProjMatrixOffset() const
+{
+	return mProjMatrixOffset;
 }
 
 const std::string& Scene::CameraInstance::GetName() const
