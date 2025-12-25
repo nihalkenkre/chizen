@@ -59,7 +59,7 @@ Viewport::Viewport(const VulkanInterface* vulkan_interface, const std::string& c
 		VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_DEPTH_ATTACHMENT_OPTIMAL,
 		VK_QUEUE_FAMILY_IGNORED, VK_QUEUE_FAMILY_IGNORED,
 		VK_IMAGE_ASPECT_DEPTH_BIT,
-		mDepthTexture->GetImage()
+		mDepthTexture->GetVkImage()
 	);
 	mTransferHelpers->SubmitBatch();
 }

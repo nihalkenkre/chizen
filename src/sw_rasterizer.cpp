@@ -4,6 +4,8 @@
 
 void SWRasterizer::Start(const SWRasterizerScene* scene, const uint32_t width, const uint32_t height, const uint32_t max_samples, const uint32_t cam_index, float* pixels)
 {
+	mMeshInstanceTriangles.clear();
+
 	glm::mat4 view_proj_matrix = glm::make_mat4(reinterpret_cast<const float*>(scene->GetUniformData().data() + scene->GetCameraInstances()[cam_index].GetViewProjMatrixOffset()));
 	mMeshInstanceTriangles.resize(scene->GetMeshInstances().size());
 
@@ -128,8 +130,8 @@ SWRasterizer::~SWRasterizer() noexcept
 bool SWRasterizer::ArePointsToBeClipped(const glm::vec4 p0, const glm::vec4 p1, const glm::vec4 p2) const
 {
 	return (
-		p0.x > p0.w || p0.x < -p0.w || p0.y > p0.w || p0.y < -p0.w || p0.z > p0.w || p0.z < -p0.w || p0.w <= 0 ||
-		p1.x > p1.w || p1.x < -p1.w || p1.y > p1.w || p1.y < -p1.w || p1.z > p1.w || p1.z < -p1.w || p1.w <= 0 ||
+		p0.x > p0.w || p0.x < -p0.w || p0.y > p0.w || p0.y < -p0.w || p0.z > p0.w || p0.z < -p0.w || p0.w <= 0 &&
+		p1.x > p1.w || p1.x < -p1.w || p1.y > p1.w || p1.y < -p1.w || p1.z > p1.w || p1.z < -p1.w || p1.w <= 0 &&
 		p2.x > p2.w || p2.x < -p2.w || p2.y > p2.w || p2.y < -p2.w || p2.z > p2.w || p2.z < -p2.w || p2.w <= 0
 		);
 }

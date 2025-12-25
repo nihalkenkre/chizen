@@ -14,7 +14,7 @@ VulkanInterface::VulkanInterface(SDL_Window* window)
 	mDevice = std::make_unique<Device>(mPhysicalDeviceData.get());
 	mSwapchain = std::make_unique<Swapchain>(mDevice->GetDevice(), mSurface.get(), mPhysicalDeviceData->GraphicsQueueFamilyIndex, "swapchain");
 	mAllocator = std::make_unique<Allocator>(mInstance->GetInstance(), mPhysicalDeviceData->PhysicalDevice, mDevice->GetDevice());
-	mTransferHelpers = std::make_unique<TransferHelpers>(mDevice->GetDevice(), mDevice->GetTransferQueue(), mPhysicalDeviceData->TransferQueueFamilyIndex, "transfer objects");
+	mTransferHelpers = std::make_unique<TransferHelpers>(mDevice->GetDevice(), mDevice->GetTransferQueue(), mPhysicalDeviceData->TransferQueueFamilyIndex, "transfer helpers");
 	mComputeHelpers = std::make_unique<ComputeHelpers>(mDevice->GetDevice(), mDevice->GetComputeQueue(), mPhysicalDeviceData->ComputeQueueFamilyIndex, "compute helpers");
 
 #ifdef _DEBUG

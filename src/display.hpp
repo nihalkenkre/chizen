@@ -7,6 +7,7 @@ class ImGUIState;
 class DeviceBufferResource;
 class ImageResource;
 class TransferHelpers;
+class ComputeHelpers;
 class Swapchain;
 
 class Display
@@ -21,7 +22,7 @@ public:
 	~Display() noexcept;
 
 	void UpdateFinalRenderTargetDesc(const ImageResource* final_render_target);
-	void Render(const Swapchain* swapchain, const VkExtent2D extent, const float position_offset[], const float zoom_level, ImGUIState* imgui_state);
+	void Render(const Swapchain* swapchain, const VkExtent2D extent, const float position_offset[], const float zoom_level, ImGUIState* imgui_state, const ComputeHelpers* compute_helpers);
 
 private:
 

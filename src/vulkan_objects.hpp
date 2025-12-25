@@ -144,12 +144,12 @@ public:
 		const VkImageLayout old_layout, const VkImageLayout new_layout,
 		const uint32_t src_q_fly_idx, const uint32_t dst_q_fly_idx,
 		const VkImageAspectFlags aspect_mask,
-		const VkImage& image);
-	void CopyBufferToBuffer(const VkBuffer src_buffer, const VkBuffer dst_buffer, const VkDeviceSize size);
-	void CopyBufferToImage(const VkBuffer src_buffer, const VkImage dst_image, const VkExtent2D extent);
+		const VkImage& image) const;
+	void CopyBufferToBuffer(const VkBuffer src_buffer, const VkBuffer dst_buffer, const VkDeviceSize size) const;
+	void CopyBufferToImage(const VkBuffer src_buffer, const VkImage dst_image, const VkExtent2D extent) const;
 	void InsertMemoryBarrier(const VkPipelineStageFlags2 src_stage_mask, const VkAccessFlags2 src_access_mask,
-		const VkPipelineStageFlags2 dst_stage_mask, const VkAccessFlags2 dst_access_mask);
-	void SubmitBatch();
+		const VkPipelineStageFlags2 dst_stage_mask, const VkAccessFlags2 dst_access_mask) const;
+	void SubmitBatch(const VkSemaphore wait_semaphore = VK_NULL_HANDLE, const uint64_t wait_semaphore_value = 0, const VkPipelineStageFlags2 wait_stage_mask = VK_PIPELINE_STAGE_2_TOP_OF_PIPE_BIT);
 
 	VkCommandPool GetCommandPool() const;
 	VkCommandBuffer GetCommandBuffer() const;
@@ -182,11 +182,12 @@ public:
 	~ComputeHelpers() noexcept;
 
 	void RecordBatch();
-	void CopyBufferToBuffer(const VkBuffer src_buffer, const VkBuffer dst_buffer, const VkDeviceSize size);
+	void CopyBufferToBuffer(const VkBuffer src_buffer, const VkBuffer dst_buffer, const VkDeviceSize size) const;
 	void InsertMemoryBarrier(const VkPipelineStageFlags2 src_stage_mask, const VkAccessFlags2 src_access_mask,
-		const VkPipelineStageFlags2 dst_stage_mask, const VkAccessFlags2 dst_access_mask);
-	void BuildAccelerationStructure(const std::vector<VkAccelerationStructureBuildGeometryInfoKHR>& build_geom_infos, const std::vector<VkAccelerationStructureBuildRangeInfoKHR*>& range_infos);
-	void SubmitBatch();
+		const VkPipelineStageFlags2 dst_stage_mask, const VkAccessFlags2 dst_access_mask) const;
+	void ClearImage(const VkImage image, const VkClearColorValue clear_color) const;
+	void BuildAccelerationStructure(const std::vector<VkAccelerationStructureBuildGeometryInfoKHR>& build_geom_infos, const std::vector<VkAccelerationStructureBuildRangeInfoKHR*>& range_infos) const;
+	void SubmitBatch(const VkSemaphore wait_semaphore = VK_NULL_HANDLE, const uint64_t wait_semaphore_value = 0, const VkPipelineStageFlags2 wait_stage_mask = VK_PIPELINE_STAGE_2_TOP_OF_PIPE_BIT);
 
 	VkCommandPool GetCommandPool() const;
 	VkCommandBuffer GetCommandBuffer() const;

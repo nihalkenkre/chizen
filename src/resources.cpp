@@ -73,7 +73,7 @@ ImageResource::~ImageResource() noexcept
 	}
 }
 
-VkImage ImageResource::GetImage() const
+VkImage ImageResource::GetVkImage() const
 {
 	return mImage;
 }
@@ -133,7 +133,7 @@ VkDeviceOrHostAddressKHR BufferResource::GetDeviceOrHostAddressKHR() const
 	return mDeviceOrHostAddress;
 }
 
-HostBufferResource::HostBufferResource(const VkDevice device, const VmaAllocator allocator, const VkBufferUsageFlags usage, const VmaAllocationCreateFlags vma_alloc_create_flags, const std::vector<uint8_t>& data, const std::string& name)
+HostBufferResource::HostBufferResource(const VkDevice device, const VmaAllocator allocator, const VkBufferUsageFlags usage, const VmaAllocationCreateFlags vma_alloc_create_flags, const std::vector<uint8_t>& data, const std::string& name, const std::vector<uint32_t>& queue_family_indices)
 {
 	mDevice = device;
 	mAllocator = allocator;
@@ -146,6 +146,9 @@ HostBufferResource::HostBufferResource(const VkDevice device, const VmaAllocator
 		.sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO,
 		.size = data.size(),
 		.usage = usage | VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT,
+		.sharingMode = static_cast<VkSharingMode>(std::clamp(static_cast<int>(queue_family_indices.size()), 0, 1)),
+		.queueFamilyIndexCount = static_cast<uint32_t>(queue_family_indices.size()),
+		.pQueueFamilyIndices = queue_family_indices.data(),
 	};
 
 	const VmaAllocationCreateInfo alloc_ci = {
@@ -171,7 +174,7 @@ HostBufferResource::HostBufferResource(const VkDevice device, const VmaAllocator
 #endif // _DEBUG
 }
 
-HostBufferResource::HostBufferResource(const VkDevice device, const VmaAllocator allocator, const VkBufferUsageFlags usage, const VmaAllocationCreateFlags vma_alloc_create_flags, const VkDeviceSize size, const std::string& name)
+HostBufferResource::HostBufferResource(const VkDevice device, const VmaAllocator allocator, const VkBufferUsageFlags usage, const VmaAllocationCreateFlags vma_alloc_create_flags, const VkDeviceSize size, const std::string& name, const std::vector<uint32_t>& queue_family_indices)
 {
 	mDevice = device;
 	mAllocator = allocator;
@@ -184,6 +187,9 @@ HostBufferResource::HostBufferResource(const VkDevice device, const VmaAllocator
 		.sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO,
 		.size = size,
 		.usage = usage | VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT,
+		.sharingMode = static_cast<VkSharingMode>(std::clamp(static_cast<int>(queue_family_indices.size()), 0, 1)),
+		.queueFamilyIndexCount = static_cast<uint32_t>(queue_family_indices.size()),
+		.pQueueFamilyIndices = queue_family_indices.data(),
 	};
 
 	const VmaAllocationCreateInfo alloc_ci = {

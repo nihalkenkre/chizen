@@ -33,7 +33,8 @@ App::App(SDL_Window* window, const std::string& current_path) : mWindow(window)
 	mStagingRenderTarget = std::make_unique<HostBufferResource>(
 		mVulkanInterface->GetVkDevice(), mVulkanInterface->GetVmaAllocator(),
 		VK_BUFFER_USAGE_TRANSFER_SRC_BIT, VMA_ALLOCATION_CREATE_HOST_ACCESS_RANDOM_BIT,
-		mFinalRenderTargetExtent.width * mFinalRenderTargetExtent.height * 4 * sizeof(float), "embree render target"
+		mFinalRenderTargetExtent.width * mFinalRenderTargetExtent.height * 4 * sizeof(float), "staging render target",
+		std::vector<uint32_t>{ mVulkanInterface->GetPhysicalDeviceData()->GraphicsQueueFamilyIndex, mVulkanInterface->GetPhysicalDeviceData()->ComputeQueueFamilyIndex, mVulkanInterface->GetPhysicalDeviceData()->TransferQueueFamilyIndex }
 	);
 
 	auto transfer_objects = mVulkanInterface->GetTransferHelpers();
@@ -43,7 +44,7 @@ App::App(SDL_Window* window, const std::string& current_path) : mWindow(window)
 		VK_PIPELINE_STAGE_2_BOTTOM_OF_PIPE_BIT, 0,
 		VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_GENERAL,
 		VK_QUEUE_FAMILY_IGNORED, VK_QUEUE_FAMILY_IGNORED, VK_IMAGE_ASPECT_COLOR_BIT,
-		mFinalRenderTarget->GetImage());
+		mFinalRenderTarget->GetVkImage());
 	transfer_objects->SubmitBatch();
 
 	mViewport = std::make_unique<Viewport>(mVulkanInterface.get(), current_path, "rasterizer");
@@ -142,6 +143,14 @@ void App::ProcessEvent(SDL_Event* event)
 	{
 		mRenderType = events.StartRender.user.code;
 
+		const VkClearColorValue clear_color = {
+			.float32 = {
+				0, 0, 0, 0
+			},
+		};
+
+		TransferHelpers* transfer_helpers = mVulkanInterface->GetTransferHelpers();
+
 		if (mRenderType == 0)
 		{
 			if (mVulkanRaytracerScene != nullptr)
@@ -187,16 +196,11 @@ void App::ProcessEvent(SDL_Event* event)
 					mMaxSamples = tmp_max_samples;
 				}
 
-				std::memset(mStagingRenderTarget->GetAllocationInfo2().allocationInfo.pMappedData, 0, mStagingRenderTarget->GetAllocationInfo2().allocationInfo.size);
-				const VkMappedMemoryRange mem_ranges[] = {
-					{
-						.sType = VK_STRUCTURE_TYPE_MAPPED_MEMORY_RANGE,
-						.memory = mStagingRenderTarget->GetAllocationInfo2().allocationInfo.deviceMemory,
-						.offset = mStagingRenderTarget->GetAllocationInfo2().allocationInfo.offset,
-						.size = mStagingRenderTarget->GetAllocationInfo2().allocationInfo.size,
-					}
-				};
-				VK_CHECK("flush staging render target", vkFlushMappedMemoryRanges(mVulkanInterface->GetVkDevice(), std::size(mem_ranges), mem_ranges));
+				std::memset(
+					mStagingRenderTarget->GetAllocationInfo2().allocationInfo.pMappedData,
+					0,
+					mStagingRenderTarget->GetAllocationInfo2().allocationInfo.size
+				);
 
 				mRenderThread = std::thread(&EmbreeRaytracer::Start, mEmbreeRaytracer.get(), mEmbreeRaytacerScene.get(), mFinalRenderTargetExtent.width, mFinalRenderTargetExtent.height, mMaxSamples, mImGUIState->GetSelectedCameraIndex(), reinterpret_cast<float*>(mStagingRenderTarget->GetAllocationInfo2().allocationInfo.pMappedData));
 				mRenderThread.detach();
@@ -224,22 +228,35 @@ void App::ProcessEvent(SDL_Event* event)
 					mMaxSamples = tmp_max_samples;
 				}
 
-				std::memset(mStagingRenderTarget->GetAllocationInfo2().allocationInfo.pMappedData, 0, mStagingRenderTarget->GetAllocationInfo2().allocationInfo.size);
-				const VkMappedMemoryRange mem_ranges[] = {
-				{
-					.sType = VK_STRUCTURE_TYPE_MAPPED_MEMORY_RANGE,
-					.memory = mStagingRenderTarget->GetAllocationInfo2().allocationInfo.deviceMemory,
-					.offset = mStagingRenderTarget->GetAllocationInfo2().allocationInfo.offset,
-					.size = mStagingRenderTarget->GetAllocationInfo2().allocationInfo.size,
-				}
-				};
-				VK_CHECK("flush staging render target", vkFlushMappedMemoryRanges(mVulkanInterface->GetVkDevice(), std::size(mem_ranges), mem_ranges));
+				std::memset(
+					mStagingRenderTarget->GetAllocationInfo2().allocationInfo.pMappedData,
+					0,
+					mStagingRenderTarget->GetAllocationInfo2().allocationInfo.size
+				);
 
-				mVulkanInterface->GetTransferHelpers()->RecordBatch();
-				mVulkanInterface->GetTransferHelpers()->CopyBufferToImage(mStagingRenderTarget->GetVkBuffer(), mFinalRenderTarget->GetImage(), mFinalRenderTargetExtent);
-				mVulkanInterface->GetTransferHelpers()->SubmitBatch();
+				TransferHelpers* transfer_helpers = mVulkanInterface->GetTransferHelpers();
+				transfer_helpers->RecordBatch();
+				transfer_helpers->InsertMemoryBarrier(
+					VK_PIPELINE_STAGE_2_HOST_BIT, VK_ACCESS_2_HOST_WRITE_BIT,
+					VK_PIPELINE_STAGE_2_COPY_BIT, VK_ACCESS_2_TRANSFER_WRITE_BIT
+				);
+				transfer_helpers->CopyBufferToImage(mStagingRenderTarget->GetVkBuffer(), mFinalRenderTarget->GetVkImage(), mFinalRenderTargetExtent);
+				transfer_helpers->InsertMemoryBarrier(
+					VK_PIPELINE_STAGE_2_COPY_BIT, VK_ACCESS_2_TRANSFER_WRITE_BIT,
+					VK_PIPELINE_STAGE_2_BOTTOM_OF_PIPE_BIT, 0
+				);
+				transfer_helpers->SubmitBatch();
 
-				mRenderThread = std::thread(&SWRasterizer::Start, mSWRasterizer.get(), mSWRasterizerScene.get(), mFinalRenderTargetExtent.width, mFinalRenderTargetExtent.height, mMaxSamples, mImGUIState->GetSelectedCameraIndex(), reinterpret_cast<float*>(mStagingRenderTarget->GetAllocationInfo2().allocationInfo.pMappedData));
+				mRenderThread = std::thread(
+					&SWRasterizer::Start,
+					mSWRasterizer.get(),
+					mSWRasterizerScene.get(),
+					mFinalRenderTargetExtent.width,
+					mFinalRenderTargetExtent.height,
+					mMaxSamples,
+					mImGUIState->GetSelectedCameraIndex(),
+					reinterpret_cast<float*>(mStagingRenderTarget->GetAllocationInfo2().allocationInfo.pMappedData)
+				);
 				mRenderThread.detach();
 
 				SDL_CHECK(SDL_PushEvent(&events.RenderStarted));
@@ -256,33 +273,38 @@ void App::ProcessEvent(SDL_Event* event)
 	}
 	else if (event->type == events.RenderStopped.type)
 	{
+		TransferHelpers* transfer_helpers = mVulkanInterface->GetTransferHelpers();
 		if (mRenderType == 1 || mRenderType == 2)
 		{
-			mVulkanInterface->GetTransferHelpers()->RecordBatch();
-			mVulkanInterface->GetTransferHelpers()->CopyBufferToImage(
-				mStagingRenderTarget->GetVkBuffer(), mFinalRenderTarget->GetImage(), mFinalRenderTargetExtent
-			);
-			mVulkanInterface->GetTransferHelpers()->SubmitBatch();
-		}
-	}
-	else if (event->type == events.RenderSampleDone.type)
-	{
-		if (mRenderType == 1 || mRenderType == 2)
-		{
-			mVulkanInterface->GetTransferHelpers()->RecordBatch();
-			mVulkanInterface->GetTransferHelpers()->InsertMemoryBarrier(
+			transfer_helpers->RecordBatch();
+			transfer_helpers->InsertMemoryBarrier(
 				VK_PIPELINE_STAGE_2_HOST_BIT, VK_ACCESS_2_MEMORY_WRITE_BIT,
 				VK_PIPELINE_STAGE_2_TRANSFER_BIT, VK_ACCESS_2_TRANSFER_READ_BIT
 			);
-			mVulkanInterface->GetTransferHelpers()->CopyBufferToImage(
-				mStagingRenderTarget->GetVkBuffer(), mFinalRenderTarget->GetImage(), mFinalRenderTargetExtent
+			transfer_helpers->CopyBufferToImage(
+				mStagingRenderTarget->GetVkBuffer(), mFinalRenderTarget->GetVkImage(), mFinalRenderTargetExtent
 			);
-			mVulkanInterface->GetTransferHelpers()->InsertMemoryBarrier(
-				VK_PIPELINE_STAGE_2_TRANSFER_BIT, VK_ACCESS_2_TRANSFER_WRITE_BIT,
-				VK_PIPELINE_STAGE_2_BOTTOM_OF_PIPE_BIT, 0
-			);
-			mVulkanInterface->GetTransferHelpers()->SubmitBatch();
+			transfer_helpers->SubmitBatch();
 		}
+		mDisplayRender = true;
+	}
+	else if (event->type == events.RenderSampleDone.type)
+	{
+		TransferHelpers* transfer_helpers = mVulkanInterface->GetTransferHelpers();
+
+		if (mRenderType == 1 || mRenderType == 2)
+		{
+			transfer_helpers->RecordBatch();
+			transfer_helpers->InsertMemoryBarrier(
+				VK_PIPELINE_STAGE_2_HOST_BIT, VK_ACCESS_2_MEMORY_WRITE_BIT,
+				VK_PIPELINE_STAGE_2_TRANSFER_BIT, VK_ACCESS_2_TRANSFER_READ_BIT
+			);
+			transfer_helpers->CopyBufferToImage(
+				mStagingRenderTarget->GetVkBuffer(), mFinalRenderTarget->GetVkImage(), mFinalRenderTargetExtent
+			);
+			transfer_helpers->SubmitBatch();
+		}
+		mDisplayRender = true;
 	}
 
 	mImGUIState->ProcessEvent(event);
@@ -307,7 +329,7 @@ void App::RunDisplay()
 {
 	mDisplay->Render(mVulkanInterface->GetSwapchain(),
 		mVulkanInterface->GetSurfaceKHR()->GetSurfaceCapabilities().surfaceCapabilities.currentExtent,
-		mDeltaMousePosition, mZoomLevel, mImGUIState.get()
+		mDeltaMousePosition, mZoomLevel, mImGUIState.get(), mVulkanInterface->GetComputeHelpers()
 	);
 }
 
@@ -321,13 +343,15 @@ void App::RecreateRenderTarget()
 		extent, VK_FORMAT_R32G32B32A32_SFLOAT, VK_IMAGE_USAGE_STORAGE_BIT | VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT,
 		mVulkanInterface->GetVmaAllocator(),
 		queue_family_indices,
-		"final render target");
+		"final render target"
+	);
 
 	mStagingRenderTarget = std::make_unique<HostBufferResource>(
 		mVulkanInterface->GetVkDevice(), mVulkanInterface->GetVmaAllocator(),
 		VK_BUFFER_USAGE_TRANSFER_SRC_BIT, VMA_ALLOCATION_CREATE_HOST_ACCESS_RANDOM_BIT,
 		mFinalRenderTargetExtent.width * mFinalRenderTargetExtent.height * 4 * sizeof(float),
-		"staging render target"
+		"staging render target",
+		std::vector<uint32_t>{ mVulkanInterface->GetPhysicalDeviceData()->GraphicsQueueFamilyIndex, mVulkanInterface->GetPhysicalDeviceData()->ComputeQueueFamilyIndex, mVulkanInterface->GetPhysicalDeviceData()->TransferQueueFamilyIndex }
 	);
 
 	auto transfer_objects = mVulkanInterface->GetTransferHelpers();
@@ -337,7 +361,7 @@ void App::RecreateRenderTarget()
 		VK_PIPELINE_STAGE_2_BOTTOM_OF_PIPE_BIT, 0,
 		VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_GENERAL,
 		VK_QUEUE_FAMILY_IGNORED, VK_QUEUE_FAMILY_IGNORED, VK_IMAGE_ASPECT_COLOR_BIT,
-		mFinalRenderTarget->GetImage());
+		mFinalRenderTarget->GetVkImage());
 	transfer_objects->SubmitBatch();
 
 	mDisplay->UpdateFinalRenderTargetDesc(mFinalRenderTarget.get());

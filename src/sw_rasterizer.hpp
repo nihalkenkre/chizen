@@ -25,11 +25,14 @@ public:
 
 		void Draw(float* pixels, const size_t width, const size_t height) const
 		{
+			if (std::lroundf(mPosition.y) > height || std::lroundf(mPosition.x) > width)
+				return;
+
 			size_t pixel_offset = (std::lroundf(mPosition.y) * width + std::lroundf(mPosition.x)) * 4;
 
-			pixels[pixel_offset] = static_cast<uint8_t>(mColor.b);
-			pixels[pixel_offset + 1] = static_cast<uint8_t>(mColor.g);
-			pixels[pixel_offset + 2] = static_cast<uint8_t>(mColor.r);
+			pixels[pixel_offset] = mColor.b;
+			pixels[pixel_offset + 1] = mColor.g;
+			pixels[pixel_offset + 2] = mColor.r;
 			pixels[pixel_offset + 3] = 1;
 		}
 

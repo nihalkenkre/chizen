@@ -13,7 +13,7 @@ public:
 
 	~ImageResource() noexcept;
 
-	VkImage GetImage() const;
+	VkImage GetVkImage() const;
 	VkDescriptorImageInfo GetDescriptorInfo() const;
 
 	VkExtent3D GetExtent() const;
@@ -71,8 +71,8 @@ class HostBufferResource : public BufferResource
 {
 public:
 	HostBufferResource() = delete;
-	HostBufferResource(const VkDevice device, const VmaAllocator allocator, const VkBufferUsageFlags usage, const VmaAllocationCreateFlags vma_alloc_create_flags, const std::vector<uint8_t>& data, const std::string& name);
-	HostBufferResource(const VkDevice device, const VmaAllocator allocator, const VkBufferUsageFlags usage, const VmaAllocationCreateFlags vma_alloc_create_flags, const VkDeviceSize size, const std::string& name);
+	HostBufferResource(const VkDevice device, const VmaAllocator allocator, const VkBufferUsageFlags usage, const VmaAllocationCreateFlags vma_alloc_create_flags, const std::vector<uint8_t>& data, const std::string& name, const std::vector<uint32_t>& queue_family_indices = {});
+	HostBufferResource(const VkDevice device, const VmaAllocator allocator, const VkBufferUsageFlags usage, const VmaAllocationCreateFlags vma_alloc_create_flags, const VkDeviceSize size, const std::string& name, const std::vector<uint32_t>& queue_family_indices = {});
 
 	~HostBufferResource() noexcept;
 };

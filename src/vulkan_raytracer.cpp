@@ -538,7 +538,7 @@ void VulkanRaytracer::InitializeResources()
 		VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_GENERAL,
 		VK_QUEUE_FAMILY_IGNORED, VK_QUEUE_FAMILY_IGNORED,
 		VK_IMAGE_ASPECT_COLOR_BIT,
-		mAccumRenderTarget->GetImage()
+		mAccumRenderTarget->GetVkImage()
 	);
 
 	std::vector<uint32_t> rand_states(4 * mExtent.width * mExtent.height);
@@ -652,7 +652,7 @@ void VulkanRaytracer::Start(const VulkanRaytracerScene* scene, const ImageResour
 				},
 			};
 
-			vkCmdClearColorImage(cmd_buff, mAccumRenderTarget->GetImage(), VK_IMAGE_LAYOUT_GENERAL, &clear_color, std::size(ranges), ranges);
+			vkCmdClearColorImage(cmd_buff, mAccumRenderTarget->GetVkImage(), VK_IMAGE_LAYOUT_GENERAL, &clear_color, std::size(ranges), ranges);
 		}
 
 		vkCmdBindPipeline(cmd_buff, VK_PIPELINE_BIND_POINT_RAY_TRACING_KHR, mPipelineData->GetPipeline());

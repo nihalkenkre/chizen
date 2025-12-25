@@ -939,9 +939,9 @@ ViewportWorldScene::Image::Image(const char* image_path, const VkDevice device, 
 		VK_PIPELINE_STAGE_2_COPY_BIT, VK_ACCESS_2_TRANSFER_WRITE_BIT,
 		VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_GENERAL,
 		VK_QUEUE_FAMILY_IGNORED, VK_QUEUE_FAMILY_IGNORED,
-		VK_IMAGE_ASPECT_COLOR_BIT, mImageResource->GetImage()
+		VK_IMAGE_ASPECT_COLOR_BIT, mImageResource->GetVkImage()
 	);
-	transfer_helpers->CopyBufferToImage(staging_buffer->GetVkBuffer(), mImageResource->GetImage(), VkExtent2D{ w,h });
+	transfer_helpers->CopyBufferToImage(staging_buffer->GetVkBuffer(), mImageResource->GetVkImage(), VkExtent2D{ w,h });
 	transfer_helpers->SubmitBatch();
 }
 
@@ -994,9 +994,9 @@ ViewportWorldScene::Image::Image(const Scene::Image& image, const std::vector<ui
 		VK_PIPELINE_STAGE_2_COPY_BIT, VK_ACCESS_2_TRANSFER_WRITE_BIT,
 		VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_GENERAL,
 		VK_QUEUE_FAMILY_IGNORED, VK_QUEUE_FAMILY_IGNORED,
-		VK_IMAGE_ASPECT_COLOR_BIT, mImageResource->GetImage()
+		VK_IMAGE_ASPECT_COLOR_BIT, mImageResource->GetVkImage()
 	);
-	transfer_helpers->CopyBufferToImage(staging_buffer->GetVkBuffer(), mImageResource->GetImage(), VkExtent2D{ w,h });
+	transfer_helpers->CopyBufferToImage(staging_buffer->GetVkBuffer(), mImageResource->GetVkImage(), VkExtent2D{ w,h });
 	transfer_helpers->SubmitBatch();
 }
 

@@ -385,9 +385,9 @@ TransferHelpers::TransferHelpers(const VkDevice device, const VkQueue transfer_q
 	VK_CHECK("create transfer sem", vkCreateSemaphore(device, &sem_ci, nullptr, &mSemaphore));
 
 #ifdef _DEBUG
-	Utils_SetObjectName(mDevice, VK_OBJECT_TYPE_COMMAND_POOL, reinterpret_cast<uint64_t>(mCommandPool), "tranfer objects command pool");
-	Utils_SetObjectName(mDevice, VK_OBJECT_TYPE_COMMAND_BUFFER, reinterpret_cast<uint64_t>(mCommandBuffer), "tranfer objects command buffer");
-	Utils_SetObjectName(mDevice, VK_OBJECT_TYPE_SEMAPHORE, reinterpret_cast<uint64_t>(mSemaphore), "transfer objects semaphore");
+	Utils_SetObjectName(mDevice, VK_OBJECT_TYPE_COMMAND_POOL, reinterpret_cast<uint64_t>(mCommandPool), std::string(name).append(" command pool").c_str());
+	Utils_SetObjectName(mDevice, VK_OBJECT_TYPE_COMMAND_BUFFER, reinterpret_cast<uint64_t>(mCommandBuffer), std::string(name).append(" command buffer").c_str());
+	Utils_SetObjectName(mDevice, VK_OBJECT_TYPE_SEMAPHORE, reinterpret_cast<uint64_t>(mSemaphore), std::string(name).append(" semaphore").c_str());
 #endif
 }
 
@@ -417,7 +417,7 @@ void TransferHelpers::RecordBatch()
 	VK_CHECK("begin xfer cmd buff", vkBeginCommandBuffer(mCommandBuffer, &begin_info));
 }
 
-void TransferHelpers::ChangeImageLayout(const VkPipelineStageFlags2 src_stage_mask, const VkAccessFlags2 src_access_mask, const VkPipelineStageFlags2 dst_stage_mask, const VkAccessFlags2 dst_access_mask, const VkImageLayout old_layout, const VkImageLayout new_layout, const uint32_t src_q_fly_idx, const uint32_t dst_q_fly_idx, const VkImageAspectFlags aspect_mask, const VkImage& image)
+void TransferHelpers::ChangeImageLayout(const VkPipelineStageFlags2 src_stage_mask, const VkAccessFlags2 src_access_mask, const VkPipelineStageFlags2 dst_stage_mask, const VkAccessFlags2 dst_access_mask, const VkImageLayout old_layout, const VkImageLayout new_layout, const uint32_t src_q_fly_idx, const uint32_t dst_q_fly_idx, const VkImageAspectFlags aspect_mask, const VkImage& image) const
 {
 	const VkImageMemoryBarrier2 img_mem_barr = {
 		.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER_2,
@@ -446,7 +446,7 @@ void TransferHelpers::ChangeImageLayout(const VkPipelineStageFlags2 src_stage_ma
 	vkCmdPipelineBarrier2KHR(mCommandBuffer, &dep_info);
 }
 
-void TransferHelpers::CopyBufferToBuffer(const VkBuffer src_buffer, const VkBuffer dst_buffer, const VkDeviceSize size)
+void TransferHelpers::CopyBufferToBuffer(const VkBuffer src_buffer, const VkBuffer dst_buffer, const VkDeviceSize size) const
 {
 	const VkBufferCopy2 regions[] = {
 		{
@@ -466,7 +466,7 @@ void TransferHelpers::CopyBufferToBuffer(const VkBuffer src_buffer, const VkBuff
 	vkCmdCopyBuffer2KHR(mCommandBuffer, &copy_buff_info);
 }
 
-void TransferHelpers::CopyBufferToImage(const VkBuffer src_buffer, const VkImage dst_image, const VkExtent2D extent)
+void TransferHelpers::CopyBufferToImage(const VkBuffer src_buffer, const VkImage dst_image, const VkExtent2D extent) const
 {
 	const VkBufferImageCopy2KHR regions[] = {
 		{
@@ -495,7 +495,7 @@ void TransferHelpers::CopyBufferToImage(const VkBuffer src_buffer, const VkImage
 	vkCmdCopyBufferToImage2KHR(mCommandBuffer, &copy_buff_info);
 }
 
-void TransferHelpers::InsertMemoryBarrier(const VkPipelineStageFlags2 src_stage_mask, const VkAccessFlags2 src_access_mask, const VkPipelineStageFlags2 dst_stage_mask, const VkAccessFlags2 dst_access_mask)
+void TransferHelpers::InsertMemoryBarrier(const VkPipelineStageFlags2 src_stage_mask, const VkAccessFlags2 src_access_mask, const VkPipelineStageFlags2 dst_stage_mask, const VkAccessFlags2 dst_access_mask) const
 {
 	VkMemoryBarrier2 mem_bar = {
 		.sType = VK_STRUCTURE_TYPE_MEMORY_BARRIER_2,
@@ -514,18 +514,30 @@ void TransferHelpers::InsertMemoryBarrier(const VkPipelineStageFlags2 src_stage_
 	vkCmdPipelineBarrier2KHR(mCommandBuffer, &dep_info);
 }
 
-void TransferHelpers::SubmitBatch()
+void TransferHelpers::SubmitBatch(const VkSemaphore wait_semaphore, const uint64_t wait_semaphore_value, const VkPipelineStageFlags2 wait_stage_mask)
 {
 	VK_CHECK("end xfer cmd buff", vkEndCommandBuffer(mCommandBuffer));
 
-	const VkSemaphoreSubmitInfo wait_sem_infos[] = {
+	std::vector<VkSemaphoreSubmitInfo> wait_sem_infos = {
 		{
 			.sType = VK_STRUCTURE_TYPE_SEMAPHORE_SUBMIT_INFO,
 			.semaphore = mSemaphore,
 			.value = mSemaphoreValue,
 			.stageMask = VK_PIPELINE_STAGE_2_TOP_OF_PIPE_BIT,
-		}
+		},
 	};
+
+	if (wait_semaphore != VK_NULL_HANDLE)
+	{
+		wait_sem_infos.push_back(
+			{
+				.sType = VK_STRUCTURE_TYPE_SEMAPHORE_SUBMIT_INFO,
+				.semaphore = wait_semaphore,
+				.value = wait_semaphore_value,
+				.stageMask = wait_stage_mask,
+			}
+			);
+	}
 
 	const VkCommandBufferSubmitInfo cmd_buff_infos[] = {
 		{
@@ -546,8 +558,8 @@ void TransferHelpers::SubmitBatch()
 	const VkSubmitInfo2 submit_infos[] = {
 		{
 			.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO_2,
-			.waitSemaphoreInfoCount = std::size(wait_sem_infos),
-			.pWaitSemaphoreInfos = wait_sem_infos,
+			.waitSemaphoreInfoCount = static_cast<uint32_t>(wait_sem_infos.size()),
+			.pWaitSemaphoreInfos = wait_sem_infos.data(),
 			.commandBufferInfoCount = std::size(cmd_buff_infos),
 			.pCommandBufferInfos = cmd_buff_infos,
 			.signalSemaphoreInfoCount = std::size(sig_sem_infos),
@@ -876,6 +888,7 @@ ComputeHelpers::~ComputeHelpers() noexcept
 		vkDestroySemaphore(mDevice, mSemaphore, nullptr);
 	}
 }
+
 void ComputeHelpers::RecordBatch()
 {
 	const VkSemaphoreWaitInfo  wait_info = {
@@ -893,7 +906,7 @@ void ComputeHelpers::RecordBatch()
 	VK_CHECK("begin cmpt cmd buff", vkBeginCommandBuffer(mCommandBuffer, &begin_info))
 }
 
-void ComputeHelpers::CopyBufferToBuffer(const VkBuffer src_buffer, const VkBuffer dst_buffer, const VkDeviceSize size)
+void ComputeHelpers::CopyBufferToBuffer(const VkBuffer src_buffer, const VkBuffer dst_buffer, const VkDeviceSize size) const
 {
 	const VkBufferCopy2 regions[] = {
 		{
@@ -913,7 +926,7 @@ void ComputeHelpers::CopyBufferToBuffer(const VkBuffer src_buffer, const VkBuffe
 	vkCmdCopyBuffer2KHR(mCommandBuffer, &copy_buff_info);
 }
 
-void ComputeHelpers::InsertMemoryBarrier(const VkPipelineStageFlags2 src_stage_mask, const VkAccessFlags2 src_access_mask, const VkPipelineStageFlags2 dst_stage_mask, const VkAccessFlags2 dst_access_mask)
+void ComputeHelpers::InsertMemoryBarrier(const VkPipelineStageFlags2 src_stage_mask, const VkAccessFlags2 src_access_mask, const VkPipelineStageFlags2 dst_stage_mask, const VkAccessFlags2 dst_access_mask) const
 {
 	VkMemoryBarrier2 mem_bar = {
 		.sType = VK_STRUCTURE_TYPE_MEMORY_BARRIER_2,
@@ -932,16 +945,29 @@ void ComputeHelpers::InsertMemoryBarrier(const VkPipelineStageFlags2 src_stage_m
 	vkCmdPipelineBarrier2KHR(mCommandBuffer, &dep_info);
 }
 
-void ComputeHelpers::BuildAccelerationStructure(const std::vector<VkAccelerationStructureBuildGeometryInfoKHR>& build_geom_infos, const std::vector<VkAccelerationStructureBuildRangeInfoKHR*>& range_infos)
+void ComputeHelpers::ClearImage(const VkImage image, const VkClearColorValue clear_color) const
+{
+	const VkImageSubresourceRange ranges[] = {
+		{
+			.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT,
+			.levelCount =1,
+			.layerCount =1,
+		},
+	};
+
+	vkCmdClearColorImage(mCommandBuffer, image, VK_IMAGE_LAYOUT_GENERAL, &clear_color, std::size(ranges), ranges);
+}
+
+void ComputeHelpers::BuildAccelerationStructure(const std::vector<VkAccelerationStructureBuildGeometryInfoKHR>& build_geom_infos, const std::vector<VkAccelerationStructureBuildRangeInfoKHR*>& range_infos) const
 {
 	vkCmdBuildAccelerationStructuresKHR(mCommandBuffer, static_cast<uint32_t>(std::size(build_geom_infos)), build_geom_infos.data(), range_infos.data());
 }
 
-void ComputeHelpers::SubmitBatch()
+void ComputeHelpers::SubmitBatch(const VkSemaphore wait_semaphore, const uint64_t wait_semaphore_value, const VkPipelineStageFlags2 wait_stage_mask)
 {
 	VK_CHECK("end cmpt cmd buff", vkEndCommandBuffer(mCommandBuffer));
 
-	const VkSemaphoreSubmitInfo wait_sem_infos[] = {
+	std::vector<VkSemaphoreSubmitInfo> wait_sem_infos = {
 		{
 			.sType = VK_STRUCTURE_TYPE_SEMAPHORE_SUBMIT_INFO,
 			.semaphore = mSemaphore,
@@ -949,6 +975,18 @@ void ComputeHelpers::SubmitBatch()
 			.stageMask = VK_PIPELINE_STAGE_2_TOP_OF_PIPE_BIT,
 		}
 	};
+	
+	if (wait_semaphore != VK_NULL_HANDLE)
+	{
+		wait_sem_infos.push_back(
+			{
+				.sType = VK_STRUCTURE_TYPE_SEMAPHORE_SUBMIT_INFO,
+				.semaphore = wait_semaphore,
+				.value = wait_semaphore_value,
+				.stageMask = wait_stage_mask,
+			}
+			);
+	}
 
 	const VkCommandBufferSubmitInfo cmd_buff_infos[] = {
 		{
@@ -969,8 +1007,8 @@ void ComputeHelpers::SubmitBatch()
 	const VkSubmitInfo2 submit_infos[] = {
 		{
 			.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO_2,
-			.waitSemaphoreInfoCount = std::size(wait_sem_infos),
-			.pWaitSemaphoreInfos = wait_sem_infos,
+			.waitSemaphoreInfoCount = static_cast<uint32_t>(wait_sem_infos.size()),
+			.pWaitSemaphoreInfos = wait_sem_infos.data(),
 			.commandBufferInfoCount = std::size(cmd_buff_infos),
 			.pCommandBufferInfos = cmd_buff_infos,
 			.signalSemaphoreInfoCount = std::size(sig_sem_infos),

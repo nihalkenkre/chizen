@@ -547,7 +547,7 @@ void Display::UpdateFinalRenderTargetDesc(const ImageResource* final_render_targ
 
 void Display::Render(
 	const Swapchain* swapchain, const VkExtent2D extent,
-	const float position_offset[], const float zoom_level, ImGUIState* imgui_state)
+	const float position_offset[], const float zoom_level, ImGUIState* imgui_state, const ComputeHelpers* compute_helpers)
 {
 	VkDevice device = mDevice;
 	VkCommandBuffer cmd_buff = mFrameObjects->GetCommandBuffer();
@@ -705,6 +705,12 @@ void Display::Render(
 			.sType = VK_STRUCTURE_TYPE_SEMAPHORE_SUBMIT_INFO,
 			.semaphore = mTransferHelpers->GetSemaphore(),
 			.value = mTransferHelpers->GetSemaphoreValueConst(),
+			.stageMask = VK_PIPELINE_STAGE_2_FRAGMENT_SHADER_BIT,
+		},
+		{
+			.sType = VK_STRUCTURE_TYPE_SEMAPHORE_SUBMIT_INFO,
+			.semaphore = compute_helpers->GetSemaphore(),
+			.value = compute_helpers->GetSemaphoreValueConst(),
 			.stageMask = VK_PIPELINE_STAGE_2_FRAGMENT_SHADER_BIT,
 		}
 	};
