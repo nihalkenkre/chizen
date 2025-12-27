@@ -35,7 +35,7 @@ Instance::Instance(const char* const* extensions, const uint32_t extensions_coun
 
 		if (it == props.end())
 		{
-			std::println("Extension {} is not supporeted by instance", req_ext_name);
+			std::println("Extension {} is not supported by instance", req_ext_name);
 		}
 	}
 
@@ -57,7 +57,9 @@ Instance::Instance(const char* const* extensions, const uint32_t extensions_coun
 
 	VK_CHECK("create instance", vkCreateInstance(&create_info, nullptr, &mInstance));
 
+#ifdef _DEBUG
 	vk_SetDebugUtilsObjectNameEXT = reinterpret_cast<PFN_vkSetDebugUtilsObjectNameEXT>(vkGetInstanceProcAddr(mInstance, "vkSetDebugUtilsObjectNameEXT"));
+#endif // _DEBUG
 }
 
 Instance::~Instance() noexcept
@@ -568,6 +570,7 @@ void TransferHelpers::SubmitBatch(const VkSemaphore wait_semaphore, const uint64
 	};
 
 	VK_CHECK("submit xfer batch", vkQueueSubmit2KHR(mQueue, std::size(submit_infos), submit_infos, VK_NULL_HANDLE));
+	VK_CHECK("wait xfer queue", vkQueueWaitIdle(mQueue));
 }
 
 VkCommandPool TransferHelpers::GetCommandPool() const
@@ -644,7 +647,7 @@ Device::Device(const PhysicalDeviceData* physical_device_data)
 
 		if (it == props.end())
 		{
-			std::println("Extension {} is not supporeted by device", req_ext_name);
+			std::println("Extension {} is not supported by device", req_ext_name);
 		}
 	}
 
@@ -950,8 +953,8 @@ void ComputeHelpers::ClearImage(const VkImage image, const VkClearColorValue cle
 	const VkImageSubresourceRange ranges[] = {
 		{
 			.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT,
-			.levelCount =1,
-			.layerCount =1,
+			.levelCount = 1,
+			.layerCount = 1,
 		},
 	};
 
@@ -975,7 +978,7 @@ void ComputeHelpers::SubmitBatch(const VkSemaphore wait_semaphore, const uint64_
 			.stageMask = VK_PIPELINE_STAGE_2_TOP_OF_PIPE_BIT,
 		}
 	};
-	
+
 	if (wait_semaphore != VK_NULL_HANDLE)
 	{
 		wait_sem_infos.push_back(
@@ -1057,7 +1060,7 @@ uint32_t ComputeHelpers::GetQueueFamilyIndex() const
 BLAccelerationStructure::BLAccelerationStructure(const VkDevice device, const VmaAllocator allocator, const Scene::Mesh::Primitive& primitive, const std::vector<uint8_t>& vertex_data, ComputeHelpers* compute_helpers, const std::string& name)
 	: mDevice(device)
 {
- 	auto host_wait_and_delete = [device, compute_helpers](HostBufferResource* hbr) {
+	auto host_wait_and_delete = [device, compute_helpers](HostBufferResource* hbr) {
 		VkSemaphore sem = compute_helpers->GetSemaphore();
 		const uint64_t sem_value = compute_helpers->GetSemaphoreValueConst();
 
@@ -1070,9 +1073,9 @@ BLAccelerationStructure::BLAccelerationStructure(const VkDevice device, const Vm
 		VK_CHECK("wait for sem", vkWaitSemaphoresKHR(device, &wait_info, UINT64_MAX));
 
 		hbr->~HostBufferResource();
-	};
+		};
 
- 	auto device_wait_and_delete = [device, compute_helpers](DeviceBufferResource* hbr) {
+	auto device_wait_and_delete = [device, compute_helpers](DeviceBufferResource* hbr) {
 		VkSemaphore sem = compute_helpers->GetSemaphore();
 		const uint64_t sem_value = compute_helpers->GetSemaphoreValueConst();
 
@@ -1085,7 +1088,7 @@ BLAccelerationStructure::BLAccelerationStructure(const VkDevice device, const Vm
 		VK_CHECK("wait for sem", vkWaitSemaphoresKHR(device, &wait_info, UINT64_MAX));
 
 		hbr->~DeviceBufferResource();
-	};
+		};
 
 	std::vector<uint8_t> positions_data(primitive.GetPositionsSize());
 	std::memcpy(positions_data.data(), vertex_data.data() + primitive.GetPositionsOffset(), primitive.GetPositionsSize());

@@ -37,15 +37,15 @@ App::App(SDL_Window* window, const std::string& current_path) : mWindow(window)
 		std::vector<uint32_t>{ mVulkanInterface->GetPhysicalDeviceData()->GraphicsQueueFamilyIndex, mVulkanInterface->GetPhysicalDeviceData()->ComputeQueueFamilyIndex, mVulkanInterface->GetPhysicalDeviceData()->TransferQueueFamilyIndex }
 	);
 
-	auto transfer_objects = mVulkanInterface->GetTransferHelpers();
-	transfer_objects->RecordBatch();
-	transfer_objects->ChangeImageLayout(
+	auto transfer_helpers = mVulkanInterface->GetTransferHelpers();
+	transfer_helpers->RecordBatch();
+	transfer_helpers->ChangeImageLayout(
 		VK_PIPELINE_STAGE_2_TOP_OF_PIPE_BIT, 0,
 		VK_PIPELINE_STAGE_2_BOTTOM_OF_PIPE_BIT, 0,
 		VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_GENERAL,
 		VK_QUEUE_FAMILY_IGNORED, VK_QUEUE_FAMILY_IGNORED, VK_IMAGE_ASPECT_COLOR_BIT,
 		mFinalRenderTarget->GetVkImage());
-	transfer_objects->SubmitBatch();
+	transfer_helpers->SubmitBatch();
 
 	mViewport = std::make_unique<Viewport>(mVulkanInterface.get(), current_path, "rasterizer");
 	mDisplay = std::make_unique<Display>(mVulkanInterface.get(), mFinalRenderTarget.get(), current_path);
@@ -149,8 +149,6 @@ void App::ProcessEvent(SDL_Event* event)
 			},
 		};
 
-		TransferHelpers* transfer_helpers = mVulkanInterface->GetTransferHelpers();
-
 		if (mRenderType == 0)
 		{
 			if (mVulkanRaytracerScene != nullptr)
@@ -236,15 +234,7 @@ void App::ProcessEvent(SDL_Event* event)
 
 				TransferHelpers* transfer_helpers = mVulkanInterface->GetTransferHelpers();
 				transfer_helpers->RecordBatch();
-				transfer_helpers->InsertMemoryBarrier(
-					VK_PIPELINE_STAGE_2_HOST_BIT, VK_ACCESS_2_HOST_WRITE_BIT,
-					VK_PIPELINE_STAGE_2_COPY_BIT, VK_ACCESS_2_TRANSFER_WRITE_BIT
-				);
 				transfer_helpers->CopyBufferToImage(mStagingRenderTarget->GetVkBuffer(), mFinalRenderTarget->GetVkImage(), mFinalRenderTargetExtent);
-				transfer_helpers->InsertMemoryBarrier(
-					VK_PIPELINE_STAGE_2_COPY_BIT, VK_ACCESS_2_TRANSFER_WRITE_BIT,
-					VK_PIPELINE_STAGE_2_BOTTOM_OF_PIPE_BIT, 0
-				);
 				transfer_helpers->SubmitBatch();
 
 				mRenderThread = std::thread(
@@ -291,14 +281,9 @@ void App::ProcessEvent(SDL_Event* event)
 	else if (event->type == events.RenderSampleDone.type)
 	{
 		TransferHelpers* transfer_helpers = mVulkanInterface->GetTransferHelpers();
-
 		if (mRenderType == 1 || mRenderType == 2)
 		{
 			transfer_helpers->RecordBatch();
-			transfer_helpers->InsertMemoryBarrier(
-				VK_PIPELINE_STAGE_2_HOST_BIT, VK_ACCESS_2_MEMORY_WRITE_BIT,
-				VK_PIPELINE_STAGE_2_TRANSFER_BIT, VK_ACCESS_2_TRANSFER_READ_BIT
-			);
 			transfer_helpers->CopyBufferToImage(
 				mStagingRenderTarget->GetVkBuffer(), mFinalRenderTarget->GetVkImage(), mFinalRenderTargetExtent
 			);
@@ -354,15 +339,15 @@ void App::RecreateRenderTarget()
 		std::vector<uint32_t>{ mVulkanInterface->GetPhysicalDeviceData()->GraphicsQueueFamilyIndex, mVulkanInterface->GetPhysicalDeviceData()->ComputeQueueFamilyIndex, mVulkanInterface->GetPhysicalDeviceData()->TransferQueueFamilyIndex }
 	);
 
-	auto transfer_objects = mVulkanInterface->GetTransferHelpers();
-	transfer_objects->RecordBatch();
-	transfer_objects->ChangeImageLayout(
+	auto transfer_helpers = mVulkanInterface->GetTransferHelpers();
+	transfer_helpers->RecordBatch();
+	transfer_helpers->ChangeImageLayout(
 		VK_PIPELINE_STAGE_2_TOP_OF_PIPE_BIT, 0,
 		VK_PIPELINE_STAGE_2_BOTTOM_OF_PIPE_BIT, 0,
 		VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_GENERAL,
 		VK_QUEUE_FAMILY_IGNORED, VK_QUEUE_FAMILY_IGNORED, VK_IMAGE_ASPECT_COLOR_BIT,
 		mFinalRenderTarget->GetVkImage());
-	transfer_objects->SubmitBatch();
+	transfer_helpers->SubmitBatch();
 
 	mDisplay->UpdateFinalRenderTargetDesc(mFinalRenderTarget.get());
 	mVulkanRaytracer->RecreateRenderResources(mFinalRenderTargetExtent);
@@ -430,7 +415,7 @@ float& App::GetZoomLevel()
 	return mZoomLevel;
 }
 
-ImGUIState* App::GetImGUIState()
+ImGUIState* App::GetImGUIState() const 
 {
 	return mImGUIState.get();
 }

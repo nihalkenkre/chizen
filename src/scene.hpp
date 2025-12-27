@@ -102,12 +102,16 @@ public:
 	{
 	public:
 		Camera() {}
-		Camera(const size_t proj_mat_offset);
+		Camera(const size_t proj_mat_offset, const float z_near, const float z_far);
 
 		size_t GetProjectionMatrixOffset() const;
+		float GetZNear() const;
+		float GetZFar() const;
 
 	private:
 		size_t mProjMatrixOffset = 0;
+		float mZNear = 0.1f;
+		float mZFar = 100.f;
 	};
 
 	class Material

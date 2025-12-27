@@ -1,6 +1,13 @@
 #include "vulkan_functions.hpp"
 
+#ifdef _DEBUG
 PFN_vkSetDebugUtilsObjectNameEXT vk_SetDebugUtilsObjectNameEXT = nullptr;
+VKAPI_ATTR VkResult VKAPI_CALL vkSetDebugUtilsObjectNameEXT(VkDevice device, const VkDebugUtilsObjectNameInfoEXT* pNameInfo)
+{
+	return vk_SetDebugUtilsObjectNameEXT(device, pNameInfo);
+}
+#endif // _DEBUG
+
 PFN_vkQueueSubmit2KHR vk_QueueSubmit2KHR = nullptr;
 PFN_vkSignalSemaphoreKHR vk_SignalSemaphoreKHR = nullptr;
 PFN_vkCmdPipelineBarrier2KHR vk_CmdPipelineBarrier2KHR = nullptr;
@@ -23,10 +30,6 @@ PFN_vkCmdBuildAccelerationStructuresKHR vk_CmdBuildAccelerationStructuresKHR = n
 PFN_vkGetAccelerationStructureBuildSizesKHR vk_GetAccelerationStructureBuildSizesKHR = nullptr;
 PFN_vkGetAccelerationStructureDeviceAddressKHR vk_GetAccelerationStructureDeviceAddressKHR = nullptr;
 
-VKAPI_ATTR VkResult VKAPI_CALL vkSetDebugUtilsObjectNameEXT(VkDevice device, const VkDebugUtilsObjectNameInfoEXT* pNameInfo)
-{
-	return vk_SetDebugUtilsObjectNameEXT(device, pNameInfo);
-}
 
 VKAPI_ATTR void VKAPI_CALL vkCmdPipelineBarrier2KHR(VkCommandBuffer commandBuffer, const VkDependencyInfo* pDependencyInfo)
 {

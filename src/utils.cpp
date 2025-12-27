@@ -59,6 +59,7 @@ void Utils_InsertMemoryBarrier(
 	vkCmdPipelineBarrier2KHR(cmd_buff, &dep_info);
 }
 
+#ifdef _DEBUG
 void Utils_SetObjectName(const VkDevice device, const VkObjectType type, const uint64_t handle, const std::string& name)
 {
 	const VkDebugUtilsObjectNameInfoEXT name_info = {
@@ -70,6 +71,7 @@ void Utils_SetObjectName(const VkDevice device, const VkObjectType type, const u
 
 	VK_CHECK("setting name", vkSetDebugUtilsObjectNameEXT(device, &name_info));
 }
+#endif // _DEBUG
 
 glm::mat4 Utils_GetTransformForGLTFNode(const cgltf_node* node)
 {

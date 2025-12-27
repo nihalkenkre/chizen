@@ -15,25 +15,32 @@ public:
 
 	~SWRasterizer() noexcept;
 
+	class BoundingBox;
+	class Triangle;
+
 	class Point
 	{
 	public:
+		Point() {}
 		Point(glm::vec3 pos, glm::vec3 col) : mPosition(pos), mColor(col)
 		{
-
 		}
 
-		void Draw(float* pixels, const size_t width, const size_t height) const
+		void Draw(float* color, float* depth, const size_t width, const size_t height) const
 		{
-			if (std::lroundf(mPosition.y) > height || std::lroundf(mPosition.x) > width)
+			if (std::lroundf(mPosition.y) >= height || std::lroundf(mPosition.x) >= width)
 				return;
 
 			size_t pixel_offset = (std::lroundf(mPosition.y) * width + std::lroundf(mPosition.x)) * 4;
+			size_t depth_offset = std::lroundf(mPosition.y) * width + std::lroundf(mPosition.x);
 
-			pixels[pixel_offset] = mColor.b;
-			pixels[pixel_offset + 1] = mColor.g;
-			pixels[pixel_offset + 2] = mColor.r;
-			pixels[pixel_offset + 3] = 1;
+			if (mPosition.z > depth[depth_offset]) {
+				color[pixel_offset] = mPosition.z;// mColor.b;
+				color[pixel_offset + 1] = mPosition.z;//  mColor.g;
+				color[pixel_offset + 2] = mPosition.z;//  mColor.r;
+				color[pixel_offset + 3] = 1;
+				depth[depth_offset] = mPosition.z;
+			}
 		}
 
 		glm::vec3 mPosition = glm::vec3(0.f);
@@ -96,14 +103,68 @@ public:
 			}
 		}
 
-		void Draw(float* pixels, const size_t width, const size_t height) const
+		void Draw(float* color, float* depth, const size_t width, const size_t height) const
 		{
 			for (const auto& point : mPoints)
 			{
-				point.Draw(pixels, width, height);
+				point.Draw(color, depth, width, height);
 			}
 		}
+
+	private:
 		std::vector<Point> mPoints;
+	};
+
+	class Triangle;
+
+	class BoundingBox
+	{
+	public:
+		BoundingBox() {}
+		BoundingBox(const Point& p0, const Point& p1, const Point& p2)
+		{
+			mMin.mPosition.x = std::min(std::min(p0.mPosition.x, p1.mPosition.x), p2.mPosition.x);
+			mMin.mPosition.y = std::min(std::min(p0.mPosition.y, p1.mPosition.y), p2.mPosition.y);
+			mMin.mPosition.z = std::min(std::min(p0.mPosition.z, p1.mPosition.z), p2.mPosition.z);
+
+			mMax.mPosition.x = std::max(std::max(p0.mPosition.x, p1.mPosition.x), p2.mPosition.x);
+			mMax.mPosition.y = std::max(std::max(p0.mPosition.y, p1.mPosition.y), p2.mPosition.y);
+			mMax.mPosition.z = std::max(std::max(p0.mPosition.z, p1.mPosition.z), p2.mPosition.z);
+		}
+
+		void Draw(const Triangle& triangle, float* color, float* depth, const size_t width, const size_t height)
+		{
+			if (mPointsInTriangle.size() == 0)
+			{
+				for (float x = mMin.mPosition.x; x < mMax.mPosition.x; ++x)
+				{
+					for (float y = mMin.mPosition.y; y < mMax.mPosition.y; ++y)
+					{
+						float alpha = Triangle::SignedArea(glm::vec2(x, y), triangle.mVertices[1].mPosition, triangle.mVertices[2].mPosition) / triangle.mTotalArea;
+						float beta = Triangle::SignedArea(glm::vec2(x, y), triangle.mVertices[2].mPosition, triangle.mVertices[0].mPosition) / triangle.mTotalArea;
+						float gamma = Triangle::SignedArea(glm::vec2(x, y), triangle.mVertices[0].mPosition, triangle.mVertices[1].mPosition) / triangle.mTotalArea;
+
+						if (alpha < 0 || beta < 0 || gamma < 0) continue;
+
+						mPointsInTriangle.push_back(
+							Point(
+								(triangle.mVertices[0].mPosition * alpha) + (triangle.mVertices[1].mPosition * beta) + (triangle.mVertices[2].mPosition * gamma),
+								(triangle.mVertices[0].mColor * alpha) + (triangle.mVertices[1].mColor * beta) + (triangle.mVertices[2].mColor * gamma)
+							)
+						);
+					}
+				}
+			}
+
+			for (const auto& p : mPointsInTriangle)
+				p.Draw(color, depth, width, height);
+		}
+
+	private:
+		Point mMin = Point(glm::vec3(FLT_MAX), glm::vec3(0.f));
+		Point mMax = Point(glm::vec3(-FLT_MAX), glm::vec3(0.f));
+		Line mLines[4];
+		std::vector<Point> mPointsInTriangle;
 	};
 
 	class Triangle
@@ -111,23 +172,45 @@ public:
 	public:
 		Triangle(const Point _p0, const Point _p1, const Point _p2, const size_t width, const size_t height)
 		{
-			Point p0(glm::vec3(((_p0.mPosition.x + 1.f) * 0.5f) * (width - 1), (((_p0.mPosition.y + 1.f)) * 0.5f) * (height - 1), ((_p0.mPosition.z + 1.f) * 0.5f)), _p0.mColor);
-			Point p1(glm::vec3(((_p1.mPosition.x + 1.f) * 0.5f) * (width - 1), (((_p1.mPosition.y + 1.f)) * 0.5f) * (height - 1), ((_p1.mPosition.z + 1.f) * 0.5f)), _p1.mColor);
-			Point p2(glm::vec3(((_p2.mPosition.x + 1.f) * 0.5f) * (width - 1), (((_p2.mPosition.y + 1.f)) * 0.5f) * (height - 1), ((_p2.mPosition.z + 1.f) * 0.5f)), _p2.mColor);
+			Point p0(_p0);
+			Point p1(_p1);
+			Point p2(_p2);
 
-			mLines[0] = Line(p0, p1);
-			mLines[1] = Line(p2, p1);
-			mLines[2] = Line(p0, p2);
+			mEdges[0] = Line(p0, p1);
+			mEdges[1] = Line(p2, p1);
+			mEdges[2] = Line(p0, p2);
+
+			mVertices[0] = p0;
+			mVertices[1] = p1;
+			mVertices[2] = p2;
+
+			mBBox = BoundingBox(p0, p1, p2);
+			mTotalArea = Triangle::SignedArea(p0.mPosition, p1.mPosition, p2.mPosition);
 		}
 
-		void Draw(float* pixels, const size_t width, const size_t height) const
+		void Draw(float* color, float* depth, const size_t width, const size_t height)
 		{
-			mLines[0].Draw(pixels, width, height);
-			mLines[1].Draw(pixels, width, height);
-			mLines[2].Draw(pixels, width, height);
+			mEdges[0].Draw(color, depth, width, height);
+			mEdges[1].Draw(color, depth, width, height);
+			mEdges[2].Draw(color, depth, width, height);
+			mBBox.Draw(*this, color, depth, width, height);
 		}
 
-		Line mLines[3];
+		static float SignedArea(const glm::vec2 p0, const glm::vec2 p1, const glm::vec2 p2)
+		{
+			return 0.5f * (
+				(p0.y - p1.y) * (p1.x + p0.x) +
+				(p1.y - p2.y) * (p2.x + p1.x) +
+				(p2.y - p0.y) * (p0.x + p2.x)
+				);
+		}
+
+		Point mVertices[3];
+		float mTotalArea = 0.f;
+
+	private:
+		Line mEdges[3];
+		BoundingBox mBBox;
 	};
 
 	bool ArePointsToBeClipped(const glm::vec4 p0, const glm::vec4 p1, const glm::vec4 p2) const;

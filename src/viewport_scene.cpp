@@ -31,163 +31,163 @@ private:
 
 ScenePipelineData::ScenePipelineData(const VkDevice device, const std::string& current_path, const size_t num_images, const std::string& name) : mDevice(device)
 {
- 	Slang::ComPtr<slang::IGlobalSession> slang_global_session;
- 	SLANG_CHECK("create global session", slang::createGlobalSession(slang_global_session.writeRef()));
+	Slang::ComPtr<slang::IGlobalSession> slang_global_session;
+	SLANG_CHECK("create global session", slang::createGlobalSession(slang_global_session.writeRef()));
 
- 	const slang::TargetDesc target_descs[] = {
- 		{
- 			.format = SLANG_SPIRV,
- 			.profile = slang_global_session->findProfile("spirv_1_5"),
- 		}
- 	};
+	const slang::TargetDesc target_descs[] = {
+		{
+			.format = SLANG_SPIRV,
+			.profile = slang_global_session->findProfile("spirv_1_5"),
+		}
+	};
 
- 	slang::CompilerOptionEntry compiler_options[] = {
- 		{
- 			.name = slang::CompilerOptionName::MatrixLayoutColumn,
- 			.value = {
- 				.kind = slang::CompilerOptionValueKind::Int,
- 				.intValue0 = 1,
- 			},
- 		},
- 		{
- 			.name = slang::CompilerOptionName::DisableWarnings,
- 			.value = {
- 				.kind = slang::CompilerOptionValueKind::String,
- 				.stringValue0 = "41012"
- 			},
- 		},
+	slang::CompilerOptionEntry compiler_options[] = {
+		{
+			.name = slang::CompilerOptionName::MatrixLayoutColumn,
+			.value = {
+				.kind = slang::CompilerOptionValueKind::Int,
+				.intValue0 = 1,
+			},
+		},
+		{
+			.name = slang::CompilerOptionName::DisableWarnings,
+			.value = {
+				.kind = slang::CompilerOptionValueKind::String,
+				.stringValue0 = "41012"
+			},
+		},
  #ifdef _DEBUG
- 		{
- 			.name = slang::CompilerOptionName::DebugInformation,
- 			.value = {
- 				.kind = slang::CompilerOptionValueKind::Int,
- 				.intValue0 = SLANG_DEBUG_INFO_LEVEL_MAXIMAL,
- 			}
- 		},
+		{
+			.name = slang::CompilerOptionName::DebugInformation,
+			.value = {
+				.kind = slang::CompilerOptionValueKind::Int,
+				.intValue0 = SLANG_DEBUG_INFO_LEVEL_MAXIMAL,
+			}
+		},
  #else	// _DEBUG
- 		{
- 			.name = slang::CompilerOptionName::Optimization,
- 			.value = {
- 				.kind = slang::CompilerOptionValueKind::Int,
- 				.intValue0 = SLANG_OPTIMIZATION_LEVEL_MAXIMAL
- 			},
- 		},
+		{
+			.name = slang::CompilerOptionName::Optimization,
+			.value = {
+				.kind = slang::CompilerOptionValueKind::Int,
+				.intValue0 = SLANG_OPTIMIZATION_LEVEL_MAXIMAL
+			},
+		},
  #endif // _DEBUG
- 	};
+	};
 
- 	slang::SessionDesc session_desc = {
- 		.targets = target_descs,
- 		.targetCount = std::size(target_descs),
- 		.compilerOptionEntries = compiler_options,
- 		.compilerOptionEntryCount = std::size(compiler_options),
- 	};
+	slang::SessionDesc session_desc = {
+		.targets = target_descs,
+		.targetCount = std::size(target_descs),
+		.compilerOptionEntries = compiler_options,
+		.compilerOptionEntryCount = std::size(compiler_options),
+	};
 
- 	Slang::ComPtr<slang::ISession> compile_session;
- 	SLANG_CHECK("create compile session", slang_global_session->createSession(session_desc, compile_session.writeRef()));
+	Slang::ComPtr<slang::ISession> compile_session;
+	SLANG_CHECK("create compile session", slang_global_session->createSession(session_desc, compile_session.writeRef()));
 
- 	const std::string slang_shader_path = std::string(current_path).append("/shaders/slang/viewport.slang");
+	const std::string slang_shader_path = std::string(current_path).append("/shaders/slang/viewport.slang");
 
- 	Slang::ComPtr<slang::IBlob> diagnostic_blob;
- 	slang::IModule* slang_module = compile_session->loadModule(slang_shader_path.c_str(), diagnostic_blob.writeRef());
+	Slang::ComPtr<slang::IBlob> diagnostic_blob;
+	slang::IModule* slang_module = compile_session->loadModule(slang_shader_path.c_str(), diagnostic_blob.writeRef());
 
- 	if (diagnostic_blob != nullptr)
- 	{
- 		std::println("{}", reinterpret_cast<const char*>(diagnostic_blob->getBufferPointer()));
- 	}
+	if (diagnostic_blob != nullptr)
+	{
+		std::println("{}", reinterpret_cast<const char*>(diagnostic_blob->getBufferPointer()));
+	}
 
- 	Slang::ComPtr<slang::IEntryPoint> vert_entry_point;
- 	slang_module->findEntryPointByName("vertex_main", vert_entry_point.writeRef());
+	Slang::ComPtr<slang::IEntryPoint> vert_entry_point;
+	slang_module->findEntryPointByName("vertex_main", vert_entry_point.writeRef());
 
- 	std::array<slang::IComponentType*, 2> vert_component_types = { slang_module, vert_entry_point };
- 	Slang::ComPtr<slang::IComponentType> vert_composed_program;
- 	diagnostic_blob.setNull();
- 	SLANG_CHECK("create program", compile_session->createCompositeComponentType(vert_component_types.data(), vert_component_types.size(), vert_composed_program.writeRef(), diagnostic_blob.writeRef()));
+	std::array<slang::IComponentType*, 2> vert_component_types = { slang_module, vert_entry_point };
+	Slang::ComPtr<slang::IComponentType> vert_composed_program;
+	diagnostic_blob.setNull();
+	SLANG_CHECK("create program", compile_session->createCompositeComponentType(vert_component_types.data(), vert_component_types.size(), vert_composed_program.writeRef(), diagnostic_blob.writeRef()));
 
- 	Slang::ComPtr<slang::IComponentType> vert_linked_program;
- 	diagnostic_blob.setNull();
- 	SLANG_CHECK("link program", vert_composed_program->link(vert_linked_program.writeRef(), diagnostic_blob.writeRef()));
+	Slang::ComPtr<slang::IComponentType> vert_linked_program;
+	diagnostic_blob.setNull();
+	SLANG_CHECK("link program", vert_composed_program->link(vert_linked_program.writeRef(), diagnostic_blob.writeRef()));
 
- 	Slang::ComPtr<slang::IBlob> vert_spirv_code;
- 	diagnostic_blob.setNull();
- 	SLANG_CHECK("get spirv code", vert_composed_program->getEntryPointCode(0, 0, vert_spirv_code.writeRef(), diagnostic_blob.writeRef()));
+	Slang::ComPtr<slang::IBlob> vert_spirv_code;
+	diagnostic_blob.setNull();
+	SLANG_CHECK("get spirv code", vert_composed_program->getEntryPointCode(0, 0, vert_spirv_code.writeRef(), diagnostic_blob.writeRef()));
 
- 	const VkShaderModuleCreateInfo vert_mod_ci = {
- 		.sType = VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO,
- 		.codeSize = vert_spirv_code->getBufferSize(),
- 		.pCode = reinterpret_cast<const uint32_t*>(vert_spirv_code->getBufferPointer()),
- 	};
+	const VkShaderModuleCreateInfo vert_mod_ci = {
+		.sType = VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO,
+		.codeSize = vert_spirv_code->getBufferSize(),
+		.pCode = reinterpret_cast<const uint32_t*>(vert_spirv_code->getBufferPointer()),
+	};
 
- 	VkShaderModule vert_mod = VK_NULL_HANDLE;
- 	VK_CHECK("create vert shader module", vkCreateShaderModule(mDevice, &vert_mod_ci, nullptr, &vert_mod));
+	VkShaderModule vert_mod = VK_NULL_HANDLE;
+	VK_CHECK("create vert shader module", vkCreateShaderModule(mDevice, &vert_mod_ci, nullptr, &vert_mod));
 
- 	Slang::ComPtr<slang::IEntryPoint> frag_entry_point;
- 	slang_module->findEntryPointByName("fragment_main", frag_entry_point.writeRef());
+	Slang::ComPtr<slang::IEntryPoint> frag_entry_point;
+	slang_module->findEntryPointByName("fragment_main", frag_entry_point.writeRef());
 
- 	std::array<slang::IComponentType*, 2> frag_component_types = { slang_module, frag_entry_point };
- 	Slang::ComPtr<slang::IComponentType> frag_composed_program;
- 	diagnostic_blob.setNull();
- 	SLANG_CHECK("create program", compile_session->createCompositeComponentType(frag_component_types.data(), frag_component_types.size(), frag_composed_program.writeRef(), diagnostic_blob.writeRef()));
+	std::array<slang::IComponentType*, 2> frag_component_types = { slang_module, frag_entry_point };
+	Slang::ComPtr<slang::IComponentType> frag_composed_program;
+	diagnostic_blob.setNull();
+	SLANG_CHECK("create program", compile_session->createCompositeComponentType(frag_component_types.data(), frag_component_types.size(), frag_composed_program.writeRef(), diagnostic_blob.writeRef()));
 
- 	Slang::ComPtr<slang::IComponentType> frag_linked_program;
- 	diagnostic_blob.setNull();
- 	SLANG_CHECK("link program", frag_composed_program->link(frag_linked_program.writeRef(), diagnostic_blob.writeRef()));
+	Slang::ComPtr<slang::IComponentType> frag_linked_program;
+	diagnostic_blob.setNull();
+	SLANG_CHECK("link program", frag_composed_program->link(frag_linked_program.writeRef(), diagnostic_blob.writeRef()));
 
- 	Slang::ComPtr<slang::IBlob> frag_spirv_code;
- 	diagnostic_blob.setNull();
- 	SLANG_CHECK("get spirv code", frag_composed_program->getEntryPointCode(0, 0, frag_spirv_code.writeRef(), diagnostic_blob.writeRef()));
+	Slang::ComPtr<slang::IBlob> frag_spirv_code;
+	diagnostic_blob.setNull();
+	SLANG_CHECK("get spirv code", frag_composed_program->getEntryPointCode(0, 0, frag_spirv_code.writeRef(), diagnostic_blob.writeRef()));
 
- 	const VkShaderModuleCreateInfo frag_mod_ci = {
- 		.sType = VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO,
- 		.codeSize = frag_spirv_code->getBufferSize(),
- 		.pCode = reinterpret_cast<const uint32_t*>(frag_spirv_code->getBufferPointer()),
- 	};
+	const VkShaderModuleCreateInfo frag_mod_ci = {
+		.sType = VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO,
+		.codeSize = frag_spirv_code->getBufferSize(),
+		.pCode = reinterpret_cast<const uint32_t*>(frag_spirv_code->getBufferPointer()),
+	};
 
- 	VkShaderModule frag_mod = VK_NULL_HANDLE;
- 	VK_CHECK("create frag shader module", vkCreateShaderModule(mDevice, &frag_mod_ci, nullptr, &frag_mod));
+	VkShaderModule frag_mod = VK_NULL_HANDLE;
+	VK_CHECK("create frag shader module", vkCreateShaderModule(mDevice, &frag_mod_ci, nullptr, &frag_mod));
 
-	//std::filesystem::path vert_path = std::string(current_path).append("/shaders/glsl/viewport.vert.glsl.spv");
-	//VkShaderModule vert_mod = VK_NULL_HANDLE;
-	//if (std::filesystem::exists(vert_path))
-	//{
-	//	std::uintmax_t file_size = std::filesystem::file_size(vert_path);
-	//	std::ifstream vert_file(vert_path.c_str(), std::ios::binary);
+	/*std::filesystem::path vert_path = std::string(current_path).append("/shaders/glsl/viewport.vert.glsl.spv");
+	VkShaderModule vert_mod = VK_NULL_HANDLE;
+	if (std::filesystem::exists(vert_path))
+	{
+		std::uintmax_t file_size = std::filesystem::file_size(vert_path);
+		std::ifstream vert_file(vert_path.c_str(), std::ios::binary);
 
-	//	std::vector<char> vert_code(file_size, 0);
-	//	vert_file.read(vert_code.data(), file_size);
+		std::vector<char> vert_code(file_size, 0);
+		vert_file.read(vert_code.data(), file_size);
 
-	//	const VkShaderModuleCreateInfo ci = {
-	//		.sType = VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO,
-	//		.codeSize = file_size,
-	//		.pCode = reinterpret_cast<uint32_t*>(vert_code.data()),
-	//	};
-	//	VK_CHECK("create rgen module", vkCreateShaderModule(mDevice, &ci, nullptr, &vert_mod));
-	//}
-	//else
-	//{
-	//	std::println("Could not find {}", vert_path.string());
-	//}
+		const VkShaderModuleCreateInfo ci = {
+			.sType = VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO,
+			.codeSize = file_size,
+			.pCode = reinterpret_cast<uint32_t*>(vert_code.data()),
+		};
+		VK_CHECK("create rgen module", vkCreateShaderModule(mDevice, &ci, nullptr, &vert_mod));
+	}
+	else
+	{
+		std::println("Could not find {}", vert_path.string());
+	}
 
-	//std::filesystem::path frag_path = std::string(current_path).append("/shaders/glsl/viewport.frag.glsl.spv");
-	//VkShaderModule frag_mod = VK_NULL_HANDLE;
-	//if (std::filesystem::exists(frag_path))
-	//{
-	//	std::uintmax_t file_size = std::filesystem::file_size(frag_path);
-	//	std::ifstream frag_file(frag_path.c_str(), std::ios::binary);
+	std::filesystem::path frag_path = std::string(current_path).append("/shaders/glsl/viewport.frag.glsl.spv");
+	VkShaderModule frag_mod = VK_NULL_HANDLE;
+	if (std::filesystem::exists(frag_path))
+	{
+		std::uintmax_t file_size = std::filesystem::file_size(frag_path);
+		std::ifstream frag_file(frag_path.c_str(), std::ios::binary);
 
-	//	std::vector<char> frag_code(file_size, 0);
-	//	frag_file.read(frag_code.data(), file_size);
+		std::vector<char> frag_code(file_size, 0);
+		frag_file.read(frag_code.data(), file_size);
 
-	//	const VkShaderModuleCreateInfo ci = {
-	//		.sType = VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO,
-	//		.codeSize = file_size,
-	//		.pCode = reinterpret_cast<uint32_t*>(frag_code.data()),
-	//	};
-	//	VK_CHECK("create frag module", vkCreateShaderModule(mDevice, &ci, nullptr, &frag_mod));
-	//}
-	//else
-	//{
-	//	std::println("Could not find {}", frag_path.string());
-	//}
+		const VkShaderModuleCreateInfo ci = {
+			.sType = VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO,
+			.codeSize = file_size,
+			.pCode = reinterpret_cast<uint32_t*>(frag_code.data()),
+		};
+		VK_CHECK("create frag module", vkCreateShaderModule(mDevice, &ci, nullptr, &frag_mod));
+	}
+	else
+	{
+		std::println("Could not find {}", frag_path.string());
+	}*/
 
 	const VkPipelineShaderStageCreateInfo stages[] = {
 		{
@@ -497,7 +497,7 @@ ViewportWorldScene::ViewportWorldScene(const Scene& scene, const VkDevice device
 		VK_CHECK("wait for sem", vkWaitSemaphoresKHR(device, &wait_info, UINT64_MAX));
 
 		hbr->~HostBufferResource();
-	};
+		};
 
 	auto vertex_data = scene.GetVertexData();
 
@@ -652,8 +652,8 @@ ViewportWorldScene::ViewportWorldScene(const Scene& scene, const VkDevice device
 	{
 		mMaterials.push_back(ViewportWorldScene::Material(material));
 	}
-	
-	std::vector<uint8_t> materials_data(mMaterials.size() * sizeof(Material), 32);
+
+	std::vector<uint8_t> materials_data(mMaterials.size() * sizeof(Material));
 	std::memcpy(materials_data.data(), mMaterials.data(), materials_data.size());
 	std::unique_ptr<HostBufferResource, decltype(host_wait_and_delete)> staging_materials_data(new HostBufferResource(
 		device, allocator,
@@ -844,7 +844,7 @@ VkDescriptorSet ViewportWorldScene::MeshInstance::GetModelMatDescSet() const
 
 ViewportWorldScene::Mesh::Mesh(const Scene::Mesh& mesh, const std::vector<ViewportWorldScene::Image>& images,
 	const VkDevice device, const VmaAllocator allocator, const VkDescriptorPool desc_pool, const VkDescriptorSetLayout desc_set_layout,
-	const std::vector<uint32_t>& queue_family_indices,	TransferHelpers* transfer_helpers)
+	const std::vector<uint32_t>& queue_family_indices, TransferHelpers* transfer_helpers)
 	: Scene::Mesh(mesh)
 {
 	mPrimitives.reserve(mesh.GetPrimitives().size());
@@ -870,137 +870,137 @@ ViewportWorldScene::Mesh::Primitive::Primitive(
 	const VkDescriptorPool desc_pool, const VkDescriptorSetLayout desc_set_layout,
 	const std::vector<uint32_t>& queue_family_indices,
 	TransferHelpers* transfer_helpers
-)
+	)
 	: Scene::Mesh::Primitive(primitive)
-{
-}
-
-VkDescriptorSet ViewportWorldScene::Mesh::Primitive::GetTexDescSet() const
-{
-	return mTexsDescSet;
-}
-
-ViewportWorldScene::CameraInstance::CameraInstance(const Scene::CameraInstance& camera_instance, const DeviceBufferResource* uniform_data, const VkDevice device, const VkDescriptorPool desc_pool, const VkDescriptorSetLayout desc_set_layout)
-	: Scene::CameraInstance(camera_instance)
-{
-}
-
-VkDescriptorSet ViewportWorldScene::CameraInstance::GetViewProjDescSet() const
-{
-	return mViewProjDescSet;
-}
-
-ViewportWorldScene::Camera::Camera(const Scene::Camera& camera, const DeviceBufferResource* scene_data)
-	: Scene::Camera(camera)
-{
-}
-
-ViewportWorldScene::Image::Image(const char* image_path, const VkDevice device, const VmaAllocator allocator, const std::vector<uint32_t>& queue_family_indices, TransferHelpers* transfer_helpers)
-{
-	uint32_t w, h, c;
-	uint8_t* pixels = stbi_load(image_path, reinterpret_cast<int*>(&w), reinterpret_cast<int*>(&h), reinterpret_cast<int*>(&c), 4);
-
-	VkFormat format = VK_FORMAT_R8G8B8A8_SRGB;
-
-	mImageResource = std::make_unique<ImageResource>(
-		device, VkExtent3D{ w, h, 1 }, format, VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_SAMPLED_BIT,
-		allocator,
-		queue_family_indices,
-		"texture"
-	);
-
-	auto host_wait_and_delete = [device, transfer_helpers](HostBufferResource* hbr) {
-		VkSemaphore sem = transfer_helpers->GetSemaphore();
-		const uint64_t sem_value = transfer_helpers->GetSemaphoreValueConst();
-
-		const VkSemaphoreWaitInfo wait_info = {
-			.sType = VK_STRUCTURE_TYPE_SEMAPHORE_WAIT_INFO,
-			.semaphoreCount = 1,
-			.pSemaphores = &sem,
-			.pValues = &sem_value,
-		};
-		VK_CHECK("wait for sem", vkWaitSemaphoresKHR(device, &wait_info, UINT64_MAX));
-
-		hbr->~HostBufferResource();
-		};
-
-	std::unique_ptr<HostBufferResource, decltype(host_wait_and_delete)> staging_buffer(new HostBufferResource(
-		device, allocator, VK_IMAGE_USAGE_TRANSFER_SRC_BIT, VMA_ALLOCATION_CREATE_HOST_ACCESS_SEQUENTIAL_WRITE_BIT,
-		mImageResource->GetAllocationInfo2().allocationInfo.size, "texture staging"), host_wait_and_delete);
-	std::memcpy(
-		staging_buffer->GetAllocationInfo2().allocationInfo.pMappedData,
-		pixels,
-		w * h * 4
-	);
-
-	transfer_helpers->RecordBatch();
-	transfer_helpers->ChangeImageLayout(
-		VK_PIPELINE_STAGE_2_TOP_OF_PIPE_BIT, 0,
-		VK_PIPELINE_STAGE_2_COPY_BIT, VK_ACCESS_2_TRANSFER_WRITE_BIT,
-		VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_GENERAL,
-		VK_QUEUE_FAMILY_IGNORED, VK_QUEUE_FAMILY_IGNORED,
-		VK_IMAGE_ASPECT_COLOR_BIT, mImageResource->GetVkImage()
-	);
-	transfer_helpers->CopyBufferToImage(staging_buffer->GetVkBuffer(), mImageResource->GetVkImage(), VkExtent2D{ w,h });
-	transfer_helpers->SubmitBatch();
-}
-
-ViewportWorldScene::Image::Image(const Scene::Image& image, const std::vector<uint8_t>& images_data, const VkDevice device, const VmaAllocator allocator, const std::vector<uint32_t>& queue_family_indices, TransferHelpers* transfer_helpers)
-{
-	uint32_t w, h, c;
-	uint8_t* pixels = stbi_load_from_memory(images_data.data() + image.GetDataOffset(), static_cast<int>(image.GetDataSize()),
-		reinterpret_cast<int*>(&w), reinterpret_cast<int*>(&h), reinterpret_cast<int*>(&c), 4);
-
-	VkFormat format = VK_FORMAT_R8G8B8A8_SRGB;
-	if (image.GetName().contains("normal") || image.GetName().contains("NRM") || image.GetName().contains("nrm"))
 	{
-		format = VK_FORMAT_R8G8B8A8_SNORM;
 	}
 
-	mImageResource = std::make_unique<ImageResource>(
-		device, VkExtent3D{ w, h, 1 }, format, VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_SAMPLED_BIT,
-		allocator,
-		queue_family_indices,
-		"texture"
-	);
+	VkDescriptorSet ViewportWorldScene::Mesh::Primitive::GetTexDescSet() const
+	{
+		return mTexsDescSet;
+	}
 
-	auto host_wait_and_delete = [device, transfer_helpers](HostBufferResource* hbr) {
-		VkSemaphore sem = transfer_helpers->GetSemaphore();
-		const uint64_t sem_value = transfer_helpers->GetSemaphoreValueConst();
+	ViewportWorldScene::CameraInstance::CameraInstance(const Scene::CameraInstance& camera_instance, const DeviceBufferResource* uniform_data, const VkDevice device, const VkDescriptorPool desc_pool, const VkDescriptorSetLayout desc_set_layout)
+		: Scene::CameraInstance(camera_instance)
+	{
+	}
 
-		const VkSemaphoreWaitInfo wait_info = {
-			.sType = VK_STRUCTURE_TYPE_SEMAPHORE_WAIT_INFO,
-			.semaphoreCount = 1,
-			.pSemaphores = &sem,
-			.pValues = &sem_value,
-		};
-		VK_CHECK("wait for sem", vkWaitSemaphoresKHR(device, &wait_info, UINT64_MAX));
+	VkDescriptorSet ViewportWorldScene::CameraInstance::GetViewProjDescSet() const
+	{
+		return mViewProjDescSet;
+	}
 
-		hbr->~HostBufferResource();
-	};
+	ViewportWorldScene::Camera::Camera(const Scene::Camera& camera, const DeviceBufferResource* scene_data)
+		: Scene::Camera(camera)
+	{
+	}
 
-	std::unique_ptr<HostBufferResource, decltype(host_wait_and_delete)> staging_buffer(new HostBufferResource(
-		device, allocator, VK_IMAGE_USAGE_TRANSFER_SRC_BIT, VMA_ALLOCATION_CREATE_HOST_ACCESS_SEQUENTIAL_WRITE_BIT,
-		mImageResource->GetAllocationInfo2().allocationInfo.size, "texture staging"), host_wait_and_delete);
-	std::memcpy(
-		staging_buffer->GetAllocationInfo2().allocationInfo.pMappedData,
-		pixels,
-		w * h * 4
-	);
+	ViewportWorldScene::Image::Image(const char* image_path, const VkDevice device, const VmaAllocator allocator, const std::vector<uint32_t>& queue_family_indices, TransferHelpers* transfer_helpers)
+	{
+		uint32_t w, h, c;
+		uint8_t* pixels = stbi_load(image_path, reinterpret_cast<int*>(&w), reinterpret_cast<int*>(&h), reinterpret_cast<int*>(&c), 4);
 
-	transfer_helpers->RecordBatch();
-	transfer_helpers->ChangeImageLayout(
-		VK_PIPELINE_STAGE_2_TOP_OF_PIPE_BIT, 0,
-		VK_PIPELINE_STAGE_2_COPY_BIT, VK_ACCESS_2_TRANSFER_WRITE_BIT,
-		VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_GENERAL,
-		VK_QUEUE_FAMILY_IGNORED, VK_QUEUE_FAMILY_IGNORED,
-		VK_IMAGE_ASPECT_COLOR_BIT, mImageResource->GetVkImage()
-	);
-	transfer_helpers->CopyBufferToImage(staging_buffer->GetVkBuffer(), mImageResource->GetVkImage(), VkExtent2D{ w,h });
-	transfer_helpers->SubmitBatch();
-}
+		VkFormat format = VK_FORMAT_R8G8B8A8_SRGB;
 
-ImageResource* ViewportWorldScene::Image::GetImageResource() const
-{
-	return mImageResource.get();
-}
+		mImageResource = std::make_unique<ImageResource>(
+			device, VkExtent3D{ w, h, 1 }, format, VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_SAMPLED_BIT,
+			allocator,
+			queue_family_indices,
+			"texture"
+		);
+
+		auto host_wait_and_delete = [device, transfer_helpers](HostBufferResource* hbr) {
+			VkSemaphore sem = transfer_helpers->GetSemaphore();
+			const uint64_t sem_value = transfer_helpers->GetSemaphoreValueConst();
+
+			const VkSemaphoreWaitInfo wait_info = {
+				.sType = VK_STRUCTURE_TYPE_SEMAPHORE_WAIT_INFO,
+				.semaphoreCount = 1,
+				.pSemaphores = &sem,
+				.pValues = &sem_value,
+			};
+			VK_CHECK("wait for sem", vkWaitSemaphoresKHR(device, &wait_info, UINT64_MAX));
+
+			hbr->~HostBufferResource();
+			};
+
+		std::unique_ptr<HostBufferResource, decltype(host_wait_and_delete)> staging_buffer(new HostBufferResource(
+			device, allocator, VK_IMAGE_USAGE_TRANSFER_SRC_BIT, VMA_ALLOCATION_CREATE_HOST_ACCESS_SEQUENTIAL_WRITE_BIT,
+			mImageResource->GetAllocationInfo2().allocationInfo.size, "texture staging"), host_wait_and_delete);
+		std::memcpy(
+			staging_buffer->GetAllocationInfo2().allocationInfo.pMappedData,
+			pixels,
+			w * h * 4
+		);
+
+		transfer_helpers->RecordBatch();
+		transfer_helpers->ChangeImageLayout(
+			VK_PIPELINE_STAGE_2_TOP_OF_PIPE_BIT, 0,
+			VK_PIPELINE_STAGE_2_COPY_BIT, VK_ACCESS_2_TRANSFER_WRITE_BIT,
+			VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_GENERAL,
+			VK_QUEUE_FAMILY_IGNORED, VK_QUEUE_FAMILY_IGNORED,
+			VK_IMAGE_ASPECT_COLOR_BIT, mImageResource->GetVkImage()
+		);
+		transfer_helpers->CopyBufferToImage(staging_buffer->GetVkBuffer(), mImageResource->GetVkImage(), VkExtent2D{ w,h });
+		transfer_helpers->SubmitBatch();
+	}
+
+	ViewportWorldScene::Image::Image(const Scene::Image& image, const std::vector<uint8_t>& images_data, const VkDevice device, const VmaAllocator allocator, const std::vector<uint32_t>& queue_family_indices, TransferHelpers* transfer_helpers)
+	{
+		uint32_t w, h, c;
+		uint8_t* pixels = stbi_load_from_memory(images_data.data() + image.GetDataOffset(), static_cast<int>(image.GetDataSize()),
+			reinterpret_cast<int*>(&w), reinterpret_cast<int*>(&h), reinterpret_cast<int*>(&c), 4);
+
+		VkFormat format = VK_FORMAT_R8G8B8A8_SRGB;
+		if (image.GetName().contains("normal") || image.GetName().contains("NRM") || image.GetName().contains("nrm"))
+		{
+			format = VK_FORMAT_R8G8B8A8_SNORM;
+		}
+
+		mImageResource = std::make_unique<ImageResource>(
+			device, VkExtent3D{ w, h, 1 }, format, VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_SAMPLED_BIT,
+			allocator,
+			queue_family_indices,
+			"texture"
+		);
+
+		auto host_wait_and_delete = [device, transfer_helpers](HostBufferResource* hbr) {
+			VkSemaphore sem = transfer_helpers->GetSemaphore();
+			const uint64_t sem_value = transfer_helpers->GetSemaphoreValueConst();
+
+			const VkSemaphoreWaitInfo wait_info = {
+				.sType = VK_STRUCTURE_TYPE_SEMAPHORE_WAIT_INFO,
+				.semaphoreCount = 1,
+				.pSemaphores = &sem,
+				.pValues = &sem_value,
+			};
+			VK_CHECK("wait for sem", vkWaitSemaphoresKHR(device, &wait_info, UINT64_MAX));
+
+			hbr->~HostBufferResource();
+			};
+
+		std::unique_ptr<HostBufferResource, decltype(host_wait_and_delete)> staging_buffer(new HostBufferResource(
+			device, allocator, VK_IMAGE_USAGE_TRANSFER_SRC_BIT, VMA_ALLOCATION_CREATE_HOST_ACCESS_SEQUENTIAL_WRITE_BIT,
+			mImageResource->GetAllocationInfo2().allocationInfo.size, "texture staging"), host_wait_and_delete);
+		std::memcpy(
+			staging_buffer->GetAllocationInfo2().allocationInfo.pMappedData,
+			pixels,
+			w * h * 4
+		);
+
+		transfer_helpers->RecordBatch();
+		transfer_helpers->ChangeImageLayout(
+			VK_PIPELINE_STAGE_2_TOP_OF_PIPE_BIT, 0,
+			VK_PIPELINE_STAGE_2_COPY_BIT, VK_ACCESS_2_TRANSFER_WRITE_BIT,
+			VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_GENERAL,
+			VK_QUEUE_FAMILY_IGNORED, VK_QUEUE_FAMILY_IGNORED,
+			VK_IMAGE_ASPECT_COLOR_BIT, mImageResource->GetVkImage()
+		);
+		transfer_helpers->CopyBufferToImage(staging_buffer->GetVkBuffer(), mImageResource->GetVkImage(), VkExtent2D{ w,h });
+		transfer_helpers->SubmitBatch();
+	}
+
+	ImageResource* ViewportWorldScene::Image::GetImageResource() const
+	{
+		return mImageResource.get();
+	}

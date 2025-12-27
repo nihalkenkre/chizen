@@ -1,6 +1,8 @@
 #pragma once
 
+#ifdef _DEBUG
 extern "C" PFN_vkSetDebugUtilsObjectNameEXT vk_SetDebugUtilsObjectNameEXT;
+#endif // _DEBUG
 extern "C" PFN_vkQueueSubmit2KHR vk_QueueSubmit2KHR;
 extern "C" PFN_vkSignalSemaphoreKHR vk_SignalSemaphoreKHR;
 extern "C" PFN_vkCmdCopyBuffer2KHR vk_CmdCopyBuffer2KHR;

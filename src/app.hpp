@@ -46,7 +46,7 @@ public:
 
 	uint32_t& GetMaxSamples();
 
-	ImGUIState* GetImGUIState();
+	ImGUIState* GetImGUIState() const;
 	bool& IsRaytracing();
 
 	VkExtent2D& GetFinalRenderTargetExtent();

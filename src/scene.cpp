@@ -57,7 +57,7 @@ Scene::Scene(const std::string& path, const VkDeviceSize uniform_buffer_alignmen
 		std::memcpy(proj_mat_data.data(), &proj_mat, sizeof(glm::mat4));
 
 		mUniformData.append_range(proj_mat_data);
-		mCameras.push_back(Scene::Camera(proj_mat_offset));
+		mCameras.push_back(Scene::Camera(proj_mat_offset, 0.001f, 1000.f));
 	}
 
 	std::vector<float> uniform_debug(mUniformData.size() / sizeof(float));
@@ -67,6 +67,11 @@ Scene::Scene(const std::string& path, const VkDeviceSize uniform_buffer_alignmen
 	for (size_t m = 0; m < gltf->materials_count; ++m)
 	{
 		AddMaterial(gltf, gltf->materials + m);
+	}
+
+	if (mMaterials.size() == 0)
+	{
+		mMaterials.push_back(Scene::Material(-1, glm::vec4(1, 0, 0, 1)));
 	}
 
 	mImages.reserve(gltf->images_count);
@@ -310,33 +315,41 @@ void Scene::AddMesh(const cgltf_data* gltf, const cgltf_mesh* mesh, const size_t
 void Scene::AddCamera(const cgltf_camera* camera, const VkDeviceSize uniform_buffer_alignment)
 {
 	auto proj_matrix = glm::mat4(1.f);
+	float z_near = 0.001f;
+	float z_far = 1000.f;
 
 	if (camera->type == cgltf_camera_type_perspective)
 	{
 		cgltf_camera_perspective persp_data = camera->data.perspective;
-		auto proj_mat = glm::perspective(
-			persp_data.yfov,
-			persp_data.has_aspect_ratio ? persp_data.aspect_ratio : 1.777f,
-			persp_data.znear,
-			persp_data.zfar
-		);
-		proj_mat[1][1] *= -1;
+		//auto proj_mat = glm::perspective(
+		//	persp_data.yfov,
+		//	persp_data.has_aspect_ratio ? persp_data.aspect_ratio : 1.777f,
+		//	persp_data.znear,
+		//	persp_data.zfar
+		//);
+		//proj_mat[1][1] *= -1;
+
+		z_near = persp_data.znear;
+		z_far = persp_data.zfar;
 	}
 	else if (camera->type == cgltf_camera_type_orthographic)
 	{
 		cgltf_camera_orthographic ortho_data = camera->data.orthographic;
-		auto proj_mat = glm::ortho(
-			-ortho_data.xmag / 2.f, ortho_data.xmag / 2.f,
-			-ortho_data.ymag / 2.f, ortho_data.ymag / 2.f,
-			ortho_data.znear, ortho_data.zfar);
-		proj_mat[1][1] *= -1;
+		//auto proj_mat = glm::ortho(
+		//	-ortho_data.xmag / 2.f, ortho_data.xmag / 2.f,
+		//	-ortho_data.ymag / 2.f, ortho_data.ymag / 2.f,
+		//	ortho_data.znear, ortho_data.zfar);
+		//proj_mat[1][1] *= -1;
+
+		z_near = ortho_data.znear;
+		z_far = ortho_data.zfar;
 	}
 
-	mCameras.push_back(Camera(mUniformData.size()));
-	std::vector<uint8_t> mat_data(ALIGNED_SIZE(sizeof(glm::mat4), uniform_buffer_alignment));
-	std::memcpy(mat_data.data(), &proj_matrix, sizeof(glm::mat4));
+	mCameras.push_back(Camera(mUniformData.size(), z_near, z_far));
+	//std::vector<uint8_t> mat_data(ALIGNED_SIZE(sizeof(glm::mat4), uniform_buffer_alignment));
+	//std::memcpy(mat_data.data(), &proj_matrix, sizeof(glm::mat4));
 
-	mUniformData.append_range(mat_data);
+	//mUniformData.append_range(mat_data);
 }
 
 void Scene::AddMaterial(const cgltf_data* gltf, const cgltf_material* material)
@@ -421,14 +434,24 @@ const std::string& Scene::CameraInstance::GetName() const
 	return mName;
 }
 
-Scene::Camera::Camera(const size_t proj_mat_offset)
-	:mProjMatrixOffset(proj_mat_offset)
+Scene::Camera::Camera(const size_t proj_mat_offset, const float z_near, const float z_far)
+	:mProjMatrixOffset(proj_mat_offset), mZNear(z_near), mZFar(z_far)
 {
 }
 
 size_t Scene::Camera::GetProjectionMatrixOffset() const
 {
 	return mProjMatrixOffset;
+}
+
+float Scene::Camera::GetZNear() const
+{
+	return mZNear;
+}
+
+float Scene::Camera::GetZFar() const
+{
+	return mZFar;
 }
 
 Scene::Mesh::Mesh(std::vector<Scene::Mesh::Primitive> primitives)

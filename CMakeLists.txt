@@ -12,16 +12,18 @@ file(GLOB IMGUI_FILE_DLG_SRCS ImGuiFileDialog/ImGuiFileDialog*.*)
 source_group("ImGui" FILES ${IMGUI_SRCS})
 source_group("ImGuiFileDialog" FILES ${IMGUI_FILE_DLG_SRCS})
 
+add_executable(${PROJECT_NAME} ${PROJECT_SRCS} ${IMGUI_SRCS} ${IMGUI_FILE_DLG_SRCS})
+
 add_compile_definitions(_HAS_EXCEPTIONS=0 SDL_MAIN_USE_CALLBACKS IMGUI_DEFINE_MATH_OPERATORS _CRT_SECURE_NO_WARNINGS GLM_FORCE_DEPTH_ZERO_TO_ONE GLM_ENABLE_EXPERIMENTAL)
 
 if (CMAKE_CXX_COMPILER_ID MATCHES "MSVC")
-   set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} /EHs-c-")
+   target_compile_options(${PROJECT_NAME} PRIVATE "/EHs-" "/EHc-" "/GR-")
 elseif (CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang")
-   set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -fno-exceptions")
+   target_compile_options(${PROJECT_NAME} PRIVATE "-fno-exceptions" "-fno-rtti")
 endif()
 
-add_executable(${PROJECT_NAME} ${PROJECT_SRCS} ${IMGUI_SRCS} ${IMGUI_FILE_DLG_SRCS})
 
+set_property(TARGET ${PROJECT_NAME} PROPERTY CXX_STANDARD 23)
 target_precompile_headers(${PROJECT_NAME} PRIVATE 
                                        <vector>
                                        <filesystem>
@@ -47,8 +49,6 @@ target_precompile_headers(${PROJECT_NAME} PRIVATE
                                        <tbb/task_arena.h>
                                        <embree4/rtcore.h>
                            )
-set_property(TARGET ${PROJECT_NAME} PROPERTY CXX_STANDARD 23)
-
 target_include_directories(${PROJECT_NAME} PRIVATE SDL/include imgui imgui/backends ImGuiFileDialog glm cgltf stb $ENV{VULKAN_SDK}/Include $ENV{EMBREE_SDK}/include $ENV{ONE_TBB_SDK}/include)
 
 target_link_directories(${PROJECT_NAME} PRIVATE $<IF:$<CONFIG:Debug>,${CMAKE_SOURCE_DIR}/SDL/build/Debug,> $<IF:$<CONFIG:MinSizeRel>,${CMAKE_SOURCE_DIR}/SDL/build/MinSizeRel,> $ENV{VULKAN_SDK}/Lib $ENV{EMBREE_SDK}/lib/ $ENV{ONE_TBB_SDK}/lib/intel64/vc14)

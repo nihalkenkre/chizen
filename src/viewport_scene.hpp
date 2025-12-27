@@ -23,7 +23,7 @@ public:
 class ViewportWorldScene : public ViewportScene
 {
 public:
-	ViewportWorldScene(const Scene& scene, const VkDevice device, const VmaAllocator allocator, const std::vector<uint32_t>& queue_family_indices, const std::string& current_path, TransferHelpers* transfer_objects);
+	ViewportWorldScene(const Scene& scene, const VkDevice device, const VmaAllocator allocator, const std::vector<uint32_t>& queue_family_indices, const std::string& current_path, TransferHelpers* transfer_helpers);
 
 	void Render(const VkCommandBuffer cmd_buff, const uint32_t cam_index) const override;
 
