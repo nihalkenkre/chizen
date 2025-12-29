@@ -3,7 +3,7 @@
 class VulkanInterface;
 class Swapchain;
 class FrameObjects;
-class ScenePipelineData;
+class ViewportScenePipelineData;
 class ImGUIState;
 class ViewportScene;
 class ImageResource;

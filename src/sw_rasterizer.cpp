@@ -13,7 +13,7 @@ void SWRasterizer::Start(const SWRasterizerScene* scene, const uint32_t width, c
 	float z_far = scene->GetCameras()[scene->GetCameraInstances()[cam_index].GetCameraIndex()].GetZFar();
 
 	float* depth = new float[width * height];
-	std::fill_n(depth, width * height, 0.f);
+	std::fill_n(depth, width * height, 1.f);
 
 	srand(static_cast<unsigned int>(time(NULL)));
 	tbb::blocked_range<size_t> mesh_instance_range(0, scene->GetMeshInstances().size());
@@ -80,17 +80,17 @@ void SWRasterizer::Start(const SWRasterizerScene* scene, const uint32_t width, c
 
 							p0.x = (p0.x + 1) * 0.5f * (width - 1);
 							p0.y = (p0.y + 1) * 0.5f * (height - 1);
-							p0.z = 1 - ((pos0.w - z_near) / (z_far - z_near));
+							p0.z = (pos0.w - z_near) / (z_far - z_near);
 
 							p1.x = (p1.x + 1) * 0.5f * (width - 1);
 							p1.y = (p1.y + 1) * 0.5f * (height - 1);
-							p1.z = 1 - ((pos1.w - z_near) / (z_far - z_near));
+							p1.z = (pos1.w - z_near) / (z_far - z_near);
 
 							p2.x = (p2.x + 1) * 0.5f * (width - 1);
 							p2.y = (p2.y + 1) * 0.5f * (height - 1);
-							p2.z = 1 - ((pos2.w - z_near) / (z_far - z_near));
+							p2.z = (pos2.w - z_near) / (z_far - z_near);
 
-							if (Triangle::SignedArea(p0, p1, p2) < 0.01f)
+							if (Triangle::SignedArea(p0, p1, p2) < 1.f)
 								continue;
 
 							mMeshInstanceTriangles[m].push_back(

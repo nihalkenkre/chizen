@@ -2,7 +2,7 @@
 
 class VulkanInterface;
 class FrameObjects;
-class RaytracerPipelineData;
+class VulkanRaytracerScenePipelineData;
 class ImageResource;
 class HostBufferResource;
 class DeviceBufferResource;
@@ -20,37 +20,27 @@ public:
 
 	~VulkanRaytracer() noexcept;
 
-	void RecreateRenderResources(const VkExtent2D& extent);
-	void Start(const VulkanRaytracerScene* scene, const ImageResource* final_render_target, const uint32_t max_samples, const uint32_t cam_index);
+	void RecreateRenderResources(const VkExtent3D& extent);
+	void Start(const VulkanRaytracerScene* scene, const ImageResource* final_render_target, const VkExtent3D& extemt, const uint32_t max_samples, const uint32_t cam_index);
 	void Stop();
 
 	FrameObjects* GetFrameObjects() const;
 
 private:
-	void InitializeResources();
+	void InitializeResources(const VkExtent3D& extent);
 
 	std::unique_ptr<ImageResource> mAccumRenderTarget = nullptr;
 	std::unique_ptr<DeviceBufferResource> mRandomStates = nullptr;
-	std::unique_ptr<HostBufferResource> mRaygenSBT = nullptr;
-	std::unique_ptr<HostBufferResource> mMissSBT = nullptr;
-	std::unique_ptr<HostBufferResource> mCHSBT = nullptr;
 
 	std::unique_ptr<FrameObjects> mFrameObjects = nullptr;
-	std::unique_ptr<HostBufferResource> mUniformBuffer = nullptr;
-	std::vector<VkDescriptorSet> mDescriptorSets;
-	VkDescriptorPool mDescriptorPool = VK_NULL_HANDLE;
 	VkPhysicalDeviceRayTracingPipelinePropertiesKHR mRayTracingProperties = {};
 
-	std::unique_ptr<RaytracerPipelineData> mPipelineData = nullptr;
-
 	TransferHelpers* mTransferHelpers = nullptr;
-	VkExtent3D mExtent = {};
 	VkQueue mComputeQueue = VK_NULL_HANDLE;
 	std::vector<uint32_t> mQueueFamilyIndices;
 	VmaAllocator mAllocator = nullptr;
 	VkDevice mDevice = VK_NULL_HANDLE;
 
 	uint8_t mMaxFramesInFlight = 0;
-	uint8_t mFrameInFlight = 0;
 	bool mStopRendering = false;
 };

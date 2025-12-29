@@ -120,9 +120,10 @@ void App::ProcessEvent(SDL_Event* event)
 			scene,
 			mVulkanInterface->GetVkDevice(),
 			mVulkanInterface->GetVmaAllocator(),
-			std::vector<uint32_t>{mVulkanInterface->GetPhysicalDeviceData()->GraphicsQueueFamilyIndex,
-			mVulkanInterface->GetPhysicalDeviceData()->ComputeQueueFamilyIndex,
-			mVulkanInterface->GetPhysicalDeviceData()->TransferQueueFamilyIndex},
+			std::vector<uint32_t>{
+			mVulkanInterface->GetPhysicalDeviceData()->GraphicsQueueFamilyIndex,
+				mVulkanInterface->GetPhysicalDeviceData()->ComputeQueueFamilyIndex,
+				mVulkanInterface->GetPhysicalDeviceData()->TransferQueueFamilyIndex},
 			mCurrentPath,
 			mVulkanInterface->GetTransferHelpers()
 		);
@@ -130,7 +131,13 @@ void App::ProcessEvent(SDL_Event* event)
 		mVulkanRaytracerScene = std::make_unique<VulkanRaytracerScene>(
 			scene, mVulkanInterface->GetVkDevice(),
 			mVulkanInterface->GetVmaAllocator(),
-			mVulkanInterface->GetPhysicalDeviceData()->Properties.properties.limits.minUniformBufferOffsetAlignment,
+			std::vector<uint32_t>{
+			mVulkanInterface->GetPhysicalDeviceData()->GraphicsQueueFamilyIndex,
+				mVulkanInterface->GetPhysicalDeviceData()->ComputeQueueFamilyIndex,
+				mVulkanInterface->GetPhysicalDeviceData()->TransferQueueFamilyIndex},
+			mCurrentPath,
+			mVulkanInterface->GetPhysicalDeviceData()->RayTracingProperties,
+			mVulkanInterface->GetPhysicalDeviceData()->AccelerationStructureProperties.minAccelerationStructureScratchOffsetAlignment,
 			mVulkanInterface->GetComputeHelpers()
 		);
 
@@ -143,14 +150,14 @@ void App::ProcessEvent(SDL_Event* event)
 	{
 		mRenderType = events.StartRender.user.code;
 
-		const VkClearColorValue clear_color = {
-			.float32 = {
-				0, 0, 0, 0
-			},
-		};
-
 		if (mRenderType == 0)
 		{
+			const VkClearColorValue clear_color = {
+				.float32 = {
+					0, 0, 0, 0
+				},
+			};
+
 			if (mVulkanRaytracerScene != nullptr)
 			{
 				int* tmp_render_target_extent = mImGUIState->GetFinalRenderTargetExtent();
@@ -169,7 +176,7 @@ void App::ProcessEvent(SDL_Event* event)
 					mMaxSamples = tmp_max_samples;
 				}
 
-				mRenderThread = std::thread(&VulkanRaytracer::Start, mVulkanRaytracer.get(), mVulkanRaytracerScene.get(), mFinalRenderTarget.get(), mMaxSamples, mImGUIState->GetSelectedCameraIndex());
+				mRenderThread = std::thread(&VulkanRaytracer::Start, mVulkanRaytracer.get(), mVulkanRaytracerScene.get(), mFinalRenderTarget.get(), mFinalRenderTargetExtent, mMaxSamples, mImGUIState->GetSelectedCameraIndex());
 				mRenderThread.detach();
 				SDL_CHECK(SDL_PushEvent(&events.RenderStarted));
 			}
@@ -199,6 +206,11 @@ void App::ProcessEvent(SDL_Event* event)
 					0,
 					mStagingRenderTarget->GetAllocationInfo2().allocationInfo.size
 				);
+
+				TransferHelpers* transfer_helpers = mVulkanInterface->GetTransferHelpers();
+				transfer_helpers->RecordBatch();
+				transfer_helpers->CopyBufferToImage(mStagingRenderTarget->GetVkBuffer(), mFinalRenderTarget->GetVkImage(), mFinalRenderTargetExtent);
+				transfer_helpers->SubmitBatch();
 
 				mRenderThread = std::thread(&EmbreeRaytracer::Start, mEmbreeRaytracer.get(), mEmbreeRaytacerScene.get(), mFinalRenderTargetExtent.width, mFinalRenderTargetExtent.height, mMaxSamples, mImGUIState->GetSelectedCameraIndex(), reinterpret_cast<float*>(mStagingRenderTarget->GetAllocationInfo2().allocationInfo.pMappedData));
 				mRenderThread.detach();
@@ -415,7 +427,7 @@ float& App::GetZoomLevel()
 	return mZoomLevel;
 }
 
-ImGUIState* App::GetImGUIState() const 
+ImGUIState* App::GetImGUIState() const
 {
 	return mImGUIState.get();
 }
@@ -430,7 +442,7 @@ bool& App::IsRaytracing()
 	return mDisplayRender;
 }
 
-VkExtent2D& App::GetFinalRenderTargetExtent()
+VkExtent3D& App::GetFinalRenderTargetExtent()
 {
 	return mFinalRenderTargetExtent;
 }

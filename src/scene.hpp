@@ -37,7 +37,7 @@ public:
 				const size_t texcoords_size, const size_t texcoords_offset,
 				const size_t vertex_count,
 				const size_t indices_size, const size_t indices_offset, const size_t index_count, const VkIndexType index_type,
-				const int32_t material_index
+				const uint32_t material_index
 			);
 
 			size_t GetPositionsSize() const;
@@ -53,7 +53,7 @@ public:
 			size_t GetVertexCount() const;
 			size_t GetIndexCount() const;
 
-			int32_t GetMaterialIndex() const;
+			uint32_t GetMaterialIndex() const;
 
 		private:
 			size_t mPositionsSize = 0;
@@ -68,7 +68,7 @@ public:
 			VkIndexType mIndexType = VK_INDEX_TYPE_UINT16;
 			size_t mVertexCount = 0;
 			size_t mIndexCount = 0;
-			int32_t mMaterialIndex = -1;
+			uint32_t mMaterialIndex = 0;
 		};
 
 		Mesh(std::vector<Scene::Mesh::Primitive> primitives);
@@ -86,15 +86,15 @@ public:
 
 		size_t GetCameraIndex() const;
 		size_t GetViewProjMatrixOffset() const;
-		size_t GetViewMatrixOffset() const;
-		size_t GetProjMatrixOffset() const;
+		size_t GetViewInverseMatrixOffset() const;
+		size_t GetProjInverseMatrixOffset() const;
 		const std::string& GetName() const;
 
 	private:
 		size_t mCameraIndex = 0;
 		size_t mViewProjMatrixOffset = 0;
-		size_t mViewMatrixOffset = 0;
-		size_t mProjMatrixOffset = 0;
+		size_t mViewInverseMatrixOffset = 0;
+		size_t mProjInverseMatrixOffset = 0;
 		std::string mName = "scene cam";
 	};
 
@@ -109,7 +109,7 @@ public:
 		float GetZFar() const;
 
 	private:
-		size_t mProjMatrixOffset = 0;
+		size_t mProjInverseMatrixOffset = 0;
 		float mZNear = 0.1f;
 		float mZFar = 100.f;
 	};

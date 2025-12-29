@@ -18,6 +18,15 @@ Scene::Scene(const std::string& path, const VkDeviceSize uniform_buffer_alignmen
 		std::println("Could not load GLTF from {}", path);
 	}
 
+	mMaterials.reserve(gltf->materials_count);
+	for (size_t m = 0; m < gltf->materials_count; ++m)
+	{
+		AddMaterial(gltf, gltf->materials + m);
+	}
+
+	// Default material
+	mMaterials.push_back(Scene::Material(-1, glm::vec4(1, 0, 0, 1)));
+
 	mMeshes.resize(gltf->meshes_count);
 	for (size_t n = 0; n < gltf->nodes_count; ++n)
 	{
@@ -62,17 +71,6 @@ Scene::Scene(const std::string& path, const VkDeviceSize uniform_buffer_alignmen
 
 	std::vector<float> uniform_debug(mUniformData.size() / sizeof(float));
 	std::memcpy(uniform_debug.data(), mUniformData.data(), mUniformData.size());
-
-	mMaterials.reserve(gltf->materials_count);
-	for (size_t m = 0; m < gltf->materials_count; ++m)
-	{
-		AddMaterial(gltf, gltf->materials + m);
-	}
-
-	if (mMaterials.size() == 0)
-	{
-		mMaterials.push_back(Scene::Material(-1, glm::vec4(1, 0, 0, 1)));
-	}
 
 	mImages.reserve(gltf->images_count);
 	for (size_t i = 0; i < gltf->images_count; ++i)
@@ -207,12 +205,16 @@ void Scene::AddCameraInstance(const cgltf_data* gltf, const cgltf_node* node, co
 	std::memcpy(view_proj_data.data(), &view_proj_matrix, sizeof(glm::mat4));
 	mUniformData.append_range(view_proj_data);
 
+	// for raygen shader
+	auto view_inverse = glm::inverse(view_matrix);
+	auto proj_inverse = glm::inverse(proj_matrix);
+
 	std::vector<uint8_t> view_data(ALIGNED_SIZE(sizeof(glm::mat4), uniform_buffer_alignments));
-	std::memcpy(view_data.data(), &view_matrix, sizeof(glm::mat4));
+	std::memcpy(view_data.data(), &view_inverse, sizeof(glm::mat4));
 	mUniformData.append_range(view_data);
 
 	std::vector<uint8_t> proj_data(ALIGNED_SIZE(sizeof(glm::mat4), uniform_buffer_alignments));
-	std::memcpy(proj_data.data(), &proj_matrix, sizeof(glm::mat4));
+	std::memcpy(proj_data.data(), &proj_inverse, sizeof(glm::mat4));
 	mUniformData.append_range(proj_data);
 
 	mCameraNames.push_back(node->name == nullptr ? "scene cam" : node->name);
@@ -237,7 +239,7 @@ void Scene::AddMesh(const cgltf_data* gltf, const cgltf_mesh* mesh, const size_t
 		size_t indices_offset = 0;
 		size_t vertex_count = 0;
 		size_t index_count = 0;
-		int32_t material_index = -1;
+		int32_t material_index = static_cast<int32_t>(mMaterials.size()) - 1;
 
 		for (size_t a = 0; a < curr_prim->attributes_count; ++a)
 		{
@@ -321,35 +323,17 @@ void Scene::AddCamera(const cgltf_camera* camera, const VkDeviceSize uniform_buf
 	if (camera->type == cgltf_camera_type_perspective)
 	{
 		cgltf_camera_perspective persp_data = camera->data.perspective;
-		//auto proj_mat = glm::perspective(
-		//	persp_data.yfov,
-		//	persp_data.has_aspect_ratio ? persp_data.aspect_ratio : 1.777f,
-		//	persp_data.znear,
-		//	persp_data.zfar
-		//);
-		//proj_mat[1][1] *= -1;
-
 		z_near = persp_data.znear;
 		z_far = persp_data.zfar;
 	}
 	else if (camera->type == cgltf_camera_type_orthographic)
 	{
 		cgltf_camera_orthographic ortho_data = camera->data.orthographic;
-		//auto proj_mat = glm::ortho(
-		//	-ortho_data.xmag / 2.f, ortho_data.xmag / 2.f,
-		//	-ortho_data.ymag / 2.f, ortho_data.ymag / 2.f,
-		//	ortho_data.znear, ortho_data.zfar);
-		//proj_mat[1][1] *= -1;
-
 		z_near = ortho_data.znear;
 		z_far = ortho_data.zfar;
 	}
 
 	mCameras.push_back(Camera(mUniformData.size(), z_near, z_far));
-	//std::vector<uint8_t> mat_data(ALIGNED_SIZE(sizeof(glm::mat4), uniform_buffer_alignment));
-	//std::memcpy(mat_data.data(), &proj_matrix, sizeof(glm::mat4));
-
-	//mUniformData.append_range(mat_data);
 }
 
 void Scene::AddMaterial(const cgltf_data* gltf, const cgltf_material* material)
@@ -403,8 +387,8 @@ size_t Scene::MeshInstance::GetModelMatrixOffset() const
 Scene::CameraInstance::CameraInstance(const size_t camera_index, const size_t view_matrix_offset, const char* name)
 	:mCameraIndex(camera_index),
 	mViewProjMatrixOffset(view_matrix_offset),
-	mViewMatrixOffset(view_matrix_offset + sizeof(glm::mat4)),
-	mProjMatrixOffset(view_matrix_offset + sizeof(glm::mat4) * 2),
+	mViewInverseMatrixOffset(view_matrix_offset + sizeof(glm::mat4)),
+	mProjInverseMatrixOffset(view_matrix_offset + sizeof(glm::mat4) * 2),
 	mName(name)
 {
 }
@@ -419,14 +403,14 @@ size_t Scene::CameraInstance::GetViewProjMatrixOffset() const
 	return mViewProjMatrixOffset;
 }
 
-size_t Scene::CameraInstance::GetViewMatrixOffset() const
+size_t Scene::CameraInstance::GetViewInverseMatrixOffset() const
 {
-	return mViewMatrixOffset;
+	return mViewInverseMatrixOffset;
 }
 
-size_t Scene::CameraInstance::GetProjMatrixOffset() const
+size_t Scene::CameraInstance::GetProjInverseMatrixOffset() const
 {
-	return mProjMatrixOffset;
+	return mProjInverseMatrixOffset;
 }
 
 const std::string& Scene::CameraInstance::GetName() const
@@ -435,13 +419,13 @@ const std::string& Scene::CameraInstance::GetName() const
 }
 
 Scene::Camera::Camera(const size_t proj_mat_offset, const float z_near, const float z_far)
-	:mProjMatrixOffset(proj_mat_offset), mZNear(z_near), mZFar(z_far)
+	:mProjInverseMatrixOffset(proj_mat_offset), mZNear(z_near), mZFar(z_far)
 {
 }
 
 size_t Scene::Camera::GetProjectionMatrixOffset() const
 {
-	return mProjMatrixOffset;
+	return mProjInverseMatrixOffset;
 }
 
 float Scene::Camera::GetZNear() const
@@ -470,7 +454,7 @@ Scene::Mesh::Primitive::Primitive(
 	const size_t texcoords_size, const size_t texcoords_offset, 
 	const size_t vertex_count, 
 	const size_t indices_size, const size_t indices_offset, const size_t index_count, const VkIndexType index_type,
-	const int32_t material_index
+	const uint32_t material_index
 )
 	: mPositionsSize(positions_size),
 	mPositionsOffset(positions_offset),
@@ -543,7 +527,7 @@ size_t Scene::Mesh::Primitive::GetIndexCount() const
 	return mIndexCount;
 }
 
-int32_t Scene::Mesh::Primitive::GetMaterialIndex() const
+uint32_t Scene::Mesh::Primitive::GetMaterialIndex() const
 {
 	return mMaterialIndex;
 }

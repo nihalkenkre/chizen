@@ -49,7 +49,7 @@ public:
 	ImGUIState* GetImGUIState() const;
 	bool& IsRaytracing();
 
-	VkExtent2D& GetFinalRenderTargetExtent();
+	VkExtent3D& GetFinalRenderTargetExtent();
 	ImageResource* GetFinalRenderTarget() const;
 
 private:
@@ -72,7 +72,7 @@ private:
 	std::unique_ptr<ImageResource> mFinalRenderTarget = nullptr;
 	std::unique_ptr<HostBufferResource> mStagingRenderTarget = nullptr;
 	SDL_Window* mWindow = nullptr;
-	VkExtent2D mFinalRenderTargetExtent = { 1280, 720 };
+	VkExtent3D mFinalRenderTargetExtent = { 1280, 720, 1 };
 	std::thread mRenderThread = {};
 	bool mIsTrackingMouse = false;
 	bool mDisplayRender = false;

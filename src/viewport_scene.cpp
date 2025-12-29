@@ -6,16 +6,16 @@
 
 #include <stb_image.h>
 
-class ScenePipelineData
+class ViewportScenePipelineData
 {
 public:
-	ScenePipelineData() = delete;
-	ScenePipelineData(const VkDevice device, const std::string& current_path, const size_t num_images, const std::string& name);
+	ViewportScenePipelineData() = delete;
+	ViewportScenePipelineData(const VkDevice device, const std::string& current_path, const size_t num_images, const std::string& name);
 
-	ScenePipelineData(const ScenePipelineData& other) = delete;
-	ScenePipelineData& operator=(const ScenePipelineData& other) = delete;
+	ViewportScenePipelineData(const ViewportScenePipelineData& other) = delete;
+	ViewportScenePipelineData& operator=(const ViewportScenePipelineData& other) = delete;
 
-	~ScenePipelineData() noexcept;
+	~ViewportScenePipelineData() noexcept;
 
 	VkPipeline GetPipeline() const;
 	VkPipelineLayout GetPipelineLayout() const;
@@ -29,7 +29,7 @@ private:
 	VkDevice mDevice = VK_NULL_HANDLE;
 };
 
-ScenePipelineData::ScenePipelineData(const VkDevice device, const std::string& current_path, const size_t num_images, const std::string& name) : mDevice(device)
+ViewportScenePipelineData::ViewportScenePipelineData(const VkDevice device, const std::string& current_path, const size_t num_images, const std::string& name) : mDevice(device)
 {
 	Slang::ComPtr<slang::IGlobalSession> slang_global_session;
 	SLANG_CHECK("create global session", slang::createGlobalSession(slang_global_session.writeRef()));
@@ -452,7 +452,7 @@ ScenePipelineData::ScenePipelineData(const VkDevice device, const std::string& c
 #endif // _DEBUG
 }
 
-ScenePipelineData::~ScenePipelineData() noexcept
+ViewportScenePipelineData::~ViewportScenePipelineData() noexcept
 {
 	if (mDevice != VK_NULL_HANDLE)
 	{
@@ -464,17 +464,17 @@ ScenePipelineData::~ScenePipelineData() noexcept
 	}
 }
 
-VkPipeline ScenePipelineData::GetPipeline() const
+VkPipeline ViewportScenePipelineData::GetPipeline() const
 {
 	return mPipeline;
 }
 
-VkPipelineLayout ScenePipelineData::GetPipelineLayout() const
+VkPipelineLayout ViewportScenePipelineData::GetPipelineLayout() const
 {
 	return mPipelineLayout;
 }
 
-const std::vector<VkDescriptorSetLayout>& ScenePipelineData::GetDescriptorSetLayouts() const
+const std::vector<VkDescriptorSetLayout>& ViewportScenePipelineData::GetDescriptorSetLayouts() const
 {
 	return mDescriptorSetLayouts;
 }
@@ -482,22 +482,22 @@ const std::vector<VkDescriptorSetLayout>& ScenePipelineData::GetDescriptorSetLay
 ViewportWorldScene::ViewportWorldScene(const Scene& scene, const VkDevice device, const VmaAllocator allocator, const std::vector<uint32_t>& queue_family_indices, const std::string& current_path, TransferHelpers* transfer_helpers)
 	: mDevice(device)
 {
-	mPipelineData = std::make_unique<ScenePipelineData>(device, current_path, std::max(static_cast<size_t>(1), scene.GetImages().size()), "Scene");
+	mPipelineData = std::make_unique<ViewportScenePipelineData>(device, current_path, std::max(static_cast<size_t>(1), scene.GetImages().size()), "Scene");
 
-	auto host_wait_and_delete = [device, transfer_helpers](HostBufferResource* hbr) {
-		VkSemaphore sem = transfer_helpers->GetSemaphore();
-		const uint64_t sem_value = transfer_helpers->GetSemaphoreValueConst();
+	//auto host_wait_and_delete = [device, transfer_helpers](HostBufferResource* hbr) {
+	//	VkSemaphore sem = transfer_helpers->GetSemaphore();
+	//	const uint64_t sem_value = transfer_helpers->GetSemaphoreValueConst();
 
-		const VkSemaphoreWaitInfo wait_info = {
-			.sType = VK_STRUCTURE_TYPE_SEMAPHORE_WAIT_INFO,
-			.semaphoreCount = 1,
-			.pSemaphores = &sem,
-			.pValues = &sem_value,
-		};
-		VK_CHECK("wait for sem", vkWaitSemaphoresKHR(device, &wait_info, UINT64_MAX));
+	//	const VkSemaphoreWaitInfo wait_info = {
+	//		.sType = VK_STRUCTURE_TYPE_SEMAPHORE_WAIT_INFO,
+	//		.semaphoreCount = 1,
+	//		.pSemaphores = &sem,
+	//		.pValues = &sem_value,
+	//	};
+	//	VK_CHECK("wait for sem", vkWaitSemaphoresKHR(device, &wait_info, UINT64_MAX));
 
-		hbr->~HostBufferResource();
-		};
+	//	hbr->~HostBufferResource();
+	//	};
 
 	auto vertex_data = scene.GetVertexData();
 
@@ -506,10 +506,16 @@ ViewportWorldScene::ViewportWorldScene(const Scene& scene, const VkDevice device
 		VK_BUFFER_USAGE_VERTEX_BUFFER_BIT | VK_BUFFER_USAGE_INDEX_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT,
 		vertex_data.size(), "scene vertex data");
 
-	std::unique_ptr<HostBufferResource, decltype(host_wait_and_delete)> staging_vertex_data(new HostBufferResource(
+	//std::unique_ptr<HostBufferResource, decltype(host_wait_and_delete)> staging_vertex_data(new HostBufferResource(
+	//	device, allocator,
+	//	VK_BUFFER_USAGE_TRANSFER_SRC_BIT, VMA_ALLOCATION_CREATE_HOST_ACCESS_SEQUENTIAL_WRITE_BIT,
+	//	vertex_data, "staging vertex data"), host_wait_and_delete
+	//);
+
+	auto staging_vertex_data = std::make_unique<HostBufferResource>(
 		device, allocator,
 		VK_BUFFER_USAGE_TRANSFER_SRC_BIT, VMA_ALLOCATION_CREATE_HOST_ACCESS_SEQUENTIAL_WRITE_BIT,
-		vertex_data, "staging vertex data"), host_wait_and_delete
+		vertex_data, "staging vertex data"
 	);
 
 	auto uniform_data = scene.GetUniformData();
@@ -519,10 +525,16 @@ ViewportWorldScene::ViewportWorldScene(const Scene& scene, const VkDevice device
 		VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT,
 		uniform_data.size(), "scene uniform data");
 
-	std::unique_ptr<HostBufferResource, decltype(host_wait_and_delete)> staging_uniform_data(new HostBufferResource(
+	//std::unique_ptr<HostBufferResource, decltype(host_wait_and_delete)> staging_uniform_data(new HostBufferResource(
+	//	device, allocator,
+	//	VK_BUFFER_USAGE_TRANSFER_SRC_BIT, VMA_ALLOCATION_CREATE_HOST_ACCESS_SEQUENTIAL_WRITE_BIT,
+	//	uniform_data, "staging uniform data"), host_wait_and_delete
+	//);
+
+	auto staging_uniform_data = std::make_unique<HostBufferResource>(
 		device, allocator,
 		VK_BUFFER_USAGE_TRANSFER_SRC_BIT, VMA_ALLOCATION_CREATE_HOST_ACCESS_SEQUENTIAL_WRITE_BIT,
-		uniform_data, "staging uniform data"), host_wait_and_delete
+		uniform_data, "staging uniform data"
 	);
 
 	const VkDescriptorPoolSize view_proj_desc_size = {
@@ -559,9 +571,9 @@ ViewportWorldScene::ViewportWorldScene(const Scene& scene, const VkDevice device
 	Utils_SetObjectName(mDevice, VK_OBJECT_TYPE_DESCRIPTOR_POOL, reinterpret_cast<uint64_t>(mDescriptorPool), "scene descriptor pool");
 #endif // _DEBUG
 
-	const std::vector<VkDescriptorSetLayout> desc_set_layouts = mPipelineData->GetDescriptorSetLayouts();
+	const std::vector<VkDescriptorSetLayout>& desc_set_layouts = mPipelineData->GetDescriptorSetLayouts();
 
-	mMatricesDescBufferInfo = {
+	mCameraDescBuffer = {
 		.buffer = mUniformData->GetVkBuffer(),
 		.offset = 0,
 		.range = sizeof(glm::mat4),
@@ -575,13 +587,17 @@ ViewportWorldScene::ViewportWorldScene(const Scene& scene, const VkDevice device
 	};
 	VK_CHECK("allocate cam matrix desc set", vkAllocateDescriptorSets(device, &cam_ds_ai, &mCameraMatrixDescSet));
 
+#ifdef _DEBUG
+	Utils_SetObjectName(device, VK_OBJECT_TYPE_DESCRIPTOR_SET, reinterpret_cast<uint64_t>(mCameraMatrixDescSet), "viewport scene cam desc set");
+#endif
+
 	const VkWriteDescriptorSet cam_ds_write = {
 		.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
 		.dstSet = mCameraMatrixDescSet,
 		.dstBinding = 0,
 		.descriptorCount = 1,
 		.descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC,
-		.pBufferInfo = &mMatricesDescBufferInfo,
+		.pBufferInfo = &mCameraDescBuffer,
 	};
 
 	vkUpdateDescriptorSets(device, 1, &cam_ds_write, 0, nullptr);
@@ -594,13 +610,17 @@ ViewportWorldScene::ViewportWorldScene(const Scene& scene, const VkDevice device
 	};
 	VK_CHECK("allocate model matrix desc set", vkAllocateDescriptorSets(device, &model_ds_ai, &mModelMatrixDescSet));
 
+#ifdef _DEBUG
+	Utils_SetObjectName(device, VK_OBJECT_TYPE_DESCRIPTOR_SET, reinterpret_cast<uint64_t>(mModelMatrixDescSet), "viewport scene model matrix desc set");
+#endif
+
 	const VkWriteDescriptorSet model_ds_write = {
 		.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
 		.dstSet = mModelMatrixDescSet,
 		.dstBinding = 0,
 		.descriptorCount = 1,
 		.descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC,
-		.pBufferInfo = &mMatricesDescBufferInfo,
+		.pBufferInfo = &mCameraDescBuffer,
 	};
 
 	vkUpdateDescriptorSets(device, 1, &model_ds_write, 0, nullptr);
@@ -623,28 +643,28 @@ ViewportWorldScene::ViewportWorldScene(const Scene& scene, const VkDevice device
 		.pSetLayouts = desc_set_layouts.data() + 2,
 	};
 
-	VK_CHECK("create mat tex desc set", vkAllocateDescriptorSets(device, &tex_ds_ai, &mMaterialTexturesDescSet));
+	VK_CHECK("create mat tex desc set", vkAllocateDescriptorSets(device, &tex_ds_ai, &mMTexturesDescSet));
 
 #ifdef _DEBUG
-	Utils_SetObjectName(mDevice, VK_OBJECT_TYPE_DESCRIPTOR_SET, reinterpret_cast<uint64_t>(mMaterialTexturesDescSet), "material textures desc set");
+	Utils_SetObjectName(mDevice, VK_OBJECT_TYPE_DESCRIPTOR_SET, reinterpret_cast<uint64_t>(mMTexturesDescSet), "textures desc set");
 #endif // _DEBUG
 
 	mCameraInstances.reserve(scene.GetCameraInstances().size());
 	for (const auto& cam_instance : scene.GetCameraInstances())
 	{
-		mCameraInstances.push_back(ViewportWorldScene::CameraInstance(cam_instance, mUniformData.get(), device, mDescriptorPool, desc_set_layouts[0]));
+		mCameraInstances.push_back(ViewportWorldScene::CameraInstance(cam_instance));
 	}
 
 	mCameras.reserve(scene.GetCameras().size());
 	for (const auto& cam : scene.GetCameras())
 	{
-		mCameras.push_back(ViewportWorldScene::Camera(cam, mUniformData.get()));
+		mCameras.push_back(ViewportWorldScene::Camera(cam));
 	}
 
 	mMeshInstances.reserve(scene.GetMeshInstances().size());
 	for (const auto& mesh_instance : scene.GetMeshInstances())
 	{
-		mMeshInstances.push_back(ViewportWorldScene::MeshInstance(mesh_instance, mUniformData.get(), device, mDescriptorPool, desc_set_layouts[1]));
+		mMeshInstances.push_back(ViewportWorldScene::MeshInstance(mesh_instance));
 	}
 
 	mMaterials.reserve(scene.GetMaterials().size());
@@ -655,10 +675,16 @@ ViewportWorldScene::ViewportWorldScene(const Scene& scene, const VkDevice device
 
 	std::vector<uint8_t> materials_data(mMaterials.size() * sizeof(Material));
 	std::memcpy(materials_data.data(), mMaterials.data(), materials_data.size());
-	std::unique_ptr<HostBufferResource, decltype(host_wait_and_delete)> staging_materials_data(new HostBufferResource(
+	//std::unique_ptr<HostBufferResource, decltype(host_wait_and_delete)> staging_materials_data(new HostBufferResource(
+	//	device, allocator,
+	//	VK_BUFFER_USAGE_TRANSFER_SRC_BIT, VMA_ALLOCATION_CREATE_HOST_ACCESS_SEQUENTIAL_WRITE_BIT,
+	//	materials_data, "staging materials"), host_wait_and_delete
+	//);
+
+	auto staging_materials_data = std::make_unique<HostBufferResource>(
 		device, allocator,
 		VK_BUFFER_USAGE_TRANSFER_SRC_BIT, VMA_ALLOCATION_CREATE_HOST_ACCESS_SEQUENTIAL_WRITE_BIT,
-		materials_data, "staging materials"), host_wait_and_delete
+		materials_data, "staging materials"
 	);
 
 	mMaterialsBuffer = std::make_unique<DeviceBufferResource>(device, allocator,
@@ -699,7 +725,7 @@ ViewportWorldScene::ViewportWorldScene(const Scene& scene, const VkDevice device
 	const VkWriteDescriptorSet write_descs[] = {
 		{
 			.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
-			.dstSet = mMaterialTexturesDescSet,
+			.dstSet = mMTexturesDescSet,
 			.dstBinding = 0,
 			.descriptorCount = 1,
 			.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,
@@ -707,7 +733,7 @@ ViewportWorldScene::ViewportWorldScene(const Scene& scene, const VkDevice device
 		},
 		{
 			.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
-			.dstSet = mMaterialTexturesDescSet,
+			.dstSet = mMTexturesDescSet,
 			.dstBinding = 1,
 			.descriptorCount = static_cast<uint32_t>(image_descs.size()),
 			.descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
@@ -720,10 +746,7 @@ ViewportWorldScene::ViewportWorldScene(const Scene& scene, const VkDevice device
 	mMeshes.reserve(scene.GetMeshes().size());
 	for (const auto& mesh : scene.GetMeshes())
 	{
-		mMeshes.push_back(ViewportWorldScene::Mesh(
-			mesh, mImages, device, allocator, mDescriptorPool, desc_set_layouts[2],
-			queue_family_indices, transfer_helpers
-		));
+		mMeshes.push_back(ViewportWorldScene::Mesh(mesh));
 	}
 }
 
@@ -764,7 +787,7 @@ void ViewportWorldScene::Render(const VkCommandBuffer cmd_buff, const uint32_t c
 
 		for (const auto& curr_prim : curr_prims)
 		{
-			const VkDescriptorSet tex_desc_set = mMaterialTexturesDescSet;
+			const VkDescriptorSet tex_desc_set = mMTexturesDescSet;
 			const VkBindDescriptorSetsInfoKHR bind_ds_info = {
 				.sType = VK_STRUCTURE_TYPE_BIND_DESCRIPTOR_SETS_INFO_KHR,
 				.stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT,
@@ -828,7 +851,7 @@ ViewportWorldScene::~ViewportWorldScene() noexcept
 	}
 }
 
-ViewportWorldScene::MeshInstance::MeshInstance(const Scene::MeshInstance& mesh_instance, const DeviceBufferResource* uniform_data, const VkDevice device, const VkDescriptorPool desc_pool, const VkDescriptorSetLayout desc_set_layout)
+ViewportWorldScene::MeshInstance::MeshInstance(const Scene::MeshInstance& mesh_instance)
 	: Scene::MeshInstance(mesh_instance)
 {
 }
@@ -842,19 +865,14 @@ VkDescriptorSet ViewportWorldScene::MeshInstance::GetModelMatDescSet() const
 	return mModelMatDescSet;
 }
 
-ViewportWorldScene::Mesh::Mesh(const Scene::Mesh& mesh, const std::vector<ViewportWorldScene::Image>& images,
-	const VkDevice device, const VmaAllocator allocator, const VkDescriptorPool desc_pool, const VkDescriptorSetLayout desc_set_layout,
-	const std::vector<uint32_t>& queue_family_indices, TransferHelpers* transfer_helpers)
+ViewportWorldScene::Mesh::Mesh(const Scene::Mesh& mesh)
 	: Scene::Mesh(mesh)
 {
 	mPrimitives.reserve(mesh.GetPrimitives().size());
 	for (const auto& prim : mesh.GetPrimitives())
 	{
 		mPrimitives.push_back(
-			ViewportWorldScene::Mesh::Primitive(
-				prim, images, device, allocator, desc_pool, desc_set_layout,
-				queue_family_indices, transfer_helpers
-			)
+			ViewportWorldScene::Mesh::Primitive(prim)
 		);
 	}
 }
@@ -864,143 +882,143 @@ const std::vector<ViewportWorldScene::Mesh::Primitive>& ViewportWorldScene::Mesh
 	return mPrimitives;
 }
 
-ViewportWorldScene::Mesh::Primitive::Primitive(
-	const Scene::Mesh::Primitive& primitive, const std::vector<ViewportWorldScene::Image>& images,
-	const VkDevice device, const VmaAllocator allocator,
-	const VkDescriptorPool desc_pool, const VkDescriptorSetLayout desc_set_layout,
-	const std::vector<uint32_t>& queue_family_indices,
-	TransferHelpers* transfer_helpers
-	)
-	: Scene::Mesh::Primitive(primitive)
+VkDescriptorSet ViewportWorldScene::Mesh::Primitive::GetTexDescSet() const
+{
+	return mTexsDescSet;
+}
+
+ViewportWorldScene::CameraInstance::CameraInstance(const Scene::CameraInstance& camera_instance)
+	: Scene::CameraInstance(camera_instance)
+{
+}
+
+VkDescriptorSet ViewportWorldScene::CameraInstance::GetViewProjDescSet() const
+{
+	return mViewProjDescSet;
+}
+
+ViewportWorldScene::Camera::Camera(const Scene::Camera& camera)
+	: Scene::Camera(camera)
+{
+}
+
+ViewportWorldScene::Image::Image(const char* image_path, const VkDevice device, const VmaAllocator allocator, const std::vector<uint32_t>& queue_family_indices, TransferHelpers* transfer_helpers)
+{
+	uint32_t w, h, c;
+	uint8_t* pixels = stbi_load(image_path, reinterpret_cast<int*>(&w), reinterpret_cast<int*>(&h), reinterpret_cast<int*>(&c), 4);
+
+	VkFormat format = VK_FORMAT_R8G8B8A8_SRGB;
+
+	mImageResource = std::make_unique<ImageResource>(
+		device, VkExtent3D{ w, h, 1 }, format, VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_SAMPLED_BIT,
+		allocator,
+		queue_family_indices,
+		"texture"
+	);
+
+	//auto host_wait_and_delete = [device, transfer_helpers](HostBufferResource* hbr) {
+	//	VkSemaphore sem = transfer_helpers->GetSemaphore();
+	//	const uint64_t sem_value = transfer_helpers->GetSemaphoreValueConst();
+
+	//	const VkSemaphoreWaitInfo wait_info = {
+	//		.sType = VK_STRUCTURE_TYPE_SEMAPHORE_WAIT_INFO,
+	//		.semaphoreCount = 1,
+	//		.pSemaphores = &sem,
+	//		.pValues = &sem_value,
+	//	};
+	//	VK_CHECK("wait for sem", vkWaitSemaphoresKHR(device, &wait_info, UINT64_MAX));
+
+	//	hbr->~HostBufferResource();
+	//	};
+
+	//std::unique_ptr<HostBufferResource, decltype(host_wait_and_delete)> staging_buffer(new HostBufferResource(
+	//	device, allocator, VK_IMAGE_USAGE_TRANSFER_SRC_BIT, VMA_ALLOCATION_CREATE_HOST_ACCESS_SEQUENTIAL_WRITE_BIT,
+	//	mImageResource->GetAllocationInfo2().allocationInfo.size, "texture staging"), host_wait_and_delete);
+
+	auto staging_buffer = std::make_unique<HostBufferResource>(
+		device, allocator, VK_IMAGE_USAGE_TRANSFER_SRC_BIT, VMA_ALLOCATION_CREATE_HOST_ACCESS_SEQUENTIAL_WRITE_BIT,
+		mImageResource->GetAllocationInfo2().allocationInfo.size, "texture staging"
+	);
+
+	std::memcpy(
+		staging_buffer->GetAllocationInfo2().allocationInfo.pMappedData,
+		pixels,
+		w * h * 4
+	);
+
+	transfer_helpers->RecordBatch();
+	transfer_helpers->ChangeImageLayout(
+		VK_PIPELINE_STAGE_2_TOP_OF_PIPE_BIT, 0,
+		VK_PIPELINE_STAGE_2_COPY_BIT, VK_ACCESS_2_TRANSFER_WRITE_BIT,
+		VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_GENERAL,
+		VK_QUEUE_FAMILY_IGNORED, VK_QUEUE_FAMILY_IGNORED,
+		VK_IMAGE_ASPECT_COLOR_BIT, mImageResource->GetVkImage()
+	);
+	transfer_helpers->CopyBufferToImage(staging_buffer->GetVkBuffer(), mImageResource->GetVkImage(), VkExtent3D{ w,h,1 });
+	transfer_helpers->SubmitBatch();
+}
+
+ViewportWorldScene::Image::Image(const Scene::Image& image, const std::vector<uint8_t>& images_data, const VkDevice device, const VmaAllocator allocator, const std::vector<uint32_t>& queue_family_indices, TransferHelpers* transfer_helpers)
+{
+	uint32_t w, h, c;
+	uint8_t* pixels = stbi_load_from_memory(images_data.data() + image.GetDataOffset(), static_cast<int>(image.GetDataSize()),
+		reinterpret_cast<int*>(&w), reinterpret_cast<int*>(&h), reinterpret_cast<int*>(&c), 4);
+
+	VkFormat format = VK_FORMAT_R8G8B8A8_SRGB;
+	if (image.GetName().contains("normal") || image.GetName().contains("NRM") || image.GetName().contains("nrm"))
 	{
+		format = VK_FORMAT_R8G8B8A8_SNORM;
 	}
 
-	VkDescriptorSet ViewportWorldScene::Mesh::Primitive::GetTexDescSet() const
-	{
-		return mTexsDescSet;
-	}
+	mImageResource = std::make_unique<ImageResource>(
+		device, VkExtent3D{ w, h, 1 }, format, VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_SAMPLED_BIT,
+		allocator,
+		queue_family_indices,
+		"texture"
+	);
 
-	ViewportWorldScene::CameraInstance::CameraInstance(const Scene::CameraInstance& camera_instance, const DeviceBufferResource* uniform_data, const VkDevice device, const VkDescriptorPool desc_pool, const VkDescriptorSetLayout desc_set_layout)
-		: Scene::CameraInstance(camera_instance)
-	{
-	}
+	//auto host_wait_and_delete = [device, transfer_helpers](HostBufferResource* hbr) {
+	//	VkSemaphore sem = transfer_helpers->GetSemaphore();
+	//	const uint64_t sem_value = transfer_helpers->GetSemaphoreValueConst();
 
-	VkDescriptorSet ViewportWorldScene::CameraInstance::GetViewProjDescSet() const
-	{
-		return mViewProjDescSet;
-	}
+	//	const VkSemaphoreWaitInfo wait_info = {
+	//		.sType = VK_STRUCTURE_TYPE_SEMAPHORE_WAIT_INFO,
+	//		.semaphoreCount = 1,
+	//		.pSemaphores = &sem,
+	//		.pValues = &sem_value,
+	//	};
+	//	VK_CHECK("wait for sem", vkWaitSemaphoresKHR(device, &wait_info, UINT64_MAX));
 
-	ViewportWorldScene::Camera::Camera(const Scene::Camera& camera, const DeviceBufferResource* scene_data)
-		: Scene::Camera(camera)
-	{
-	}
+	//	hbr->~HostBufferResource();
+	//	};
 
-	ViewportWorldScene::Image::Image(const char* image_path, const VkDevice device, const VmaAllocator allocator, const std::vector<uint32_t>& queue_family_indices, TransferHelpers* transfer_helpers)
-	{
-		uint32_t w, h, c;
-		uint8_t* pixels = stbi_load(image_path, reinterpret_cast<int*>(&w), reinterpret_cast<int*>(&h), reinterpret_cast<int*>(&c), 4);
+	//std::unique_ptr<HostBufferResource, decltype(host_wait_and_delete)> staging_buffer(new HostBufferResource(
+	//	device, allocator, VK_IMAGE_USAGE_TRANSFER_SRC_BIT, VMA_ALLOCATION_CREATE_HOST_ACCESS_SEQUENTIAL_WRITE_BIT,
+	//	mImageResource->GetAllocationInfo2().allocationInfo.size, "texture staging"), host_wait_and_delete);
+	auto staging_buffer = std::make_unique<HostBufferResource>(
+		device, allocator, VK_IMAGE_USAGE_TRANSFER_SRC_BIT, VMA_ALLOCATION_CREATE_HOST_ACCESS_SEQUENTIAL_WRITE_BIT,
+		mImageResource->GetAllocationInfo2().allocationInfo.size, "texture staging"
+	);
 
-		VkFormat format = VK_FORMAT_R8G8B8A8_SRGB;
+	std::memcpy(
+		staging_buffer->GetAllocationInfo2().allocationInfo.pMappedData,
+		pixels,
+		w * h * 4
+	);
 
-		mImageResource = std::make_unique<ImageResource>(
-			device, VkExtent3D{ w, h, 1 }, format, VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_SAMPLED_BIT,
-			allocator,
-			queue_family_indices,
-			"texture"
-		);
+	transfer_helpers->RecordBatch();
+	transfer_helpers->ChangeImageLayout(
+		VK_PIPELINE_STAGE_2_TOP_OF_PIPE_BIT, 0,
+		VK_PIPELINE_STAGE_2_COPY_BIT, VK_ACCESS_2_TRANSFER_WRITE_BIT,
+		VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_GENERAL,
+		VK_QUEUE_FAMILY_IGNORED, VK_QUEUE_FAMILY_IGNORED,
+		VK_IMAGE_ASPECT_COLOR_BIT, mImageResource->GetVkImage()
+	);
+	transfer_helpers->CopyBufferToImage(staging_buffer->GetVkBuffer(), mImageResource->GetVkImage(), VkExtent3D{ w,h,1 });
+	transfer_helpers->SubmitBatch();
+}
 
-		auto host_wait_and_delete = [device, transfer_helpers](HostBufferResource* hbr) {
-			VkSemaphore sem = transfer_helpers->GetSemaphore();
-			const uint64_t sem_value = transfer_helpers->GetSemaphoreValueConst();
-
-			const VkSemaphoreWaitInfo wait_info = {
-				.sType = VK_STRUCTURE_TYPE_SEMAPHORE_WAIT_INFO,
-				.semaphoreCount = 1,
-				.pSemaphores = &sem,
-				.pValues = &sem_value,
-			};
-			VK_CHECK("wait for sem", vkWaitSemaphoresKHR(device, &wait_info, UINT64_MAX));
-
-			hbr->~HostBufferResource();
-			};
-
-		std::unique_ptr<HostBufferResource, decltype(host_wait_and_delete)> staging_buffer(new HostBufferResource(
-			device, allocator, VK_IMAGE_USAGE_TRANSFER_SRC_BIT, VMA_ALLOCATION_CREATE_HOST_ACCESS_SEQUENTIAL_WRITE_BIT,
-			mImageResource->GetAllocationInfo2().allocationInfo.size, "texture staging"), host_wait_and_delete);
-		std::memcpy(
-			staging_buffer->GetAllocationInfo2().allocationInfo.pMappedData,
-			pixels,
-			w * h * 4
-		);
-
-		transfer_helpers->RecordBatch();
-		transfer_helpers->ChangeImageLayout(
-			VK_PIPELINE_STAGE_2_TOP_OF_PIPE_BIT, 0,
-			VK_PIPELINE_STAGE_2_COPY_BIT, VK_ACCESS_2_TRANSFER_WRITE_BIT,
-			VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_GENERAL,
-			VK_QUEUE_FAMILY_IGNORED, VK_QUEUE_FAMILY_IGNORED,
-			VK_IMAGE_ASPECT_COLOR_BIT, mImageResource->GetVkImage()
-		);
-		transfer_helpers->CopyBufferToImage(staging_buffer->GetVkBuffer(), mImageResource->GetVkImage(), VkExtent2D{ w,h });
-		transfer_helpers->SubmitBatch();
-	}
-
-	ViewportWorldScene::Image::Image(const Scene::Image& image, const std::vector<uint8_t>& images_data, const VkDevice device, const VmaAllocator allocator, const std::vector<uint32_t>& queue_family_indices, TransferHelpers* transfer_helpers)
-	{
-		uint32_t w, h, c;
-		uint8_t* pixels = stbi_load_from_memory(images_data.data() + image.GetDataOffset(), static_cast<int>(image.GetDataSize()),
-			reinterpret_cast<int*>(&w), reinterpret_cast<int*>(&h), reinterpret_cast<int*>(&c), 4);
-
-		VkFormat format = VK_FORMAT_R8G8B8A8_SRGB;
-		if (image.GetName().contains("normal") || image.GetName().contains("NRM") || image.GetName().contains("nrm"))
-		{
-			format = VK_FORMAT_R8G8B8A8_SNORM;
-		}
-
-		mImageResource = std::make_unique<ImageResource>(
-			device, VkExtent3D{ w, h, 1 }, format, VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_SAMPLED_BIT,
-			allocator,
-			queue_family_indices,
-			"texture"
-		);
-
-		auto host_wait_and_delete = [device, transfer_helpers](HostBufferResource* hbr) {
-			VkSemaphore sem = transfer_helpers->GetSemaphore();
-			const uint64_t sem_value = transfer_helpers->GetSemaphoreValueConst();
-
-			const VkSemaphoreWaitInfo wait_info = {
-				.sType = VK_STRUCTURE_TYPE_SEMAPHORE_WAIT_INFO,
-				.semaphoreCount = 1,
-				.pSemaphores = &sem,
-				.pValues = &sem_value,
-			};
-			VK_CHECK("wait for sem", vkWaitSemaphoresKHR(device, &wait_info, UINT64_MAX));
-
-			hbr->~HostBufferResource();
-			};
-
-		std::unique_ptr<HostBufferResource, decltype(host_wait_and_delete)> staging_buffer(new HostBufferResource(
-			device, allocator, VK_IMAGE_USAGE_TRANSFER_SRC_BIT, VMA_ALLOCATION_CREATE_HOST_ACCESS_SEQUENTIAL_WRITE_BIT,
-			mImageResource->GetAllocationInfo2().allocationInfo.size, "texture staging"), host_wait_and_delete);
-		std::memcpy(
-			staging_buffer->GetAllocationInfo2().allocationInfo.pMappedData,
-			pixels,
-			w * h * 4
-		);
-
-		transfer_helpers->RecordBatch();
-		transfer_helpers->ChangeImageLayout(
-			VK_PIPELINE_STAGE_2_TOP_OF_PIPE_BIT, 0,
-			VK_PIPELINE_STAGE_2_COPY_BIT, VK_ACCESS_2_TRANSFER_WRITE_BIT,
-			VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_GENERAL,
-			VK_QUEUE_FAMILY_IGNORED, VK_QUEUE_FAMILY_IGNORED,
-			VK_IMAGE_ASPECT_COLOR_BIT, mImageResource->GetVkImage()
-		);
-		transfer_helpers->CopyBufferToImage(staging_buffer->GetVkBuffer(), mImageResource->GetVkImage(), VkExtent2D{ w,h });
-		transfer_helpers->SubmitBatch();
-	}
-
-	ImageResource* ViewportWorldScene::Image::GetImageResource() const
-	{
-		return mImageResource.get();
-	}
+ImageResource* ViewportWorldScene::Image::GetImageResource() const
+{
+	return mImageResource.get();
+}

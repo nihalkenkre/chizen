@@ -1,20 +1,37 @@
-RWTexture2D<float4> accum_target;
-RWTexture2D<float4> final_target;
-RWStructuredBuffer<uint4> rand_states;
-
-struct UniformBuffer
+struct CamMatrices
 {
     float4x4 view_inverse;
     float4x4 proj_inverse;
 }
 
-ConstantBuffer<UniformBuffer> uniform_buffer;
-RaytracingAccelerationStructure tlas;
+struct Material
+{
+    float4 base_color_factor;
+    int4 base_color_index;
+};
 
 struct PushConstants
 {
     uint current_sample;
 }
+
+[[vk::binding(0, 0)]]
+ConstantBuffer<CamMatrices> cam_matrices;
+
+[[vk::binding(0, 1)]]
+RWTexture2D<float4> accum_target;
+[[vk::binding(1, 1)]]
+RWTexture2D<float4> final_target;
+[[vk::binding(2, 1)]]
+RWStructuredBuffer<uint4> rand_states;
+
+[[vk::binding(3, 1)]]
+RaytracingAccelerationStructure tlas;
+
+[[vk::binding(4, 1)]]
+StructuredBuffer<Material> materials;
+[[vk::binding(5, 1)]]
+Sampler2D textures[];
 
 [[vk::push_constant]]
 PushConstants pc;
@@ -23,6 +40,13 @@ struct Payload
 {
     float3 hit_value;
 };
+
+struct CH_SBT_Record
+{
+    uint32_t material_index;
+};
+
+[[vk::shader_record]] ConstantBuffer<CH_SBT_Record> ch_sbt;
 
 uint TausStep(inout uint z, int S1, int S2, int S3, uint M)
 {
@@ -52,11 +76,11 @@ void raygen()
     const float2 pixel_center = float2(launch_id.xy) + float2(0.5, 0.5);
     const float2 in_uv = pixel_center / float2(launch_size.xy);
     float2 d = in_uv * 2.0 - 1.0;
-    float4 target = mul(uniform_buffer.proj_inverse, float4(d.x, d.y, 1, 1));
+    float4 target = mul(cam_matrices.proj_inverse, float4(d.x, d.y, 1, 1));
 
     RayDesc ray_desc;
-    ray_desc.Origin = mul(uniform_buffer.view_inverse, float4(0, 0, 0, 1)).xyz;
-    ray_desc.Direction = mul(uniform_buffer.view_inverse, float4(normalize(target.xyz), 0)).xyz;
+    ray_desc.Origin = mul(cam_matrices.view_inverse, float4(0, 0, 0, 1)).xyz;
+    ray_desc.Direction = mul(cam_matrices.view_inverse, float4(normalize(target.xyz), 0)).xyz;
     ray_desc.TMin = 0.001f;
     ray_desc.TMax = 1000.f;
 

@@ -34,9 +34,7 @@ VSOutput vertex_main(VSInput in)
         mul(view_proj.view_proj, mul(model.model, float4(in.pos, 1))),
         in.nrm,
         in.uv,
-       };
-
-    // out.nrm = out.pos.zzz;
+    };
 
     return out;
 }
@@ -53,7 +51,7 @@ struct PushConstants
 }
 
 [[vk::push_constant]]
-ConstantBuffer<PushConstants> pc;
+PushConstants pc;
 
 [[vk::binding(0, 2)]]
 StructuredBuffer<Material> materials;
@@ -69,16 +67,14 @@ struct FSOutput
 FSOutput fragment_main(VSOutput in)
 {
     float4 base_color = float4(1.f);
-    if (pc.material_index >= 0)
+
+    if (materials[pc.material_index].base_color_index.x >= 0)
     {
-        if (materials[pc.material_index].base_color_index.x >= 0)
-        {
-            base_color *= textures[NonUniformResourceIndex(materials[pc.material_index].base_color_index.x)].Sample(in.uv) * materials[pc.material_index].base_color_factor;
-        }
-        else
-        {
-            base_color *= materials[pc.material_index].base_color_factor;
-        }
+        base_color *= textures[NonUniformResourceIndex(materials[pc.material_index].base_color_index.x)].Sample(in.uv) * materials[pc.material_index].base_color_factor;
+    }
+    else
+    {
+        base_color *= materials[pc.material_index].base_color_factor;
     }
 
     FSOutput fs_output = { base_color };

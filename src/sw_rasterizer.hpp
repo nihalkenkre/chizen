@@ -34,7 +34,7 @@ public:
 			size_t pixel_offset = (std::lroundf(mPosition.y) * width + std::lroundf(mPosition.x)) * 4;
 			size_t depth_offset = std::lroundf(mPosition.y) * width + std::lroundf(mPosition.x);
 
-			if (mPosition.z > depth[depth_offset]) {
+			if (mPosition.z < depth[depth_offset]) {
 				color[pixel_offset] = mPosition.z;// mColor.b;
 				color[pixel_offset + 1] = mPosition.z;//  mColor.g;
 				color[pixel_offset + 2] = mPosition.z;//  mColor.r;

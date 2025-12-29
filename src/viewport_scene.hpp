@@ -4,7 +4,7 @@
 
 class DeviceBufferResource;
 class ImageResource;
-class ScenePipelineData;
+class ViewportScenePipelineData;
 class TransferHelpers;
 
 class ViewportScene
@@ -30,7 +30,7 @@ public:
 	class MeshInstance : public Scene::MeshInstance
 	{
 	public:
-		MeshInstance(const Scene::MeshInstance& mesh_instance, const DeviceBufferResource* uniform_data, const VkDevice device, const VkDescriptorPool desc_pool, const VkDescriptorSetLayout desc_set_layout);
+		MeshInstance(const Scene::MeshInstance& mesh_instance);
 
 		~MeshInstance() noexcept;
 
@@ -62,18 +62,12 @@ public:
 	class Mesh : public Scene::Mesh
 	{
 	public:
-		Mesh(const Scene::Mesh& mesh, const std::vector<ViewportWorldScene::Image>& images,
-			const VkDevice device, const VmaAllocator allocator, const VkDescriptorPool desc_pool, const VkDescriptorSetLayout desc_set_layout,
-			const std::vector<uint32_t>& queue_family_indices, TransferHelpers* transfer_helpers);
+		Mesh(const Scene::Mesh& mesh);
 
 		class Primitive : public Scene::Mesh::Primitive
 		{
 		public:
-			Primitive(const Scene::Mesh::Primitive& primitive, const std::vector<ViewportWorldScene::Image>& images,
-				const VkDevice device, const VmaAllocator allocator,
-				const VkDescriptorPool desc_pool, const VkDescriptorSetLayout desc_set_layout,
-				const std::vector<uint32_t>& queue_family_indices, TransferHelpers* transfer_helpers
-			);
+			Primitive(const Scene::Mesh::Primitive& primitive) : Scene::Mesh::Primitive(primitive) {}
 
 			VkDescriptorSet GetTexDescSet() const;
 
@@ -92,7 +86,7 @@ public:
 	class CameraInstance : public Scene::CameraInstance
 	{
 	public:
-		CameraInstance(const Scene::CameraInstance& camera_instance, const DeviceBufferResource* uniform_data, const VkDevice device, const VkDescriptorPool desc_pool, const VkDescriptorSetLayout desc_set_layout);
+		CameraInstance(const Scene::CameraInstance& camera_instance);
 
 		VkDescriptorSet GetViewProjDescSet() const;
 
@@ -103,7 +97,7 @@ public:
 	class Camera : public Scene::Camera
 	{
 	public:
-		Camera(const Scene::Camera& camera, const DeviceBufferResource* scene_data);
+		Camera(const Scene::Camera& camera);
 	};
 
 	~ViewportWorldScene() noexcept override;
@@ -119,13 +113,13 @@ private:
 	std::unique_ptr<DeviceBufferResource> mPositionsData = nullptr;
 	std::unique_ptr<DeviceBufferResource> mUniformData = nullptr;
 
-	std::unique_ptr<ScenePipelineData> mPipelineData = nullptr;
+	std::unique_ptr<ViewportScenePipelineData> mPipelineData = nullptr;
 
 	std::unique_ptr<DeviceBufferResource> mMaterialsBuffer = nullptr;
 	// All the descs in the scene
 	VkDescriptorPool mDescriptorPool = VK_NULL_HANDLE;
-	VkDescriptorSet mMaterialTexturesDescSet = VK_NULL_HANDLE;
-	VkDescriptorBufferInfo mMatricesDescBufferInfo = {};
+	VkDescriptorSet mMTexturesDescSet = VK_NULL_HANDLE;
+	VkDescriptorBufferInfo mCameraDescBuffer = {};
 	VkDescriptorSet mCameraMatrixDescSet = VK_NULL_HANDLE;
 	VkDescriptorSet mModelMatrixDescSet = VK_NULL_HANDLE;
 	VkDevice mDevice = VK_NULL_HANDLE;

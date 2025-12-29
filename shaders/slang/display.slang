@@ -20,7 +20,7 @@ struct PushConstants
 }
 
 [[vk::push_constant]]
-ConstantBuffer<PushConstants> pc;
+PushConstants pc;
 
 [shader("vertex")]
 VSOutput vertex_main(VSInput in)
