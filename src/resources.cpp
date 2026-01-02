@@ -219,7 +219,7 @@ HostBufferResource::~HostBufferResource() noexcept
 		vmaDestroyBuffer(mAllocator, mDescriptorInfo.buffer, mAllocation);
 }
 
-DeviceBufferResource::DeviceBufferResource(const VkDevice device, const VmaAllocator allocator, const VkBufferUsageFlags usage, const VkDeviceSize size, const std::string& name)
+DeviceBufferResource::DeviceBufferResource(const VkDevice device, const VmaAllocator allocator, const VkBufferUsageFlags usage, const VkDeviceSize size, const std::string& name, const VmaPool mem_pool)
 {
 	mDevice = device;
 	mAllocator = allocator;
@@ -236,6 +236,7 @@ DeviceBufferResource::DeviceBufferResource(const VkDevice device, const VmaAlloc
 
 	const VmaAllocationCreateInfo alloc_ci = {
 		.usage = VMA_MEMORY_USAGE_AUTO,
+		.pool = mem_pool
 	};
 
 	VK_CHECK("create buffer", vmaCreateBuffer(allocator, &create_info, &alloc_ci, &mDescriptorInfo.buffer, &mAllocation, &mAllocationInfo.allocationInfo));
@@ -252,7 +253,6 @@ DeviceBufferResource::DeviceBufferResource(const VkDevice device, const VmaAlloc
 #ifdef _DEBUG
 	Utils_SetObjectName(mDevice, VK_OBJECT_TYPE_BUFFER, reinterpret_cast<uint64_t>(mDescriptorInfo.buffer), std::string(name).append(" buffer").c_str());
 #endif // _DEBUG
-
 }
 
 DeviceBufferResource::~DeviceBufferResource() noexcept

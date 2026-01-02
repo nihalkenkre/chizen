@@ -102,6 +102,25 @@ private:
 	VmaAllocator mAllocator;
 };
 
+class Pool
+{
+public:
+	Pool() = delete;
+	Pool(const VmaAllocator& allocator, const VkDeviceSize min_alignment, const uint32_t mem_type_id);
+
+	Pool(const Pool& other) = delete;
+	Pool& operator=(const Pool& other) = delete;
+
+	~Pool() noexcept;
+
+	VmaPool GetPool() const;
+
+private:
+	VmaPool mPool = VK_NULL_HANDLE;
+
+	VmaAllocator mAllocator = VK_NULL_HANDLE;
+};
+
 class Swapchain
 {
 public:
@@ -190,7 +209,7 @@ public:
 		const uint32_t src_q_fly_idx, const uint32_t dst_q_fly_idx,
 		const VkImageAspectFlags aspect_mask,
 		const VkImage& image) const;
-	void CopyBufferToBuffer(const VkBuffer src_buffer, const VkBuffer dst_buffer, const VkDeviceSize size) const;
+	void CopyBufferToBuffer(const VkBuffer src_buffer, const VkBuffer dst_buffer, const VkDeviceSize size, const VkDeviceSize src_offset = 0, const VkDeviceSize dst_offset = 0) const;
 	void CopyBufferToImage(const VkBuffer src_buffer, const VkImage dst_image, const VkExtent3D& extent) const;
 	void InsertMemoryBarrier(const VkPipelineStageFlags2 src_stage_mask, const VkAccessFlags2 src_access_mask,
 		const VkPipelineStageFlags2 dst_stage_mask, const VkAccessFlags2 dst_access_mask) const;
@@ -221,7 +240,7 @@ class BLAccelerationStructure
 {
 public:
 	BLAccelerationStructure() = delete;
-	BLAccelerationStructure(const VkDevice device, const VmaAllocator allocator, const Scene::Mesh::Primitive& primitive, const std::vector<uint8_t>& vertex_data, const size_t scratch_buffer_alignment, ComputeHelpers* compute_helpers, const std::string& name);
+	BLAccelerationStructure(const VkDevice device, const VmaAllocator allocator, const Scene::Mesh::Primitive& primitive, const std::vector<uint8_t>& vertex_data, const VmaPool mem_pool, const size_t scratch_buffer_alignment, ComputeHelpers* compute_helpers, const std::string& name);
 
 	BLAccelerationStructure(const BLAccelerationStructure& other) = delete;
 	BLAccelerationStructure& operator=(const BLAccelerationStructure& other) = delete;
@@ -242,7 +261,7 @@ class TLAccelerationStructure
 {
 public:
 	TLAccelerationStructure() = delete;
-	TLAccelerationStructure(const VkDevice device, const VmaAllocator allocator, const std::vector<VkAccelerationStructureInstanceKHR>& instances, const size_t scratch_buffer_alignment, ComputeHelpers* compute_helpers, const std::string& name);
+	TLAccelerationStructure(const VkDevice device, const VmaAllocator allocator, const std::vector<VkAccelerationStructureInstanceKHR>& instances, const VmaPool mem_pool, const size_t scratch_buffer_alignment, ComputeHelpers* compute_helpers, const std::string& name);
 
 	TLAccelerationStructure(const TLAccelerationStructure& other) = delete;
 	TLAccelerationStructure& operator=(const TLAccelerationStructure& other) = delete;

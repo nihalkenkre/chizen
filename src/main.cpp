@@ -44,7 +44,7 @@ SDL_AppResult SDL_AppInit(void** appstate, int argc, char** argv)
 SDL_AppResult SDL_AppEvent(void* appstate, SDL_Event* event)
 {
 	App* app = reinterpret_cast<App*>(appstate);
-	if (SDL_GetWindowFlags(app->GetWindow()) & SDL_WINDOW_MINIMIZED)
+	if (SDL_GetWindowFlags(app->GetWindow()) & (SDL_WINDOW_MINIMIZED | SDL_WINDOW_HIDDEN | SDL_WINDOW_OCCLUDED))
 	{
 		return SDL_APP_CONTINUE;
 	}
@@ -66,7 +66,7 @@ SDL_AppResult SDL_AppIterate(void* appstate)
 {
 	App* app = reinterpret_cast<App*>(appstate);
 
-	if (SDL_GetWindowFlags(app->GetWindow()) & SDL_WINDOW_MINIMIZED)
+	if (SDL_GetWindowFlags(app->GetWindow()) & (SDL_WINDOW_MINIMIZED | SDL_WINDOW_HIDDEN | SDL_WINDOW_OCCLUDED))
 	{
 		return SDL_APP_CONTINUE;
 	}

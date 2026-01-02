@@ -266,6 +266,27 @@ VmaAllocator Allocator::GetAllocator() const
 	return mAllocator;
 }
 
+Pool::Pool(const VmaAllocator& allocator, const VkDeviceSize min_alignment, const uint32_t mem_type_id) : mAllocator(allocator)
+{
+	const VmaPoolCreateInfo ci = {
+		.memoryTypeIndex = mem_type_id,
+		.minAllocationAlignment = min_alignment,
+	};
+
+	VK_CHECK("create pool", vmaCreatePool(allocator, &ci, &mPool));
+}
+
+Pool::~Pool() noexcept
+{
+	if (mAllocator != VK_NULL_HANDLE)
+		vmaDestroyPool(mAllocator, mPool);
+}
+
+VmaPool Pool::GetPool() const
+{
+	return mPool;
+}
+
 Allocator::~Allocator() noexcept
 {
 	vmaDestroyAllocator(mAllocator);
@@ -571,6 +592,36 @@ void TransferHelpers::SubmitBatch(const VkSemaphore wait_semaphore, const uint64
 
 	VK_CHECK("submit xfer batch", vkQueueSubmit2KHR(mQueue, std::size(submit_infos), submit_infos, VK_NULL_HANDLE));
 	VK_CHECK("xfer queue wait", vkQueueWaitIdle(mQueue)); // using this since we have to wait for the transfer to get done before destroying staging buffers
+	//auto host_wait_and_delete = [device, compute_helpers](HostBufferResource* hbr) {
+	//	VkSemaphore sem = compute_helpers->GetSemaphore();
+	//	const uint64_t sem_value = compute_helpers->GetSemaphoreValueConst();
+
+	//	const VkSemaphoreWaitInfo wait_info = {
+	//		.sType = VK_STRUCTURE_TYPE_SEMAPHORE_WAIT_INFO,
+	//		.semaphoreCount = 1,
+	//		.pSemaphores = &sem,
+	//		.pValues = &sem_value,
+	//	};
+	//	VK_CHECK("wait for sem", vkWaitSemaphoresKHR(device, &wait_info, UINT64_MAX));
+
+	//	hbr->~HostBufferResource();
+	//	};
+
+	//auto device_wait_and_delete = [device, compute_helpers](DeviceBufferResource* hbr) {
+	//	VkSemaphore sem = compute_helpers->GetSemaphore();
+	//	const uint64_t sem_value = compute_helpers->GetSemaphoreValueConst();
+
+	//	const VkSemaphoreWaitInfo wait_info = {
+	//		.sType = VK_STRUCTURE_TYPE_SEMAPHORE_WAIT_INFO,
+	//		.semaphoreCount = 1,
+	//		.pSemaphores = &sem,
+	//		.pValues = &sem_value,
+	//	};
+	//	VK_CHECK("wait for sem", vkWaitSemaphoresKHR(device, &wait_info, UINT64_MAX));
+
+	//	hbr->~DeviceBufferResource();
+	//	};
+
 }
 
 VkCommandPool TransferHelpers::GetCommandPool() const
@@ -627,6 +678,7 @@ Device::Device(const PhysicalDeviceData* physical_device_data)
 		VK_KHR_COPY_COMMANDS_2_EXTENSION_NAME,
 		VK_KHR_RAY_TRACING_POSITION_FETCH_EXTENSION_NAME,
 		VK_KHR_SEPARATE_DEPTH_STENCIL_LAYOUTS_EXTENSION_NAME,
+		VK_KHR_SHADER_RELAXED_EXTENDED_INSTRUCTION_EXTENSION_NAME,
 		"VK_KHR_maintenance5",
 		"VK_KHR_maintenance6",
 		VK_EXT_DESCRIPTOR_INDEXING_EXTENSION_NAME,
@@ -700,8 +752,13 @@ Device::Device(const PhysicalDeviceData* physical_device_data)
 		.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_DESCRIPTOR_INDEXING_FEATURES_EXT,
 	};
 
+	VkPhysicalDeviceShaderRelaxedExtendedInstructionFeaturesKHR rlxd_ext_instr = {
+		.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SHADER_RELAXED_EXTENDED_INSTRUCTION_FEATURES_KHR,
+	};
+
 	VkPhysicalDeviceRobustness2FeaturesEXT rob2_feats = {
 		.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_ROBUSTNESS_2_FEATURES_EXT,
+		.pNext = &rlxd_ext_instr,
 	};
 
 	VkPhysicalDeviceRayTracingPositionFetchFeaturesKHR rt_pos_fetch_feats = {
@@ -938,11 +995,13 @@ void ComputeHelpers::ChangeImageLayout(const VkPipelineStageFlags2 src_stage_mas
 	vkCmdPipelineBarrier2KHR(mCommandBuffer, &dep_info);
 }
 
-void ComputeHelpers::CopyBufferToBuffer(const VkBuffer src_buffer, const VkBuffer dst_buffer, const VkDeviceSize size) const
+void ComputeHelpers::CopyBufferToBuffer(const VkBuffer src_buffer, const VkBuffer dst_buffer, const VkDeviceSize size, const VkDeviceSize src_offset, const VkDeviceSize dst_offset) const
 {
 	const VkBufferCopy2 regions[] = {
 		{
 			.sType = VK_STRUCTURE_TYPE_BUFFER_COPY_2,
+			.srcOffset = src_offset,
+			.dstOffset = dst_offset,
 			.size = size,
 		},
 	};
@@ -1075,6 +1134,36 @@ void ComputeHelpers::SubmitBatch(const VkSemaphore wait_semaphore, const uint64_
 
 	VK_CHECK("submit cmpt batch", vkQueueSubmit2KHR(mQueue, std::size(submit_infos), submit_infos, VK_NULL_HANDLE));
 	VK_CHECK("cmpt q wait idle", vkQueueWaitIdle(mQueue)); // using this since we have to wait for the transfer to get done before destroying staging buffers
+	//auto host_wait_and_delete = [device, compute_helpers](HostBufferResource* hbr) {
+	//	VkSemaphore sem = compute_helpers->GetSemaphore();
+	//	const uint64_t sem_value = compute_helpers->GetSemaphoreValueConst();
+
+	//	const VkSemaphoreWaitInfo wait_info = {
+	//		.sType = VK_STRUCTURE_TYPE_SEMAPHORE_WAIT_INFO,
+	//		.semaphoreCount = 1,
+	//		.pSemaphores = &sem,
+	//		.pValues = &sem_value,
+	//	};
+	//	VK_CHECK("wait for sem", vkWaitSemaphoresKHR(device, &wait_info, UINT64_MAX));
+
+	//	hbr->~HostBufferResource();
+	//	};
+
+	//auto device_wait_and_delete = [device, compute_helpers](DeviceBufferResource* hbr) {
+	//	VkSemaphore sem = compute_helpers->GetSemaphore();
+	//	const uint64_t sem_value = compute_helpers->GetSemaphoreValueConst();
+
+	//	const VkSemaphoreWaitInfo wait_info = {
+	//		.sType = VK_STRUCTURE_TYPE_SEMAPHORE_WAIT_INFO,
+	//		.semaphoreCount = 1,
+	//		.pSemaphores = &sem,
+	//		.pValues = &sem_value,
+	//	};
+	//	VK_CHECK("wait for sem", vkWaitSemaphoresKHR(device, &wait_info, UINT64_MAX));
+
+	//	hbr->~DeviceBufferResource();
+	//	};
+
 }
 
 VkCommandPool ComputeHelpers::GetCommandPool() const
@@ -1112,62 +1201,17 @@ uint32_t ComputeHelpers::GetQueueFamilyIndex() const
 	return mQueueFamilyIndex;
 }
 
-BLAccelerationStructure::BLAccelerationStructure(const VkDevice device, const VmaAllocator allocator, const Scene::Mesh::Primitive& primitive, const std::vector<uint8_t>& vertex_data, const size_t scratch_buffer_alignment, ComputeHelpers* compute_helpers, const std::string& name)
+BLAccelerationStructure::BLAccelerationStructure(const VkDevice device, const VmaAllocator allocator, const Scene::Mesh::Primitive& primitive, const std::vector<uint8_t>& vertex_data, const VmaPool mem_pool, const size_t scratch_buffer_alignment, ComputeHelpers* compute_helpers, const std::string& name)
 	: mDevice(device)
 {
-	//auto host_wait_and_delete = [device, compute_helpers](HostBufferResource* hbr) {
-	//	VkSemaphore sem = compute_helpers->GetSemaphore();
-	//	const uint64_t sem_value = compute_helpers->GetSemaphoreValueConst();
-
-	//	const VkSemaphoreWaitInfo wait_info = {
-	//		.sType = VK_STRUCTURE_TYPE_SEMAPHORE_WAIT_INFO,
-	//		.semaphoreCount = 1,
-	//		.pSemaphores = &sem,
-	//		.pValues = &sem_value,
-	//	};
-	//	VK_CHECK("wait for sem", vkWaitSemaphoresKHR(device, &wait_info, UINT64_MAX));
-
-	//	hbr->~HostBufferResource();
-	//	};
-
-	//auto device_wait_and_delete = [device, compute_helpers](DeviceBufferResource* hbr) {
-	//	VkSemaphore sem = compute_helpers->GetSemaphore();
-	//	const uint64_t sem_value = compute_helpers->GetSemaphoreValueConst();
-
-	//	const VkSemaphoreWaitInfo wait_info = {
-	//		.sType = VK_STRUCTURE_TYPE_SEMAPHORE_WAIT_INFO,
-	//		.semaphoreCount = 1,
-	//		.pSemaphores = &sem,
-	//		.pValues = &sem_value,
-	//	};
-	//	VK_CHECK("wait for sem", vkWaitSemaphoresKHR(device, &wait_info, UINT64_MAX));
-
-	//	hbr->~DeviceBufferResource();
-	//	};
-
 	std::vector<uint8_t> positions_data(primitive.GetPositionsSize());
 	std::memcpy(positions_data.data(), vertex_data.data() + primitive.GetPositionsOffset(), primitive.GetPositionsSize());
-
-	//std::unique_ptr<HostBufferResource, decltype(host_wait_and_delete)> staging_positions_data(
-	//	new HostBufferResource(
-	//		device, allocator,
-	//		VK_BUFFER_USAGE_TRANSFER_SRC_BIT, VMA_ALLOCATION_CREATE_HOST_ACCESS_SEQUENTIAL_WRITE_BIT,
-	//		positions_data, "staging positions data"),
-	//	host_wait_and_delete
-	//);
 
 	auto staging_positions_data = std::make_unique<HostBufferResource>(
 		device, allocator,
 		VK_BUFFER_USAGE_TRANSFER_SRC_BIT, VMA_ALLOCATION_CREATE_HOST_ACCESS_SEQUENTIAL_WRITE_BIT,
 		positions_data, "staging positions data"
 	);
-
-	//std::unique_ptr<DeviceBufferResource, decltype(device_wait_and_delete)> positions_buffer(
-	//	new DeviceBufferResource(
-	//		device, allocator,
-	//		VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_ACCELERATION_STRUCTURE_BUILD_INPUT_READ_ONLY_BIT_KHR,
-	//		positions_data.size(), "positions data"), device_wait_and_delete
-	//);
 
 	auto positions_buffer = std::make_unique<DeviceBufferResource>(
 		device, allocator,
@@ -1178,26 +1222,11 @@ BLAccelerationStructure::BLAccelerationStructure(const VkDevice device, const Vm
 	std::vector<uint8_t> indices_data(primitive.GetIndicesSize());
 	std::memcpy(indices_data.data(), vertex_data.data() + primitive.GetIndicesOffset(), primitive.GetIndicesSize());
 
-	//std::unique_ptr<HostBufferResource, decltype(host_wait_and_delete)> staging_indices_data(
-	//	new HostBufferResource(
-	//		device, allocator,
-	//		VK_BUFFER_USAGE_TRANSFER_SRC_BIT, VMA_ALLOCATION_CREATE_HOST_ACCESS_SEQUENTIAL_WRITE_BIT,
-	//		indices_data, "staging index data"),
-	//	host_wait_and_delete
-	//);
-
 	auto staging_indices_data = std::make_unique<HostBufferResource>(
 		device, allocator,
 		VK_BUFFER_USAGE_TRANSFER_SRC_BIT, VMA_ALLOCATION_CREATE_HOST_ACCESS_SEQUENTIAL_WRITE_BIT,
 		indices_data, "staging index data"
 	);
-
-	//std::unique_ptr<DeviceBufferResource, decltype(device_wait_and_delete)>indices_buffer(
-	//	new DeviceBufferResource(
-	//		device, allocator,
-	//		VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_ACCELERATION_STRUCTURE_BUILD_INPUT_READ_ONLY_BIT_KHR,
-	//		indices_data.size(), "index data"), device_wait_and_delete
-	//);
 
 	auto indices_buffer = std::make_unique<DeviceBufferResource>(
 		device, allocator,
@@ -1245,18 +1274,10 @@ BLAccelerationStructure::BLAccelerationStructure(const VkDevice device, const Vm
 		size_info.accelerationStructureSize, "BLAS"
 	);
 
-	//std::unique_ptr<DeviceBufferResource, decltype(device_wait_and_delete)> scratch_buffer(
-	//	new DeviceBufferResource(
-	//		device, allocator,
-	//		VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT | VK_BUFFER_USAGE_STORAGE_BUFFER_BIT,
-	//		ALIGNED_SIZE(size_info.buildScratchSize, scratch_buffer_alignment), "BLAS scratch"),
-	//	device_wait_and_delete
-	//);
-
 	auto scratch_buffer = std::make_unique<DeviceBufferResource>(
 		device, allocator,
 		VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT | VK_BUFFER_USAGE_STORAGE_BUFFER_BIT,
-		ALIGNED_SIZE(size_info.buildScratchSize, scratch_buffer_alignment), "BLAS scratch"
+		ALIGNED_SIZE(size_info.buildScratchSize, scratch_buffer_alignment), "BLAS scratch", mem_pool
 	);
 
 	const VkAccelerationStructureCreateInfoKHR ci = {
@@ -1317,49 +1338,11 @@ DeviceBufferResource* BLAccelerationStructure::GetASBuffer() const
 	return mASBuffer.get();
 }
 
-TLAccelerationStructure::TLAccelerationStructure(const VkDevice device, const VmaAllocator allocator, const std::vector<VkAccelerationStructureInstanceKHR>& instances, const size_t scratch_buffer_alignment, ComputeHelpers* compute_helpers, const std::string& name)
+TLAccelerationStructure::TLAccelerationStructure(const VkDevice device, const VmaAllocator allocator, const std::vector<VkAccelerationStructureInstanceKHR>& instances, const VmaPool mem_pool, const size_t scratch_buffer_alignment, ComputeHelpers* compute_helpers, const std::string& name)
 	: mDevice(device)
 {
-	//auto host_wait_and_delete = [device, compute_helpers](HostBufferResource* hbr) {
-	//	VkSemaphore sem = compute_helpers->GetSemaphore();
-	//	const uint64_t sem_value = compute_helpers->GetSemaphoreValueConst();
-
-	//	const VkSemaphoreWaitInfo wait_info = {
-	//		.sType = VK_STRUCTURE_TYPE_SEMAPHORE_WAIT_INFO,
-	//		.semaphoreCount = 1,
-	//		.pSemaphores = &sem,
-	//		.pValues = &sem_value,
-	//	};
-	//	VK_CHECK("wait for sem", vkWaitSemaphoresKHR(device, &wait_info, UINT64_MAX));
-
-	//	hbr->~HostBufferResource();
-	//	};
-
-	//auto device_wait_and_delete = [device, compute_helpers](DeviceBufferResource* hbr) {
-	//	VkSemaphore sem = compute_helpers->GetSemaphore();
-	//	const uint64_t sem_value = compute_helpers->GetSemaphoreValueConst();
-
-	//	const VkSemaphoreWaitInfo wait_info = {
-	//		.sType = VK_STRUCTURE_TYPE_SEMAPHORE_WAIT_INFO,
-	//		.semaphoreCount = 1,
-	//		.pSemaphores = &sem,
-	//		.pValues = &sem_value,
-	//	};
-	//	VK_CHECK("wait for sem", vkWaitSemaphoresKHR(device, &wait_info, UINT64_MAX));
-
-	//	hbr->~DeviceBufferResource();
-	//	};
-
 	std::vector<uint8_t> instances_data(instances.size() * sizeof(VkAccelerationStructureInstanceKHR));
 	std::memcpy(instances_data.data(), instances.data(), instances_data.size());
-
-	//std::unique_ptr<HostBufferResource, decltype(host_wait_and_delete)> instances_data_staging(
-	//	new HostBufferResource(
-	//		device, allocator,
-	//		VK_BUFFER_USAGE_TRANSFER_SRC_BIT, VMA_ALLOCATION_CREATE_HOST_ACCESS_SEQUENTIAL_WRITE_BIT,
-	//		instances_data, "instances staging"),
-	//	host_wait_and_delete
-	//);
 
 	auto instances_data_staging = std::make_unique<HostBufferResource>(
 		device, allocator,
@@ -1367,25 +1350,10 @@ TLAccelerationStructure::TLAccelerationStructure(const VkDevice device, const Vm
 		instances_data, "instances staging"
 	);
 
-	//std::unique_ptr<DeviceBufferResource, decltype(device_wait_and_delete)> instances_data_buffer(
-	//	new DeviceBufferResource(
-	//		device, allocator,
-	//		VK_BUFFER_USAGE_2_TRANSFER_DST_BIT | VK_BUFFER_USAGE_2_SHADER_DEVICE_ADDRESS_BIT_KHR | VK_BUFFER_USAGE_ACCELERATION_STRUCTURE_BUILD_INPUT_READ_ONLY_BIT_KHR,
-	//		instances_data.size(), "instances"),
-	//	device_wait_and_delete
-	//);
-
 	auto instances_data_buffer = std::make_unique<DeviceBufferResource>(
 		device, allocator,
 		VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT_KHR | VK_BUFFER_USAGE_ACCELERATION_STRUCTURE_BUILD_INPUT_READ_ONLY_BIT_KHR,
 		instances_data.size(), "instances"
-	);
-
-	compute_helpers->RecordBatch();
-	compute_helpers->CopyBufferToBuffer(instances_data_staging->GetVkBuffer(), instances_data_buffer->GetVkBuffer(), instances_data.size());
-	compute_helpers->InsertMemoryBarrier(
-		VK_PIPELINE_STAGE_2_TRANSFER_BIT, VK_ACCESS_2_TRANSFER_WRITE_BIT,
-		VK_PIPELINE_STAGE_2_ACCELERATION_STRUCTURE_BUILD_BIT_KHR, VK_ACCESS_2_SHADER_READ_BIT
 	);
 
 	const VkAccelerationStructureGeometryKHR geom = {
@@ -1425,18 +1393,10 @@ TLAccelerationStructure::TLAccelerationStructure(const VkDevice device, const Vm
 		size_info.accelerationStructureSize, "TLAS"
 	);
 
-	//std::unique_ptr<DeviceBufferResource, decltype(device_wait_and_delete)> scratch_buffer(
-	//	new DeviceBufferResource(
-	//		device, allocator,
-	//		VK_BUFFER_USAGE_2_SHADER_DEVICE_ADDRESS_BIT | VK_BUFFER_USAGE_STORAGE_BUFFER_BIT,
-	//		ALIGNED_SIZE(size_info.buildScratchSize, scratch_buffer_alignment), "TLAS Scratch"),
-	//	device_wait_and_delete
-	//);
-
 	auto scratch_buffer = std::make_unique<DeviceBufferResource>(
 		device, allocator,
 		VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT | VK_BUFFER_USAGE_STORAGE_BUFFER_BIT,
-		ALIGNED_SIZE(size_info.buildScratchSize, scratch_buffer_alignment), "TLAS Scratch"
+		ALIGNED_SIZE(size_info.buildScratchSize, scratch_buffer_alignment), "TLAS Scratch", mem_pool
 	);
 
 	const VkAccelerationStructureCreateInfoKHR ci = {
@@ -1459,6 +1419,12 @@ TLAccelerationStructure::TLAccelerationStructure(const VkDevice device, const Vm
 	build_geom_info.dstAccelerationStructure = mAS;
 	build_geom_info.scratchData = scratch_buffer->GetDeviceOrHostAddressKHR();
 
+	compute_helpers->RecordBatch();
+	compute_helpers->CopyBufferToBuffer(instances_data_staging->GetVkBuffer(), instances_data_buffer->GetVkBuffer(), instances_data.size());
+	compute_helpers->InsertMemoryBarrier(
+		VK_PIPELINE_STAGE_2_TRANSFER_BIT, VK_ACCESS_2_TRANSFER_WRITE_BIT,
+		VK_PIPELINE_STAGE_2_ACCELERATION_STRUCTURE_BUILD_BIT_KHR, VK_ACCESS_2_SHADER_READ_BIT
+	);
 	compute_helpers->BuildAccelerationStructure(
 		std::vector<VkAccelerationStructureBuildGeometryInfoKHR>
 	{
@@ -1466,7 +1432,6 @@ TLAccelerationStructure::TLAccelerationStructure(const VkDevice device, const Vm
 	},
 		build_range_infos
 	);
-
 	compute_helpers->SubmitBatch();
 
 #ifdef _DEBUG

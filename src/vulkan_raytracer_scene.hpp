@@ -9,13 +9,14 @@ class TLAccelerationStructure;
 class VulkanRaytracerScenePipelineData;
 class ImageResource;
 class ComputeHelpers;
+class Pool;
 
 class VulkanRaytracerScene
 {
 public:
 	VulkanRaytracerScene() = delete;
 
-	VulkanRaytracerScene(const Scene& scene, const VkDevice device, const VmaAllocator allocator, const std::vector<uint32_t>& queue_family_indices, const std::string& current_path, const VkPhysicalDeviceRayTracingPipelinePropertiesKHR& raytracing_properties, const size_t scratch_buffer_alignment, ComputeHelpers* compute_helpers);
+	VulkanRaytracerScene(const Scene& scene, const VkDevice device, const VmaAllocator allocator, const std::vector<uint32_t>& queue_family_indices, const std::string& current_path, const VkPhysicalDeviceRayTracingPipelinePropertiesKHR& raytracing_properties, const size_t scratch_buffer_alignment, const uint32_t mem_type_id, ComputeHelpers* compute_helpers);
 	
 	VulkanRaytracerScene(const VulkanRaytracerScene& other) = delete;
 	VulkanRaytracerScene& operator=(const VulkanRaytracerScene& other) = delete;
@@ -26,11 +27,6 @@ public:
 	{
 	public:
 		CameraInstance(const Scene::CameraInstance& camera_instance) : Scene::CameraInstance(camera_instance) {}
-
-		//VkDescriptorSet GetViewProjDescSet() const;
-
-	private:
-		//VkDescriptorSet mViewProjDescSet = VK_NULL_HANDLE;
 	};
 
 	class Camera : public Scene::Camera
@@ -66,11 +62,15 @@ public:
 	VulkanRaytracerScenePipelineData* GetPipelineData() const;
 
 private:
+	std::unique_ptr<Pool> mScratchBufferPool = nullptr;
+	std::unique_ptr<Pool> mSBTBufferPool = nullptr;
+
 	std::unique_ptr<TLAccelerationStructure> mTLAS;
 	std::vector<std::unique_ptr<BLAccelerationStructure>> mBLASes;
 
 	std::vector<VulkanRaytracerScene::CameraInstance> mCameraInstances;
 
+	std::unique_ptr<DeviceBufferResource> mVertexData = nullptr;
 	std::unique_ptr<DeviceBufferResource> mUniformData = nullptr;
 	std::unique_ptr<DeviceBufferResource> mMaterialsBuffer = nullptr;	
 	std::unique_ptr<VulkanRaytracerScenePipelineData> mPipelineData = nullptr;

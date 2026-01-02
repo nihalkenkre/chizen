@@ -138,6 +138,7 @@ void App::ProcessEvent(SDL_Event* event)
 			mCurrentPath,
 			mVulkanInterface->GetPhysicalDeviceData()->RayTracingProperties,
 			mVulkanInterface->GetPhysicalDeviceData()->AccelerationStructureProperties.minAccelerationStructureScratchOffsetAlignment,
+			Utils_GetMemoryTypeId(mVulkanInterface->GetPhysicalDeviceData()->MemoryProperties, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT),
 			mVulkanInterface->GetComputeHelpers()
 		);
 

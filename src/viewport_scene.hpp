@@ -110,7 +110,7 @@ private:
 	std::vector<ViewportWorldScene::Image> mImages;
 	std::vector<ViewportWorldScene::Material> mMaterials;
 
-	std::unique_ptr<DeviceBufferResource> mPositionsData = nullptr;
+	std::unique_ptr<DeviceBufferResource> mVertexData = nullptr;
 	std::unique_ptr<DeviceBufferResource> mUniformData = nullptr;
 
 	std::unique_ptr<ViewportScenePipelineData> mPipelineData = nullptr;

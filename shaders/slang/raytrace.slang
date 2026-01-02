@@ -1,4 +1,4 @@
-struct CamMatrices
+struct CamInfo
 {
     float4x4 view_inverse;
     float4x4 proj_inverse;
@@ -16,7 +16,7 @@ struct PushConstants
 }
 
 [[vk::binding(0, 0)]]
-ConstantBuffer<CamMatrices> cam_matrices;
+ConstantBuffer<CamInfo> cam_info;
 
 [[vk::binding(0, 1)]]
 RWTexture2D<float4> accum_target;
@@ -43,10 +43,15 @@ struct Payload
 
 struct CH_SBT_Record
 {
-    uint32_t material_index;
+    float3* positions;
+    float3* normals;
+    float2* uv0s;
+    uint3* indices;
+    uint64_t material_index;
 };
 
-[[vk::shader_record]] ConstantBuffer<CH_SBT_Record> ch_sbt;
+[[vk::shader_record]]
+ConstantBuffer<CH_SBT_Record> ch_sbt;
 
 uint TausStep(inout uint z, int S1, int S2, int S3, uint M)
 {
@@ -76,12 +81,12 @@ void raygen()
     const float2 pixel_center = float2(launch_id.xy) + float2(0.5, 0.5);
     const float2 in_uv = pixel_center / float2(launch_size.xy);
     float2 d = in_uv * 2.0 - 1.0;
-    float4 target = mul(cam_matrices.proj_inverse, float4(d.x, d.y, 1, 1));
+    float4 target = mul(cam_info.proj_inverse, float4(d.x, d.y, 1, 1));
 
     RayDesc ray_desc;
-    ray_desc.Origin = mul(cam_matrices.view_inverse, float4(0, 0, 0, 1)).xyz;
-    ray_desc.Direction = mul(cam_matrices.view_inverse, float4(normalize(target.xyz), 0)).xyz;
-    ray_desc.TMin = 0.001f;
+    ray_desc.Origin = mul(cam_info.view_inverse, float4(0, 0, 0, 1)).xyz;
+    ray_desc.Direction = mul(cam_info.view_inverse, float4(normalize(target.xyz), 0)).xyz;
+    ray_desc.TMin = 0.01f;
     ray_desc.TMax = 1000.f;
 
     Payload payload;
@@ -101,7 +106,7 @@ void miss(inout Payload p)
     uint4 z = rand_states[flat_index];
 
     // p.hit_value = float3(HybridTaus(z), HybridTaus(z), HybridTaus(z));
-    p.hit_value = float3(0, 0, 0.2f);
+    p.hit_value = float3(0.2f, 0.2f, 0.2f);
     rand_states[flat_index] = z;
 }
 
@@ -113,6 +118,26 @@ struct Attributes
 [shader("closesthit")]
 void closesthit(inout Payload p, in Attributes attribs)
 {
-    const float3 barycentricCoords = float3(1.0f - attribs.bary.x - attribs.bary.y, attribs.bary.x, attribs.bary.y);
-    p.hit_value = barycentricCoords;
+    const float3 bary_coords = float3(attribs.bary.x, attribs.bary.y, 1.0f - attribs.bary.x - attribs.bary.y);
+
+    uint3 index_triplet = *(ch_sbt.indices + PrimitiveIndex());
+
+    float2 uv = ch_sbt.uv0s[index_triplet.x] * bary_coords.z +
+                ch_sbt.uv0s[index_triplet.y] * bary_coords.x +
+                ch_sbt.uv0s[index_triplet.z] * bary_coords.y;
+    float3 normal = ch_sbt.normals[index_triplet.x] * bary_coords.z +
+                    ch_sbt.normals[index_triplet.y] * bary_coords.x +
+                    ch_sbt.normals[index_triplet.z] * bary_coords.y;
+
+    float4 base_color = float4(1.f);
+    if (materials[ch_sbt.material_index].base_color_index.x >= 0)
+    {
+        base_color *= textures[NonUniformResourceIndex(materials[ch_sbt.material_index].base_color_index.x)].SampleLevel(uv, 0) * materials[ch_sbt.material_index].base_color_factor;
+    }
+    else
+    {
+        base_color *= materials[ch_sbt.material_index].base_color_factor;
+    }
+
+    p.hit_value = base_color.xyz;
 }

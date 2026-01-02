@@ -108,6 +108,15 @@ void ImGUIState::Render(const VkCommandBuffer cmd_buff)
 		ImGuiFileDialog::Instance()->OpenDialog("GLTFDlg", "Choose GLTF Binary File", ".glb", config);
 	}
 
+	if (ImGui::Button("Reload"))
+	{
+		if (!file_path.empty())
+		{
+			events.FileOpen.user.data1 = reinterpret_cast<void*>((char*)file_path.c_str());
+			SDL_CHECK(SDL_PushEvent(&events.FileOpen));
+		}
+	}
+
 	if (ImGuiFileDialog::Instance()->Display("GLTFDlg"))
 	{
 		if (ImGuiFileDialog::Instance()->IsOk())

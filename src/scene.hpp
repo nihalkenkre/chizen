@@ -157,7 +157,7 @@ public:
 private:
 	void AddMeshInstance(const cgltf_data* gltf, const cgltf_node* node, const VkDeviceSize uniform_buffer_alignment);
 	void AddCameraInstance(const cgltf_data* gltf, const cgltf_node* node, const VkDeviceSize uniform_buffer_alignment);
-	void AddMesh(const cgltf_data* gltf, const cgltf_mesh* mesh, const size_t mesh_index);
+	void AddMesh(const cgltf_data* gltf, const cgltf_mesh* mesh);
 	void AddCamera(const cgltf_camera* camera, const VkDeviceSize uniform_buffer_alignment);
 	void AddMaterial(const cgltf_data* gltf, const cgltf_material* material);
 	void AddImage(const cgltf_image* image);
@@ -171,7 +171,7 @@ private:
 
 	std::vector<std::string> mCameraNames;
 
-	std::vector<uint8_t> mPositionsData;
+	std::vector<uint8_t> mVertexData;
 	std::vector<uint8_t> mUniformData;
 	std::vector<uint8_t> mImagesData;
 };

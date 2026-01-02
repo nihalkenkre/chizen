@@ -1,5 +1,21 @@
 #include "utils.hpp"
 
+uint32_t Utils_GetMemoryTypeId(const VkPhysicalDeviceMemoryProperties2 mem_props, const VkMemoryPropertyFlags mem_prop_flags)
+{
+	uint32_t mem_id = UINT32_MAX;
+
+	for (uint32_t mt = 0; mt < mem_props.memoryProperties.memoryTypeCount; ++mt)
+	{
+		if (mem_props.memoryProperties.memoryTypes[mt].propertyFlags & mem_prop_flags)
+		{
+			mem_id = mt;
+			break;
+		}
+	}
+
+	return mem_id;
+}
+
 void Utils_ChangeImageLayout(
 	const VkCommandBuffer cmd_buff,
 	const VkPipelineStageFlags2 src_stage_mask, const VkAccessFlags2 src_access_mask,

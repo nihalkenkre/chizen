@@ -39,219 +39,219 @@ private:
 VulkanRaytracerScenePipelineData::VulkanRaytracerScenePipelineData(const VkDevice device, const std::string& current_path, const size_t num_images, const std::string& name)
 	: mDevice(device)
 {
-	Slang::ComPtr<slang::IGlobalSession> slang_global_session;
-	SLANG_CHECK("create global session", slang::createGlobalSession(slang_global_session.writeRef()));
+ 	Slang::ComPtr<slang::IGlobalSession> slang_global_session;
+ 	SLANG_CHECK("create global session", slang::createGlobalSession(slang_global_session.writeRef()));
 
-	const slang::TargetDesc target_descs[] = {
-		{
-			.format = SLANG_SPIRV,
-			.profile = slang_global_session->findProfile("spirv_1_5"),
-		}
-	};
+ 	const slang::TargetDesc target_descs[] = {
+ 		{
+ 			.format = SLANG_SPIRV,
+ 			.profile = slang_global_session->findProfile("spirv_1_5"),
+ 		}
+ 	};
 
-	slang::CompilerOptionEntry compiler_options[] = {
-		{
-			.name = slang::CompilerOptionName::MatrixLayoutColumn,
-			.value = {
-				.kind = slang::CompilerOptionValueKind::Int,
-				.intValue0 = 1,
-			},
-		},
-		{
-			.name = slang::CompilerOptionName::DisableWarnings,
-			.value = {
-				.kind = slang::CompilerOptionValueKind::String,
-				.stringValue0 = "41012"
-			},
-		},
-#ifdef _DEBUG
-		{
-			.name = slang::CompilerOptionName::DebugInformation,
-			.value = {
-				.kind = slang::CompilerOptionValueKind::Int,
-				.intValue0 = SLANG_DEBUG_INFO_LEVEL_MAXIMAL,
-			}
-		},
-#else	// _DEBUG
-		{
-			.name = slang::CompilerOptionName::Optimization,
-			.value = {
-				.kind = slang::CompilerOptionValueKind::Int,
-				.intValue0 = SLANG_OPTIMIZATION_LEVEL_MAXIMAL
-			},
-		},
-#endif // _DEBUG
-	};
+ 	slang::CompilerOptionEntry compiler_options[] = {
+ 		{
+ 			.name = slang::CompilerOptionName::MatrixLayoutColumn,
+ 			.value = {
+ 				.kind = slang::CompilerOptionValueKind::Int,
+ 				.intValue0 = 1,
+ 			},
+ 		},
+ 		{
+ 			.name = slang::CompilerOptionName::DisableWarnings,
+ 			.value = {
+ 				.kind = slang::CompilerOptionValueKind::String,
+ 				.stringValue0 = "41012"
+ 			},
+ 		},
+ #ifdef _DEBUG
+ 		{
+ 			.name = slang::CompilerOptionName::DebugInformation,
+ 			.value = {
+ 				.kind = slang::CompilerOptionValueKind::Int,
+ 				.intValue0 = SLANG_DEBUG_INFO_LEVEL_MAXIMAL,
+ 			}
+ 		},
+ #else	// _DEBUG
+ 		{
+ 			.name = slang::CompilerOptionName::Optimization,
+ 			.value = {
+ 				.kind = slang::CompilerOptionValueKind::Int,
+ 				.intValue0 = SLANG_OPTIMIZATION_LEVEL_MAXIMAL
+ 			},
+ 		},
+ #endif // _DEBUG
+ 	};
 
-	slang::SessionDesc compile_session_desc = {
-		.targets = target_descs,
-		.targetCount = std::size(target_descs),
-		.compilerOptionEntries = compiler_options,
-		.compilerOptionEntryCount = std::size(compiler_options),
-	};
+ 	slang::SessionDesc compile_session_desc = {
+ 		.targets = target_descs,
+ 		.targetCount = std::size(target_descs),
+ 		.compilerOptionEntries = compiler_options,
+ 		.compilerOptionEntryCount = std::size(compiler_options),
+ 	};
 
-	Slang::ComPtr<slang::ISession> compile_session;
-	SLANG_CHECK("create compile session", slang_global_session->createSession(compile_session_desc, compile_session.writeRef()));
+ 	Slang::ComPtr<slang::ISession> compile_session;
+ 	SLANG_CHECK("create compile session", slang_global_session->createSession(compile_session_desc, compile_session.writeRef()));
 
-	const std::string slang_shader_path = std::string(current_path).append("/shaders/slang/raytrace.slang");
+ 	const std::string slang_shader_path = std::string(current_path).append("/shaders/slang/raytrace.slang");
 
-	Slang::ComPtr<slang::IBlob> diagnostic_blob;
-	slang::IModule* slang_module = compile_session->loadModule(slang_shader_path.c_str(), diagnostic_blob.writeRef());
+ 	Slang::ComPtr<slang::IBlob> diagnostic_blob;
+ 	slang::IModule* slang_module = compile_session->loadModule(slang_shader_path.c_str(), diagnostic_blob.writeRef());
 
-	if (diagnostic_blob != nullptr)
-	{
-		std::println("{}", reinterpret_cast<const char*>(diagnostic_blob->getBufferPointer()));
-	}
+ 	if (diagnostic_blob != nullptr)
+ 	{
+ 		std::println("{}", reinterpret_cast<const char*>(diagnostic_blob->getBufferPointer()));
+ 	}
 
-	Slang::ComPtr<slang::IEntryPoint> rg_entry_point;
-	slang_module->findEntryPointByName("raygen", rg_entry_point.writeRef());
+ 	Slang::ComPtr<slang::IEntryPoint> rg_entry_point;
+ 	slang_module->findEntryPointByName("raygen", rg_entry_point.writeRef());
 
-	std::array<slang::IComponentType*, 2> rg_component_types = {
-		slang_module, rg_entry_point
-	};
+ 	std::array<slang::IComponentType*, 2> rg_component_types = {
+ 		slang_module, rg_entry_point
+ 	};
 
-	Slang::ComPtr<slang::IComponentType> rg_composed_program;
-	diagnostic_blob.setNull();
-	SLANG_CHECK("create program", compile_session->createCompositeComponentType(rg_component_types.data(), rg_component_types.size(), rg_composed_program.writeRef(), diagnostic_blob.writeRef()));
+ 	Slang::ComPtr<slang::IComponentType> rg_composed_program;
+ 	diagnostic_blob.setNull();
+ 	SLANG_CHECK("create program", compile_session->createCompositeComponentType(rg_component_types.data(), rg_component_types.size(), rg_composed_program.writeRef(), diagnostic_blob.writeRef()));
 
-	Slang::ComPtr<slang::IComponentType> rg_linked_program;
-	diagnostic_blob.setNull();
-	SLANG_CHECK("link program", rg_composed_program->link(rg_linked_program.writeRef(), diagnostic_blob.writeRef()));
+ 	Slang::ComPtr<slang::IComponentType> rg_linked_program;
+ 	diagnostic_blob.setNull();
+ 	SLANG_CHECK("link program", rg_composed_program->link(rg_linked_program.writeRef(), diagnostic_blob.writeRef()));
 
-	Slang::ComPtr<slang::IBlob> rg_spirv_code;
-	diagnostic_blob.setNull();
-	SLANG_CHECK("get spirv code", rg_composed_program->getEntryPointCode(0, 0, rg_spirv_code.writeRef(), diagnostic_blob.writeRef()));
+ 	Slang::ComPtr<slang::IBlob> rg_spirv_code;
+ 	diagnostic_blob.setNull();
+ 	SLANG_CHECK("get spirv code", rg_composed_program->getEntryPointCode(0, 0, rg_spirv_code.writeRef(), diagnostic_blob.writeRef()));
 
-	const VkShaderModuleCreateInfo rg_mod_ci = {
-		.sType = VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO,
-		.codeSize = rg_spirv_code->getBufferSize(),
-		.pCode = reinterpret_cast<const uint32_t*>(rg_spirv_code->getBufferPointer()),
-	};
+ 	const VkShaderModuleCreateInfo rg_mod_ci = {
+ 		.sType = VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO,
+ 		.codeSize = rg_spirv_code->getBufferSize(),
+ 		.pCode = reinterpret_cast<const uint32_t*>(rg_spirv_code->getBufferPointer()),
+ 	};
 
-	VkShaderModule rg_mod = VK_NULL_HANDLE;
-	VK_CHECK("create shader module", vkCreateShaderModule(device, &rg_mod_ci, nullptr, &rg_mod));
+ 	VkShaderModule rg_mod = VK_NULL_HANDLE;
+ 	VK_CHECK("create shader module", vkCreateShaderModule(device, &rg_mod_ci, nullptr, &rg_mod));
 
-	Slang::ComPtr<slang::IEntryPoint> ms_entry_point;
-	slang_module->findEntryPointByName("miss", ms_entry_point.writeRef());
+ 	Slang::ComPtr<slang::IEntryPoint> ms_entry_point;
+ 	slang_module->findEntryPointByName("miss", ms_entry_point.writeRef());
 
-	std::array<slang::IComponentType*, 2> ms_component_types = {
-		slang_module, ms_entry_point
-	};
+ 	std::array<slang::IComponentType*, 2> ms_component_types = {
+ 		slang_module, ms_entry_point
+ 	};
 
-	Slang::ComPtr<slang::IComponentType> ms_composed_program;
-	diagnostic_blob.setNull();
-	SLANG_CHECK("create program", compile_session->createCompositeComponentType(ms_component_types.data(), ms_component_types.size(), ms_composed_program.writeRef(), diagnostic_blob.writeRef()));
+ 	Slang::ComPtr<slang::IComponentType> ms_composed_program;
+ 	diagnostic_blob.setNull();
+ 	SLANG_CHECK("create program", compile_session->createCompositeComponentType(ms_component_types.data(), ms_component_types.size(), ms_composed_program.writeRef(), diagnostic_blob.writeRef()));
 
-	Slang::ComPtr<slang::IComponentType> ms_linked_program;
-	diagnostic_blob.setNull();
-	SLANG_CHECK("link program", ms_composed_program->link(ms_linked_program.writeRef(), diagnostic_blob.writeRef()));
+ 	Slang::ComPtr<slang::IComponentType> ms_linked_program;
+ 	diagnostic_blob.setNull();
+ 	SLANG_CHECK("link program", ms_composed_program->link(ms_linked_program.writeRef(), diagnostic_blob.writeRef()));
 
-	Slang::ComPtr<slang::IBlob> ms_spirv_code;
-	diagnostic_blob.setNull();
-	SLANG_CHECK("get spirv code", ms_composed_program->getEntryPointCode(0, 0, ms_spirv_code.writeRef(), diagnostic_blob.writeRef()));
+ 	Slang::ComPtr<slang::IBlob> ms_spirv_code;
+ 	diagnostic_blob.setNull();
+ 	SLANG_CHECK("get spirv code", ms_composed_program->getEntryPointCode(0, 0, ms_spirv_code.writeRef(), diagnostic_blob.writeRef()));
 
-	const VkShaderModuleCreateInfo ms_mod_ci = {
-		.sType = VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO,
-		.codeSize = ms_spirv_code->getBufferSize(),
-		.pCode = reinterpret_cast<const uint32_t*>(ms_spirv_code->getBufferPointer()),
-	};
+ 	const VkShaderModuleCreateInfo ms_mod_ci = {
+ 		.sType = VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO,
+ 		.codeSize = ms_spirv_code->getBufferSize(),
+ 		.pCode = reinterpret_cast<const uint32_t*>(ms_spirv_code->getBufferPointer()),
+ 	};
 
-	VkShaderModule ms_mod = VK_NULL_HANDLE;
-	VK_CHECK("create shader module", vkCreateShaderModule(device, &ms_mod_ci, nullptr, &ms_mod));
+ 	VkShaderModule ms_mod = VK_NULL_HANDLE;
+ 	VK_CHECK("create shader module", vkCreateShaderModule(device, &ms_mod_ci, nullptr, &ms_mod));
 
-	Slang::ComPtr<slang::IEntryPoint> ch_entry_point;
-	slang_module->findEntryPointByName("closesthit", ch_entry_point.writeRef());
+ 	Slang::ComPtr<slang::IEntryPoint> ch_entry_point;
+ 	slang_module->findEntryPointByName("closesthit", ch_entry_point.writeRef());
 
-	std::array<slang::IComponentType*, 2> ch_component_types = {
-		slang_module, ch_entry_point
-	};
+ 	std::array<slang::IComponentType*, 2> ch_component_types = {
+ 		slang_module, ch_entry_point
+ 	};
 
-	Slang::ComPtr<slang::IComponentType> ch_composed_program;
-	diagnostic_blob.setNull();
-	SLANG_CHECK("create program", compile_session->createCompositeComponentType(ch_component_types.data(), ch_component_types.size(), ch_composed_program.writeRef(), diagnostic_blob.writeRef()));
+ 	Slang::ComPtr<slang::IComponentType> ch_composed_program;
+ 	diagnostic_blob.setNull();
+ 	SLANG_CHECK("create program", compile_session->createCompositeComponentType(ch_component_types.data(), ch_component_types.size(), ch_composed_program.writeRef(), diagnostic_blob.writeRef()));
 
-	Slang::ComPtr<slang::IComponentType> ch_linked_program;
-	diagnostic_blob.setNull();
-	SLANG_CHECK("link program", ch_composed_program->link(ch_linked_program.writeRef(), diagnostic_blob.writeRef()));
+ 	Slang::ComPtr<slang::IComponentType> ch_linked_program;
+ 	diagnostic_blob.setNull();
+ 	SLANG_CHECK("link program", ch_composed_program->link(ch_linked_program.writeRef(), diagnostic_blob.writeRef()));
 
-	Slang::ComPtr<slang::IBlob> ch_spirv_code;
-	diagnostic_blob.setNull();
-	SLANG_CHECK("get spirv code", ch_composed_program->getEntryPointCode(0, 0, ch_spirv_code.writeRef(), diagnostic_blob.writeRef()));
+ 	Slang::ComPtr<slang::IBlob> ch_spirv_code;
+ 	diagnostic_blob.setNull();
+ 	SLANG_CHECK("get spirv code", ch_composed_program->getEntryPointCode(0, 0, ch_spirv_code.writeRef(), diagnostic_blob.writeRef()));
 
-	const VkShaderModuleCreateInfo ch_mod_ci = {
-		.sType = VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO,
-		.codeSize = ch_spirv_code->getBufferSize(),
-		.pCode = reinterpret_cast<const uint32_t*>(ch_spirv_code->getBufferPointer()),
-	};
+ 	const VkShaderModuleCreateInfo ch_mod_ci = {
+ 		.sType = VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO,
+ 		.codeSize = ch_spirv_code->getBufferSize(),
+ 		.pCode = reinterpret_cast<const uint32_t*>(ch_spirv_code->getBufferPointer()),
+ 	};
 
-	VkShaderModule ch_mod = VK_NULL_HANDLE;
-	VK_CHECK("create shader module", vkCreateShaderModule(device, &ch_mod_ci, nullptr, &ch_mod));
+ 	VkShaderModule ch_mod = VK_NULL_HANDLE;
+ 	VK_CHECK("create shader module", vkCreateShaderModule(device, &ch_mod_ci, nullptr, &ch_mod));
 
-	/*std::filesystem::path rg_path = std::string(current_path).append("/shaders/glsl/raytrace.rgen.glsl.spv");
-	VkShaderModule rg_mod = VK_NULL_HANDLE;
-	if (std::filesystem::exists(rg_path))
-	{
-		std::uintmax_t file_size = std::filesystem::file_size(rg_path);
-		std::ifstream rgen_file(rg_path.c_str(), std::ios::binary);
+	//std::filesystem::path rg_path = std::string(current_path).append("/shaders/glsl/raytrace.rgen.glsl.spv");
+	//VkShaderModule rg_mod = VK_NULL_HANDLE;
+	//if (std::filesystem::exists(rg_path))
+	//{
+	//	std::uintmax_t file_size = std::filesystem::file_size(rg_path);
+	//	std::ifstream rgen_file(rg_path.c_str(), std::ios::binary);
 
-		std::vector<char> rg_code(file_size, 0);
-		rgen_file.read(rg_code.data(), file_size);
+	//	std::vector<char> rg_code(file_size, 0);
+	//	rgen_file.read(rg_code.data(), file_size);
 
-		const VkShaderModuleCreateInfo ci = {
-			.sType = VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO,
-			.codeSize = file_size,
-			.pCode = reinterpret_cast<uint32_t*>(rg_code.data()),
-		};
-		VK_CHECK("create rgen module", vkCreateShaderModule(mDevice, &ci, nullptr, &rg_mod));
-	}
-	else
-	{
-		std::println("Could not find {}", rg_path.string());
-	}
+	//	const VkShaderModuleCreateInfo ci = {
+	//		.sType = VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO,
+	//		.codeSize = file_size,
+	//		.pCode = reinterpret_cast<uint32_t*>(rg_code.data()),
+	//	};
+	//	VK_CHECK("create rgen module", vkCreateShaderModule(mDevice, &ci, nullptr, &rg_mod));
+	//}
+	//else
+	//{
+	//	std::println("Could not find {}", rg_path.string());
+	//}
 
-	std::filesystem::path ms_path = std::string(current_path).append("/shaders/glsl/raytrace.rmiss.glsl.spv");
-	VkShaderModule ms_mod = VK_NULL_HANDLE;
-	if (std::filesystem::exists(ms_path))
-	{
-		std::uintmax_t file_size = std::filesystem::file_size(ms_path);
-		std::ifstream ms_file(ms_path.c_str(), std::ios::binary);
+	//std::filesystem::path ms_path = std::string(current_path).append("/shaders/glsl/raytrace.rmiss.glsl.spv");
+	//VkShaderModule ms_mod = VK_NULL_HANDLE;
+	//if (std::filesystem::exists(ms_path))
+	//{
+	//	std::uintmax_t file_size = std::filesystem::file_size(ms_path);
+	//	std::ifstream ms_file(ms_path.c_str(), std::ios::binary);
 
-		std::vector<char> miss_code(file_size, 0);
-		ms_file.read(miss_code.data(), file_size);
+	//	std::vector<char> miss_code(file_size, 0);
+	//	ms_file.read(miss_code.data(), file_size);
 
-		const VkShaderModuleCreateInfo ci = {
-			.sType = VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO,
-			.codeSize = file_size,
-			.pCode = reinterpret_cast<uint32_t*>(miss_code.data()),
-		};
-		VK_CHECK("create rgen module", vkCreateShaderModule(mDevice, &ci, nullptr, &ms_mod));
-	}
-	else
-	{
-		std::println("Could not find {}", ms_path.string());
-	}
+	//	const VkShaderModuleCreateInfo ci = {
+	//		.sType = VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO,
+	//		.codeSize = file_size,
+	//		.pCode = reinterpret_cast<uint32_t*>(miss_code.data()),
+	//	};
+	//	VK_CHECK("create rmiss module", vkCreateShaderModule(mDevice, &ci, nullptr, &ms_mod));
+	//}
+	//else
+	//{
+	//	std::println("Could not find {}", ms_path.string());
+	//}
 
-	std::filesystem::path ch_path = std::string(current_path).append("/shaders/glsl/raytrace.rchit.glsl.spv");
-	VkShaderModule ch_mod = VK_NULL_HANDLE;
-	if (std::filesystem::exists(ch_path))
-	{
-		std::uintmax_t file_size = std::filesystem::file_size(ch_path);
-		std::ifstream ch_file(ch_path.c_str(), std::ios::binary);
+	//std::filesystem::path ch_path = std::string(current_path).append("/shaders/glsl/raytrace.rchit.glsl.spv");
+	//VkShaderModule ch_mod = VK_NULL_HANDLE;
+	//if (std::filesystem::exists(ch_path))
+	//{
+	//	std::uintmax_t file_size = std::filesystem::file_size(ch_path);
+	//	std::ifstream ch_file(ch_path.c_str(), std::ios::binary);
 
-		std::vector<char> ch_code(file_size, 0);
-		ch_file.read(ch_code.data(), file_size);
+	//	std::vector<char> ch_code(file_size, 0);
+	//	ch_file.read(ch_code.data(), file_size);
 
-		const VkShaderModuleCreateInfo ci = {
-			.sType = VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO,
-			.codeSize = file_size,
-			.pCode = reinterpret_cast<uint32_t*>(ch_code.data()),
-		};
-		VK_CHECK("create rgen module", vkCreateShaderModule(mDevice, &ci, nullptr, &ch_mod));
-	}
-	else
-	{
-		std::println("Could not find {}", ch_path.string());
-	}*/
+	//	const VkShaderModuleCreateInfo ci = {
+	//		.sType = VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO,
+	//		.codeSize = file_size,
+	//		.pCode = reinterpret_cast<uint32_t*>(ch_code.data()),
+	//	};
+	//	VK_CHECK("create rchit module", vkCreateShaderModule(mDevice, &ci, nullptr, &ch_mod));
+	//}
+	//else
+	//{
+	//	std::println("Could not find {}", ch_path.string());
+	//}
 
 	const VkDescriptorSetLayoutBinding dsl_0_bindings[] = {
 		{
@@ -461,10 +461,12 @@ const std::vector<VkRayTracingShaderGroupCreateInfoKHR>& VulkanRaytracerScenePip
 	return mShaderGroups;
 }
 
-VulkanRaytracerScene::VulkanRaytracerScene(const Scene& scene, const VkDevice device, const VmaAllocator allocator, const std::vector<uint32_t>& queue_family_indices, const std::string& current_path, const VkPhysicalDeviceRayTracingPipelinePropertiesKHR& raytracing_properties, const size_t scratch_buffer_alignment, ComputeHelpers* compute_helpers)
+VulkanRaytracerScene::VulkanRaytracerScene(const Scene& scene, const VkDevice device, const VmaAllocator allocator, const std::vector<uint32_t>& queue_family_indices, const std::string& current_path, const VkPhysicalDeviceRayTracingPipelinePropertiesKHR& raytracing_properties, const size_t scratch_buffer_alignment, const uint32_t mem_type_id, ComputeHelpers* compute_helpers)
 	: mDevice(device), mRaytracingProperties(raytracing_properties)
 {
 	mPipelineData = std::make_unique<VulkanRaytracerScenePipelineData>(device, current_path, std::max(static_cast<size_t>(1), scene.GetImages().size()), "vulkan raytracer");
+	mScratchBufferPool = std::make_unique<Pool>(allocator, scratch_buffer_alignment, mem_type_id);
+	mSBTBufferPool = std::make_unique<Pool>(allocator, raytracing_properties.shaderGroupBaseAlignment, mem_type_id);
 
 	const VkDeviceSize sbt_handle_size = raytracing_properties.shaderGroupHandleSize;
 	const VkDeviceSize sbt_handle_aligned_size = ALIGNED_SIZE(raytracing_properties.shaderGroupHandleSize, raytracing_properties.shaderGroupHandleAlignment);
@@ -476,13 +478,13 @@ VulkanRaytracerScene::VulkanRaytracerScene(const Scene& scene, const VkDevice de
 
 	auto staging_rg_sbt = std::make_unique<HostBufferResource>(
 		device, allocator, VK_BUFFER_USAGE_TRANSFER_SRC_BIT, VMA_ALLOCATION_CREATE_HOST_ACCESS_SEQUENTIAL_WRITE_BIT,
-		ALIGNED_SIZE(sbt_handle_aligned_size, raytracing_properties.shaderGroupBaseAlignment ), "staging rg sbt"
+		ALIGNED_SIZE(sbt_handle_aligned_size, raytracing_properties.shaderGroupBaseAlignment), "staging rg sbt"
 	);
 	std::memcpy(staging_rg_sbt->GetAllocationInfo2().allocationInfo.pMappedData, sbt_handles.data(), sbt_handle_size);
 
 	mRGSbt = std::make_unique<DeviceBufferResource>(
 		device, allocator, VK_BUFFER_USAGE_SHADER_BINDING_TABLE_BIT_KHR | VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT,
-		ALIGNED_SIZE(sbt_handle_aligned_size, raytracing_properties.shaderGroupBaseAlignment), "rg sbt"
+		ALIGNED_SIZE(sbt_handle_aligned_size, raytracing_properties.shaderGroupBaseAlignment), "rg sbt", mSBTBufferPool->GetPool()
 	);
 
 	auto staging_ms_sbt = std::make_unique<HostBufferResource>(
@@ -493,63 +495,94 @@ VulkanRaytracerScene::VulkanRaytracerScene(const Scene& scene, const VkDevice de
 
 	mMSSbt = std::make_unique<DeviceBufferResource>(
 		device, allocator, VK_BUFFER_USAGE_SHADER_BINDING_TABLE_BIT_KHR | VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT,
-		ALIGNED_SIZE(sbt_handle_aligned_size, raytracing_properties.shaderGroupBaseAlignment), "ms sbt"
+		ALIGNED_SIZE(sbt_handle_aligned_size, raytracing_properties.shaderGroupBaseAlignment), "ms sbt", mSBTBufferPool->GetPool()
 	);
 
-	// current supporting one material per primitive, one primitive per mesh
-	for (const auto& mesh : scene.GetMeshes())
-	{
-		mBLASes.push_back(
-			std::make_unique<BLAccelerationStructure>(
-				device, allocator, mesh.GetPrimitives()[0], scene.GetVertexData(), scratch_buffer_alignment, compute_helpers, "BLAS"
-			)
-		);
-	}
+	auto uniform_data = scene.GetUniformData();
+	auto staging_uniform_data = std::make_unique<HostBufferResource>(
+		device, allocator,
+		VK_BUFFER_USAGE_TRANSFER_SRC_BIT, VMA_ALLOCATION_CREATE_HOST_ACCESS_SEQUENTIAL_WRITE_BIT,
+		uniform_data, "staging uniform data"
+	);
+	mUniformData = std::make_unique<DeviceBufferResource>(
+		device, allocator,
+		VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT,
+		uniform_data.size(), "scene uniform data"
+	);
 
-	std::vector<VkAccelerationStructureInstanceKHR> instances;
-	instances.reserve(scene.GetMeshInstances().size());
+	auto vertex_data = scene.GetVertexData();
+	auto staging_vertex_data = std::make_unique<HostBufferResource>(
+		device, allocator,
+		VK_BUFFER_USAGE_TRANSFER_SRC_BIT, VMA_ALLOCATION_CREATE_HOST_ACCESS_SEQUENTIAL_WRITE_BIT,
+		vertex_data, "staging vertex data"
+	);
+	mVertexData = std::make_unique<DeviceBufferResource>(
+		device, allocator,
+		VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT | VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
+		vertex_data.size(), "scene vertex data"
+	);
 
 	struct CHSbtRecordData
 	{
-		uint32_t material_index;
+		VkDeviceAddress positions;
+		VkDeviceAddress normals;
+		VkDeviceAddress uv0s;
+		VkDeviceAddress indices;
+		uint64_t material_index;
 	};
 
 	std::vector<uint8_t> ch_sbt;
 	mCHSbtRecordAlignedSize = ALIGNED_SIZE(raytracing_properties.shaderGroupHandleSize + sizeof(CHSbtRecordData), raytracing_properties.shaderGroupHandleAlignment);
-	ch_sbt.reserve(ALIGNED_SIZE(scene.GetMaterials().size() * mCHSbtRecordAlignedSize, raytracing_properties.shaderGroupBaseAlignment));
+
+	std::vector<VkAccelerationStructureInstanceKHR> instances;
+	instances.reserve(scene.GetMeshInstances().size());
 
 	for (const auto& mesh_instance : scene.GetMeshInstances())
 	{
-		const VkAccelerationStructureDeviceAddressInfoKHR blas_addr_info = {
-			.sType = VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_DEVICE_ADDRESS_INFO_KHR,
-			.accelerationStructure = mBLASes[mesh_instance.GetMeshIndex()]->GetAS(),
-		};
+		auto mesh = scene.GetMeshes()[mesh_instance.GetMeshIndex()];
+		for (const auto& prim : mesh.GetPrimitives())
+		{
+			mBLASes.push_back(
+				std::make_unique<BLAccelerationStructure>(
+					device, allocator, prim, scene.GetVertexData(), mScratchBufferPool->GetPool(), scratch_buffer_alignment, compute_helpers, "BLAS"
+				)
+			);
 
-		glm::mat4 xform = {};
-		std::memcpy(&xform, scene.GetUniformData().data() + mesh_instance.GetModelMatrixOffset(), sizeof(xform));
+			const VkAccelerationStructureDeviceAddressInfoKHR blas_addr_info = {
+				.sType = VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_DEVICE_ADDRESS_INFO_KHR,
+				.accelerationStructure = mBLASes[mBLASes.size() - 1]->GetAS(),
+			};
 
-		xform = glm::transpose(xform);
-		VkTransformMatrixKHR inst_xform;
-		std::memcpy(&inst_xform, &xform, sizeof(inst_xform));
+			glm::mat4 xform = {};
+			std::memcpy(&xform, scene.GetUniformData().data() + mesh_instance.GetModelMatrixOffset(), sizeof(xform));
 
-		VkAccelerationStructureInstanceKHR inst = {
-			.transform = inst_xform,
-			.mask = 0xFF,
-			.instanceShaderBindingTableRecordOffset = scene.GetMeshes()[mesh_instance.GetMeshIndex()].GetPrimitives()[0].GetMaterialIndex(),
-			.accelerationStructureReference = vkGetAccelerationStructureDeviceAddressKHR(device, &blas_addr_info),
-		};
+			xform = glm::transpose(xform);
+			VkTransformMatrixKHR inst_xform;
+			std::memcpy(&inst_xform, &xform, sizeof(inst_xform));
 
-		CHSbtRecordData ch_sbt_record = {
-			.material_index = scene.GetMeshes()[mesh_instance.GetMeshIndex()].GetPrimitives()[0].GetMaterialIndex(),
-		};
+			const VkAccelerationStructureInstanceKHR inst = {
+				.transform = inst_xform,
+				.mask = 0xFF,
+				.instanceShaderBindingTableRecordOffset = static_cast<uint32_t>(instances.size()),
+				.accelerationStructureReference = vkGetAccelerationStructureDeviceAddressKHR(device, &blas_addr_info),
+			};
 
-		std::vector<uint8_t> ch_sbt_record_data(mCHSbtRecordAlignedSize);
-		std::memcpy(ch_sbt_record_data.data(), sbt_handles.data() + (sbt_handle_size * 2), sbt_handle_size);
-		std::memcpy(ch_sbt_record_data.data() + raytracing_properties.shaderGroupHandleSize, &ch_sbt_record, sizeof(CHSbtRecordData));
+			const CHSbtRecordData ch_sbt_record = {
+				.positions = mVertexData->GetDeviceOrHostAddressConstKHR().deviceAddress + prim.GetPositionsOffset(),
+				.normals = mVertexData->GetDeviceOrHostAddressConstKHR().deviceAddress + prim.GetNormalsOffset(),
+				.uv0s = mVertexData->GetDeviceOrHostAddressConstKHR().deviceAddress + prim.GetTexcoordsOffset(),
+				.indices = mVertexData->GetDeviceOrHostAddressConstKHR().deviceAddress + prim.GetIndicesOffset(),
+				.material_index = static_cast<uint64_t>(prim.GetMaterialIndex()),
+			};
 
-		ch_sbt.append_range(ch_sbt_record_data);
+			std::vector<uint8_t> ch_sbt_record_data(mCHSbtRecordAlignedSize);
+			std::memcpy(ch_sbt_record_data.data(), sbt_handles.data() + (sbt_handle_size * 2), sbt_handle_size);
+			std::memcpy(ch_sbt_record_data.data() + sbt_handle_size, &ch_sbt_record, sizeof(CHSbtRecordData));
 
-		instances.push_back(inst);
+			ch_sbt.append_range(ch_sbt_record_data);
+
+			instances.push_back(inst);
+		}
 	}
 
 	mCHSbtAlignedSize = ALIGNED_SIZE(ch_sbt.size(), raytracing_properties.shaderGroupBaseAlignment);
@@ -562,47 +595,40 @@ VulkanRaytracerScene::VulkanRaytracerScene(const Scene& scene, const VkDevice de
 
 	mCHSbt = std::make_unique<DeviceBufferResource>(
 		device, allocator, VK_BUFFER_USAGE_SHADER_BINDING_TABLE_BIT_KHR | VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT,
-		mCHSbtAlignedSize, "ch sbt"
+		mCHSbtAlignedSize, "ch sbt", mSBTBufferPool->GetPool()
 	);
 
 	mTLAS = std::make_unique<TLAccelerationStructure>(
-		device, allocator, instances, scratch_buffer_alignment, compute_helpers, "TLAS"
-	);
-
-	auto uniform_data = scene.GetUniformData();
-
-	mUniformData = std::make_unique<DeviceBufferResource>(
-		device, allocator,
-		VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT,
-		uniform_data.size(), "scene uniform data");
-
-	auto staging_uniform_data = std::make_unique<HostBufferResource>(
-		device, allocator,
-		VK_BUFFER_USAGE_TRANSFER_SRC_BIT, VMA_ALLOCATION_CREATE_HOST_ACCESS_SEQUENTIAL_WRITE_BIT,
-		uniform_data, "staging uniform data"
+		device, allocator, instances, mScratchBufferPool->GetPool(), scratch_buffer_alignment, compute_helpers, "TLAS"
 	);
 
 	const VkDescriptorPoolSize pool_sizes[] = {
+		// Camera info
 		{
 			.type = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC,
 			.descriptorCount = 1,
 		},
+		// accum target and final target
 		{
 			.type = VK_DESCRIPTOR_TYPE_STORAGE_IMAGE,
 			.descriptorCount = 2,
 		},
+		// rand states
 		{
 			.type = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,
 			.descriptorCount = 1,
 		},
+		// TLAS
 		{
 			.type = VK_DESCRIPTOR_TYPE_ACCELERATION_STRUCTURE_KHR,
 			.descriptorCount = 1,
 		},
+		// Materials Info
 		{
 			.type = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,
 			.descriptorCount = 1,
 		},
+		// Textures
 		{
 			.type = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER,
 			.descriptorCount = static_cast<uint32_t>(std::max(static_cast<size_t>(1), scene.GetImages().size())),
@@ -764,11 +790,12 @@ VulkanRaytracerScene::VulkanRaytracerScene(const Scene& scene, const VkDevice de
 	vkUpdateDescriptorSets(device, std::size(ds_writes), ds_writes, 0, nullptr);
 
 	compute_helpers->RecordBatch();
-	compute_helpers->CopyBufferToBuffer(staging_uniform_data->GetVkBuffer(), mUniformData->GetVkBuffer(), uniform_data.size());
-	compute_helpers->CopyBufferToBuffer(staging_materials_data->GetVkBuffer(), mMaterialsBuffer->GetVkBuffer(), materials_data.size());
 	compute_helpers->CopyBufferToBuffer(staging_rg_sbt->GetVkBuffer(), mRGSbt->GetVkBuffer(), staging_rg_sbt->GetAllocationInfo2().allocationInfo.size);
 	compute_helpers->CopyBufferToBuffer(staging_ms_sbt->GetVkBuffer(), mMSSbt->GetVkBuffer(), staging_ms_sbt->GetAllocationInfo2().allocationInfo.size);
+	compute_helpers->CopyBufferToBuffer(staging_uniform_data->GetVkBuffer(), mUniformData->GetVkBuffer(), uniform_data.size());
+	compute_helpers->CopyBufferToBuffer(staging_vertex_data->GetVkBuffer(), mVertexData->GetVkBuffer(), vertex_data.size());
 	compute_helpers->CopyBufferToBuffer(staging_ch_sbt->GetVkBuffer(), mCHSbt->GetVkBuffer(), staging_ch_sbt->GetAllocationInfo2().allocationInfo.size);
+	compute_helpers->CopyBufferToBuffer(staging_materials_data->GetVkBuffer(), mMaterialsBuffer->GetVkBuffer(), materials_data.size());
 	compute_helpers->SubmitBatch();
 }
 

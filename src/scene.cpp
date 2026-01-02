@@ -27,19 +27,23 @@ Scene::Scene(const std::string& path, const VkDeviceSize uniform_buffer_alignmen
 	// Default material
 	mMaterials.push_back(Scene::Material(-1, glm::vec4(1, 0, 0, 1)));
 
-	mMeshes.resize(gltf->meshes_count);
 	for (size_t n = 0; n < gltf->nodes_count; ++n)
 	{
 		cgltf_node* curr_node = gltf->nodes + n;
 		if (curr_node->mesh != nullptr)
 		{
 			AddMeshInstance(gltf, curr_node, uniform_buffer_alignment);
-			AddMesh(gltf, curr_node->mesh, cgltf_mesh_index(gltf, curr_node->mesh));
 		}
 		else if (curr_node->camera != nullptr)
 		{
 			AddCameraInstance(gltf, curr_node, uniform_buffer_alignment);
 		}
+	}
+
+	mMeshes.reserve(gltf->meshes_count);
+	for (size_t m = 0; m < gltf->meshes_count; ++m)
+	{
+		AddMesh(gltf, gltf->meshes + m);
 	}
 
 	mCameras.reserve(gltf->cameras_count);
@@ -118,7 +122,7 @@ const std::vector<std::string>& Scene::GetCameraNames() const
 
 const std::vector<uint8_t>& Scene::GetVertexData() const
 {
-	return mPositionsData;
+	return mVertexData;
 }
 
 const std::vector<uint8_t>& Scene::GetUniformData() const
@@ -220,7 +224,7 @@ void Scene::AddCameraInstance(const cgltf_data* gltf, const cgltf_node* node, co
 	mCameraNames.push_back(node->name == nullptr ? "scene cam" : node->name);
 }
 
-void Scene::AddMesh(const cgltf_data* gltf, const cgltf_mesh* mesh, const size_t mesh_index)
+void Scene::AddMesh(const cgltf_data* gltf, const cgltf_mesh* mesh)
 {
 	std::vector<Scene::Mesh::Primitive> primitives;
 	primitives.reserve(mesh->primitives_count);
@@ -252,47 +256,69 @@ void Scene::AddMesh(const cgltf_data* gltf, const cgltf_mesh* mesh, const size_t
 
 			if (std::string(curr_attr->name) == std::string("POSITION"))
 			{
-				positions_offset = mPositionsData.size();
-				mPositionsData.append_range(attr_data);
+				positions_offset = mVertexData.size();
+				mVertexData.append_range(attr_data);
 
 				vertex_count = curr_attr->data->count;
 				positions_size = curr_attr->data->buffer_view->size;
 			}
 			else if (std::string(curr_attr->name) == std::string("NORMAL"))
 			{
-				normals_offset = mPositionsData.size();
-				mPositionsData.append_range(attr_data);
+				normals_offset = mVertexData.size();
+				mVertexData.append_range(attr_data);
 
 				normals_size = curr_attr->data->buffer_view->size;
 			}
 			else if (std::string(curr_attr->name) == std::string("TEXCOORD_0"))
 			{
-				texcoords_offset = mPositionsData.size();
-				mPositionsData.append_range(attr_data);
+				texcoords_offset = mVertexData.size();
+				mVertexData.append_range(attr_data);
 
 				texcoords_size = curr_attr->data->buffer_view->size;
 			}
 		}
 
-		VkIndexType index_type = VK_INDEX_TYPE_UINT16;
+		VkIndexType index_type = VK_INDEX_TYPE_UINT32;
+		mVertexData.resize(ALIGNED_SIZE(mVertexData.size(), sizeof(uint32_t)));
+
 		if (curr_prim->indices->component_type == cgltf_component_type_r_32u)
 		{
-			index_type = VK_INDEX_TYPE_UINT32;
+			indices_size = curr_prim->indices->buffer_view->size;
+			indices_offset = mVertexData.size();
+			index_count = curr_prim->indices->count;
 
-			mPositionsData.resize(ALIGNED_SIZE(mPositionsData.size(), sizeof(uint32_t)));
+			std::vector<uint8_t> index_data(indices_size);
+			std::memcpy(
+				index_data.data(),
+				reinterpret_cast<uint8_t*>(curr_prim->indices->buffer_view->buffer->data) + curr_prim->indices->buffer_view->offset + curr_prim->indices->offset,
+				curr_prim->indices->buffer_view->size
+			);
+			mVertexData.append_range(index_data);
 		}
+		else if (curr_prim->indices->component_type == cgltf_component_type_r_16u)
+		{
+			std::vector<uint16_t> indices_16(curr_prim->indices->count);
+			std::memcpy(
+				indices_16.data(),
+				reinterpret_cast<uint8_t*>(curr_prim->indices->buffer_view->buffer->data) + curr_prim->indices->buffer_view->offset + curr_prim->indices->offset,
+				curr_prim->indices->buffer_view->size
+			);
 
-		indices_size = curr_prim->indices->buffer_view->size;
-		indices_offset = mPositionsData.size();
-		index_count = curr_prim->indices->count;
+			std::vector<uint32_t> indices_32(curr_prim->indices->count);
+			std::copy(indices_16.begin(), indices_16.end(), indices_32.begin());
 
-		std::vector<uint8_t> index_data(indices_size);
-		std::memcpy(
-			index_data.data(),
-			reinterpret_cast<uint8_t*>(curr_prim->indices->buffer_view->buffer->data) + curr_prim->indices->buffer_view->offset + curr_prim->indices->offset,
-			curr_prim->indices->buffer_view->size
-		);
-		mPositionsData.append_range(index_data);
+			indices_size = indices_32.size() * sizeof(uint32_t);
+			indices_offset = mVertexData.size();
+			index_count = curr_prim->indices->count;
+
+			std::vector<uint8_t> index_data(indices_size);
+			std::memcpy(
+				index_data.data(),
+				indices_32.data(),
+				indices_size
+			);
+			mVertexData.append_range(index_data);
+		}
 
 		if (curr_prim->material != nullptr)
 		{
@@ -311,7 +337,7 @@ void Scene::AddMesh(const cgltf_data* gltf, const cgltf_mesh* mesh, const size_t
 		);
 	}
 
-	mMeshes[mesh_index] = Mesh(primitives);
+	mMeshes.push_back(Mesh(primitives));
 }
 
 void Scene::AddCamera(const cgltf_camera* camera, const VkDeviceSize uniform_buffer_alignment)
@@ -449,10 +475,10 @@ const std::vector<Scene::Mesh::Primitive>& Scene::Mesh::GetPrimitives() const
 }
 
 Scene::Mesh::Primitive::Primitive(
-	const size_t positions_size, 	const size_t positions_offset, 
-	const size_t normals_size, const size_t normals_offset, 
-	const size_t texcoords_size, const size_t texcoords_offset, 
-	const size_t vertex_count, 
+	const size_t positions_size, const size_t positions_offset,
+	const size_t normals_size, const size_t normals_offset,
+	const size_t texcoords_size, const size_t texcoords_offset,
+	const size_t vertex_count,
 	const size_t indices_size, const size_t indices_offset, const size_t index_count, const VkIndexType index_type,
 	const uint32_t material_index
 )

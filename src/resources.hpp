@@ -81,7 +81,7 @@ class DeviceBufferResource : public BufferResource
 {
 public:
 	DeviceBufferResource() = delete;
-	DeviceBufferResource(const VkDevice device, const VmaAllocator allocator, const VkBufferUsageFlags usage, const VkDeviceSize size, const std::string& name);
+	DeviceBufferResource(const VkDevice device, const VmaAllocator allocator, const VkBufferUsageFlags usage, const VkDeviceSize size, const std::string& name, const VmaPool mem_pool = VK_NULL_HANDLE);
 
 	~DeviceBufferResource() noexcept;
 };
