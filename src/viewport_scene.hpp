@@ -10,14 +10,14 @@ class VulkanScene;
 class ViewportScene
 {
 public:
-	virtual void Render(const VkCommandBuffer cmd_buff, const uint32_t cam_index) const = 0;
+	virtual void Render(const VkCommandBuffer cmd_buff, const uint32_t cam_index, const bool is_cpu_shading) const = 0;
 	virtual ~ViewportScene() noexcept {}
 };
 
 class ViewportEmptyScene : public ViewportScene
 {
 public:
-	void Render(const VkCommandBuffer cmd_buff, const uint32_t cam_index) const override {}
+	void Render(const VkCommandBuffer cmd_buff, const uint32_t cam_index, const bool is_cpu_shading) const override {}
 };
 
 class ViewportWorldScene : public ViewportScene
@@ -25,7 +25,7 @@ class ViewportWorldScene : public ViewportScene
 public:
 	ViewportWorldScene(const VulkanScene* scene, const VulkanInterface* vulkan_interface);
 
-	void Render(const VkCommandBuffer cmd_buff, const uint32_t cam_index) const override;
+	void Render(const VkCommandBuffer cmd_buff, const uint32_t cam_index, const bool is_cpu_shading) const override;
 
 	~ViewportWorldScene() noexcept override;
 

@@ -172,7 +172,7 @@ void Viewport::Render(const ViewportScene* scene, const Swapchain* swapchain, co
 	vkCmdSetScissor(cmd_buff, 0, std::size(scissors), scissors);
 	vkCmdSetViewport(cmd_buff, 0, std::size(viewports), viewports);
 
-	scene->Render(cmd_buff, imgui_state->GetSelectedCameraIndex());
+	scene->Render(cmd_buff, imgui_state->GetSelectedCameraIndex(), imgui_state->GetCPUShading());
 	imgui_state->Render(cmd_buff);
 
 	vkCmdEndRenderingKHR(cmd_buff);

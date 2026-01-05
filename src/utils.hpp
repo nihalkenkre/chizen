@@ -1,5 +1,7 @@
 #pragma once
 
+struct cgltf_node;
+
 #define VK_CHECK(action, result)						\
 	if (result != VK_SUCCESS)							\
 	{															\

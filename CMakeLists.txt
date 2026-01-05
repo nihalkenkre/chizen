@@ -38,10 +38,10 @@ target_precompile_headers(${PROJECT_NAME} PRIVATE
                                        <slang/slang.h>
                                        <slang/slang-com-ptr.h>
                                        <vma/vk_mem_alloc.h>
+                                       <cgltf.h>
                                        <glm/ext/matrix_clip_space.hpp>
                                        <glm/ext/matrix_transform.hpp>
                                        <glm/gtc/type_ptr.hpp>
-                                       <cgltf.h>
                                        <tbb/tbb.h>
                                        <tbb/parallel_for.h>
                                        <tbb/blocked_range2d.h>

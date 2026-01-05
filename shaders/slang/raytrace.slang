@@ -129,14 +129,10 @@ void closesthit(inout Payload p, in Attributes attribs)
                     ch_sbt.normals[index_triplet.y] * bary_coords.x +
                     ch_sbt.normals[index_triplet.z] * bary_coords.y;
 
-    float4 base_color = float4(1.f);
+    float4 base_color = materials[ch_sbt.material_index].base_color_factor;
     if (materials[ch_sbt.material_index].base_color_index.x >= 0)
     {
-        base_color *= textures[NonUniformResourceIndex(materials[ch_sbt.material_index].base_color_index.x)].SampleLevel(uv, 0) * materials[ch_sbt.material_index].base_color_factor;
-    }
-    else
-    {
-        base_color *= materials[ch_sbt.material_index].base_color_factor;
+        base_color *= textures[NonUniformResourceIndex(materials[ch_sbt.material_index].base_color_index.x)].SampleLevel(uv, 0);
     }
 
     p.hit_value = base_color.xyz;

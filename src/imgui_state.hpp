@@ -23,6 +23,8 @@ public:
 	const int GetSelectedCameraIndex() const;
 	const int GetSelectedRendererIndex() const;
 
+	bool GetCPUShading() const;
+
 private:
 	VkDescriptorPool mDescriptorPool = VK_NULL_HANDLE;
 	VkDevice mDevice = VK_NULL_HANDLE;
@@ -35,4 +37,5 @@ private:
 	int mRenderTargetExtent[2] = { 1280, 720 };
 	std::string file_path = {};
 	bool mRaytracingStarted = false;
+	bool mCPUShading = false;
 };

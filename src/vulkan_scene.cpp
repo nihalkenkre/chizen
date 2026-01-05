@@ -4,7 +4,7 @@
 #include "resources.hpp"
 #include <stb_image.h>
 
-VulkanScene::VulkanScene(const Scene& scene, const VulkanInterface* vulkan_interface)
+VulkanScene::VulkanScene(const Scene& scene, const VulkanInterface* vulkan_interface, const bool is_cpu_shading)
 	: mDevice(vulkan_interface->GetVkDevice())
 {
 	VmaAllocator allocator = vulkan_interface->GetVmaAllocator();
@@ -82,10 +82,13 @@ VulkanScene::VulkanScene(const Scene& scene, const VulkanInterface* vulkan_inter
 	transfer_helpers->CopyBufferToBuffer(staging_materials_data->GetVkBuffer(), mMaterialsData->GetVkBuffer(), mMaterials.size() * sizeof(Material));
 	transfer_helpers->SubmitBatch();
 
-	mImages.reserve(scene.GetImages().size());
-	for (const auto& image : scene.GetImages())
+	if (!is_cpu_shading)
 	{
-		mImages.push_back(VulkanScene::Image(image, scene.GetImagesData(), vulkan_interface));
+		mImages.reserve(scene.GetImages().size());
+		for (const auto& image : scene.GetImages())
+		{
+			mImages.push_back(VulkanScene::Image(image, scene.GetImagesData(), vulkan_interface));
+		}
 	}
 
 	if (mImages.size() == 0)
@@ -198,6 +201,7 @@ VulkanScene::Image::Image(const char* image_path, const VulkanInterface* vulkan_
 		pixels,
 		w * h * 4
 	);
+	stbi_image_free(pixels);
 
 	TransferHelpers* transfer_helpers = vulkan_interface->GetTransferHelpers();
 	transfer_helpers->RecordBatch();
@@ -210,8 +214,6 @@ VulkanScene::Image::Image(const char* image_path, const VulkanInterface* vulkan_
 	);
 	transfer_helpers->CopyBufferToImage(staging_buffer->GetVkBuffer(), mImageResource->GetVkImage(), VkExtent3D{ w,h,1 });
 	transfer_helpers->SubmitBatch();
-
-	stbi_image_free(pixels);
 }
 
 VulkanScene::Image::Image(const Scene::Image& image, const std::vector<uint8_t>& images_data, const VulkanInterface* vulkan_interface)
@@ -224,9 +226,11 @@ VulkanScene::Image::Image(const Scene::Image& image, const std::vector<uint8_t>&
 		vulkan_interface->GetPhysicalDeviceData()->TransferQueueFamilyIndex,
 	};
 
-	uint32_t w, h, c;
-	uint8_t* pixels = stbi_load_from_memory(images_data.data() + image.GetDataOffset(), static_cast<int>(image.GetDataSize()),
-		reinterpret_cast<int*>(&w), reinterpret_cast<int*>(&h), reinterpret_cast<int*>(&c), 4);
+	int w, h, c;
+	uint8_t* pixels = stbi_load_from_memory(
+		images_data.data() + image.GetDataOffset(), static_cast<int>(image.GetDataSize()),
+		&w, &h, &c, 4
+	);
 
 	VkFormat format = VK_FORMAT_R8G8B8A8_SRGB;
 	if (image.GetName().contains("normal") || image.GetName().contains("NRM") || image.GetName().contains("nrm"))
@@ -235,7 +239,7 @@ VulkanScene::Image::Image(const Scene::Image& image, const std::vector<uint8_t>&
 	}
 
 	mImageResource = std::make_unique<ImageResource>(
-		device, VkExtent3D{ w, h, 1 }, format, VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_SAMPLED_BIT,
+		device, VkExtent3D{ static_cast<uint32_t>(w), static_cast<uint32_t>(h), 1 }, format, VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_SAMPLED_BIT,
 		allocator,
 		queue_family_indices,
 		"texture"
@@ -251,6 +255,7 @@ VulkanScene::Image::Image(const Scene::Image& image, const std::vector<uint8_t>&
 		pixels,
 		w * h * 4
 	);
+	stbi_image_free(pixels);
 
 	TransferHelpers* transfer_helpers = vulkan_interface->GetTransferHelpers();
 	transfer_helpers->RecordBatch();
@@ -261,10 +266,8 @@ VulkanScene::Image::Image(const Scene::Image& image, const std::vector<uint8_t>&
 		VK_QUEUE_FAMILY_IGNORED, VK_QUEUE_FAMILY_IGNORED,
 		VK_IMAGE_ASPECT_COLOR_BIT, mImageResource->GetVkImage()
 	);
-	transfer_helpers->CopyBufferToImage(staging_buffer->GetVkBuffer(), mImageResource->GetVkImage(), VkExtent3D{ w,h,1 });
+	transfer_helpers->CopyBufferToImage(staging_buffer->GetVkBuffer(), mImageResource->GetVkImage(), VkExtent3D{ static_cast<uint32_t>(w), static_cast<uint32_t>(h),1 });
 	transfer_helpers->SubmitBatch();
-
-	stbi_image_free(pixels);
 }
 
 const ImageResource* VulkanScene::Image::GetImageResource() const

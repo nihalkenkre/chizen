@@ -47,7 +47,8 @@ struct Material
 
 struct PushConstants
 {
-    int material_index;
+    uint material_index;
+    uint is_cpu_shading;
 }
 
 [[vk::push_constant]]
@@ -66,15 +67,16 @@ struct FSOutput
 [shader("fragment")]
 FSOutput fragment_main(VSOutput in)
 {
-    float4 base_color = float4(1.f);
+    float4 base_color = float4(0.5f, 0.5, 0.5f, 1.f);
+    printf("cpu_shading: %d\n", pc.is_cpu_shading);
 
-    if (materials[pc.material_index].base_color_index.x >= 0)
+    if (pc.is_cpu_shading == 0)
     {
-        base_color *= textures[NonUniformResourceIndex(materials[pc.material_index].base_color_index.x)].Sample(in.uv) * materials[pc.material_index].base_color_factor;
-    }
-    else
-    {
-        base_color *= materials[pc.material_index].base_color_factor;
+        base_color = materials[pc.material_index].base_color_factor;
+        if (materials[pc.material_index].base_color_index.x >= 0)
+        {
+            base_color *= textures[NonUniformResourceIndex(materials[pc.material_index].base_color_index.x)].Sample(in.uv);
+        }
     }
 
     FSOutput fs_output = { base_color };

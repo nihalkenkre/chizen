@@ -4,8 +4,6 @@
 #include "vulkan_objects.hpp"
 #include "utils.hpp"
 
-#include <cgltf.h>
-
 Scene::Scene(const std::string& path, const VkDeviceSize uniform_buffer_alignment)
 {
 	cgltf_options options = {};
@@ -55,31 +53,41 @@ Scene::Scene(const std::string& path, const VkDeviceSize uniform_buffer_alignmen
 	if (mCameraInstances.size() == 0)
 	{
 		size_t view_mat_offset = mUniformData.size();
-		auto view_mat = glm::lookAt(glm::vec3(10, 10, 10), glm::vec3(0, 0, 0), glm::vec3(0, 1, 0));
-		std::vector<uint8_t> view_mat_data(ALIGNED_SIZE(sizeof(glm::mat4), uniform_buffer_alignment));
-		std::memcpy(view_mat_data.data(), &view_mat, sizeof(glm::mat4));
+		auto view_matrix = glm::lookAt(glm::vec3(10, 10, 10), glm::vec3(0, 0, 0), glm::vec3(0, 1, 0));
+		auto proj_matrix = glm::perspective(glm::radians(35.f), 1.7777f, 0.001f, 1000.f);
+		proj_matrix[1][1] *= -1;
+		auto view_proj_matrix = proj_matrix * view_matrix;
 
-		mUniformData.append_range(view_mat_data);
-		mCameraInstances.push_back(Scene::CameraInstance(0, view_mat_offset));
+		mCameraInstances.push_back(CameraInstance(0, mUniformData.size()));
+
+		std::vector<uint8_t> view_proj_data(ALIGNED_SIZE(sizeof(glm::mat4), uniform_buffer_alignment));
+		std::memcpy(view_proj_data.data(), &view_proj_matrix, sizeof(glm::mat4));
+		mUniformData.append_range(view_proj_data);
+
+		// for raygen shader
+		auto view_inverse = glm::inverse(view_matrix);
+		auto proj_inverse = glm::inverse(proj_matrix);
+
+		std::vector<uint8_t> view_data(ALIGNED_SIZE(sizeof(glm::mat4), uniform_buffer_alignment));
+		std::memcpy(view_data.data(), &view_inverse, sizeof(glm::mat4));
+		mUniformData.append_range(view_data);
+
+		std::vector<uint8_t> proj_data(ALIGNED_SIZE(sizeof(glm::mat4), uniform_buffer_alignment));
+		std::memcpy(proj_data.data(), &proj_inverse, sizeof(glm::mat4));
+		mUniformData.append_range(proj_data);
+
 		mCameraNames.push_back("scene cam");
-
-		size_t proj_mat_offset = mUniformData.size();
-		auto proj_mat = glm::perspective(glm::radians(35.f), 1.7777f, 0.001f, 1000.f);
-		proj_mat[1][1] *= -1;
-		std::vector<uint8_t> proj_mat_data(ALIGNED_SIZE(sizeof(glm::mat4), uniform_buffer_alignment));
-		std::memcpy(proj_mat_data.data(), &proj_mat, sizeof(glm::mat4));
-
-		mUniformData.append_range(proj_mat_data);
-		mCameras.push_back(Scene::Camera(proj_mat_offset, 0.001f, 1000.f));
 	}
-
-	std::vector<float> uniform_debug(mUniformData.size() / sizeof(float));
-	std::memcpy(uniform_debug.data(), mUniformData.data(), mUniformData.size());
 
 	mImages.reserve(gltf->images_count);
 	for (size_t i = 0; i < gltf->images_count; ++i)
 	{
-		AddImage(gltf->images + i);
+		size_t last_slash_pos = std::string(path).find_last_of("/\\");
+
+		if (std::string::npos != last_slash_pos)
+		{
+			AddImage(gltf->images + i, path.substr(0, last_slash_pos + 1));
+		}
 	}
 
 	cgltf_free(gltf);
@@ -168,7 +176,7 @@ void Scene::AddMeshInstance(const cgltf_data* gltf, const cgltf_node* node, cons
 	mUniformData.append_range(xform_data);
 }
 
-void Scene::AddCameraInstance(const cgltf_data* gltf, const cgltf_node* node, const VkDeviceSize uniform_buffer_alignments)
+void Scene::AddCameraInstance(const cgltf_data* gltf, const cgltf_node* node, const VkDeviceSize uniform_buffer_alignment)
 {
 	glm::mat4 view_matrix = glm::inverse(Utils_GetTransformForGLTFNode(node));
 	glm::mat4 proj_matrix = glm::mat4(1.f);
@@ -205,7 +213,7 @@ void Scene::AddCameraInstance(const cgltf_data* gltf, const cgltf_node* node, co
 
 	mCameraInstances.push_back(CameraInstance(camera_index, mUniformData.size(), node->name == nullptr ? "scene cam" : node->name));
 
-	std::vector<uint8_t> view_proj_data(ALIGNED_SIZE(sizeof(glm::mat4), uniform_buffer_alignments));
+	std::vector<uint8_t> view_proj_data(ALIGNED_SIZE(sizeof(glm::mat4), uniform_buffer_alignment));
 	std::memcpy(view_proj_data.data(), &view_proj_matrix, sizeof(glm::mat4));
 	mUniformData.append_range(view_proj_data);
 
@@ -213,11 +221,11 @@ void Scene::AddCameraInstance(const cgltf_data* gltf, const cgltf_node* node, co
 	auto view_inverse = glm::inverse(view_matrix);
 	auto proj_inverse = glm::inverse(proj_matrix);
 
-	std::vector<uint8_t> view_data(ALIGNED_SIZE(sizeof(glm::mat4), uniform_buffer_alignments));
+	std::vector<uint8_t> view_data(ALIGNED_SIZE(sizeof(glm::mat4), uniform_buffer_alignment));
 	std::memcpy(view_data.data(), &view_inverse, sizeof(glm::mat4));
 	mUniformData.append_range(view_data);
 
-	std::vector<uint8_t> proj_data(ALIGNED_SIZE(sizeof(glm::mat4), uniform_buffer_alignments));
+	std::vector<uint8_t> proj_data(ALIGNED_SIZE(sizeof(glm::mat4), uniform_buffer_alignment));
 	std::memcpy(proj_data.data(), &proj_inverse, sizeof(glm::mat4));
 	mUniformData.append_range(proj_data);
 
@@ -252,7 +260,8 @@ void Scene::AddMesh(const cgltf_data* gltf, const cgltf_mesh* mesh)
 			std::vector<uint8_t>attr_data(curr_attr->data->buffer_view->size);
 			std::memcpy(attr_data.data(),
 				reinterpret_cast<uint8_t*>(curr_attr->data->buffer_view->buffer->data) + curr_attr->data->buffer_view->offset + curr_attr->data->offset,
-				curr_attr->data->buffer_view->size);
+				curr_attr->data->buffer_view->size
+			);
 
 			if (std::string(curr_attr->name) == std::string("POSITION"))
 			{
@@ -380,18 +389,44 @@ void Scene::AddMaterial(const cgltf_data* gltf, const cgltf_material* material)
 	mMaterials.push_back(Scene::Material(base_color_index, base_color_factor));
 }
 
-void Scene::AddImage(const cgltf_image* image)
+void Scene::AddImage(const cgltf_image* image, const std::string& path)
 {
-	mImages.push_back(Scene::Image(mImagesData.size(), image->buffer_view->size, image->name == nullptr ? "image" : image->name));
+	if (image->buffer_view != nullptr)
+	{
+		mImages.push_back(Scene::Image(mImagesData.size(), image->buffer_view->size, image->name == nullptr ? "image" : image->name));
 
-	std::vector<uint8_t> image_data(image->buffer_view->size);
-	std::memcpy(
-		image_data.data(),
-		reinterpret_cast<uint8_t*>(image->buffer_view->buffer->data) + image->buffer_view->offset,
-		image_data.size()
-	);
+		std::vector<uint8_t> image_data(image->buffer_view->size);
+		std::memcpy(
+			image_data.data(),
+			reinterpret_cast<uint8_t*>(image->buffer_view->buffer->data) + image->buffer_view->offset,
+			image_data.size()
+		);
+		mImagesData.append_range(image_data);
+	}
+	else if (image->uri != nullptr)
+	{
+		size_t image_data_size = 0;
+		uint8_t* data = reinterpret_cast<uint8_t*>(SDL_LoadFile(std::string(path).append(image->uri).c_str(), &image_data_size));
 
-	mImagesData.append_range(image_data);
+		if (data == nullptr)
+		{
+			std::println("Could not load {}, {}", std::string(path).append(image->uri).c_str(), SDL_GetError());
+		}
+		else
+		{
+			mImages.push_back(Scene::Image(mImagesData.size(), image_data_size, image->name == nullptr ? "image" : image->name));
+
+			std::vector<uint8_t> image_data(image_data_size);
+			std::memcpy(
+				image_data.data(),
+				data,
+				image_data_size
+			);
+			mImagesData.append_range(image_data);
+
+			SDL_free(data);
+		}
+	}
 }
 
 Scene::MeshInstance::MeshInstance(const size_t mesh_index, const size_t model_matrix_offset)

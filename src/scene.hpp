@@ -160,7 +160,7 @@ private:
 	void AddMesh(const cgltf_data* gltf, const cgltf_mesh* mesh);
 	void AddCamera(const cgltf_camera* camera, const VkDeviceSize uniform_buffer_alignment);
 	void AddMaterial(const cgltf_data* gltf, const cgltf_material* material);
-	void AddImage(const cgltf_image* image);
+	void AddImage(const cgltf_image* image, const std::string& path);
 
 	std::vector<MeshInstance> mMeshInstances;
 	std::vector<Mesh> mMeshes;

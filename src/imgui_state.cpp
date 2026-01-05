@@ -102,11 +102,14 @@ void ImGUIState::Render(const VkCommandBuffer cmd_buff)
 
 	ImGui::Text("Frame time: %0.3f ms", 1000.f / ImGui::GetIO().Framerate);
 	ImGui::BeginDisabled(mRaytracingStarted);
-	if (ImGui::Button("Load GLTF Binary"))
+
+	ImGui::Checkbox("CPU Shading", &mCPUShading);
+	if (ImGui::Button("Load GLTF"))
 	{
 		IGFD::FileDialogConfig config;
 		config.path = ".";
-		ImGuiFileDialog::Instance()->OpenDialog("GLTFDlg", "Choose GLTF Binary File", ".glb", config);
+
+		ImGuiFileDialog::Instance()->OpenDialog("GLTFDlg", "Choose GLTF File", mCPUShading == true ? ".gltf" : ".gltf,.glb", config);
 	}
 
 	if (ImGuiFileDialog::Instance()->Display("GLTFDlg"))
@@ -122,12 +125,33 @@ void ImGUIState::Render(const VkCommandBuffer cmd_buff)
 		ImGuiFileDialog::Instance()->Close();
 	}
 
+	ImVec2 center = ImGui::GetMainViewport()->GetCenter();
+	ImGui::SetNextWindowPos(center, ImGuiCond_Appearing, ImVec2(0.5f, 0.5f));
+
+	if (ImGui::BeginPopupModal("Reload", nullptr, ImGuiWindowFlags_AlwaysAutoResize))
+	{
+		ImGui::Text("The loaded file should be an ASCII GLTF file...");
+		ImGui::Separator();
+
+		if (ImGui::Button("Ok"))
+			ImGui::CloseCurrentPopup();
+
+		ImGui::EndPopup();
+	}
+
 	if (ImGui::Button("Reload"))
 	{
 		if (!file_path.empty())
 		{
-			events.FileOpen.user.data1 = reinterpret_cast<void*>((char*)file_path.c_str());
-			SDL_CHECK(SDL_PushEvent(&events.FileOpen));
+			if (mCPUShading && file_path.ends_with("glb"))
+			{
+				ImGui::OpenPopup("Reload");
+			}
+			else
+			{
+				events.FileOpen.user.data1 = reinterpret_cast<void*>((char*)file_path.c_str());
+				SDL_CHECK(SDL_PushEvent(&events.FileOpen));
+			}
 		}
 	}
 
@@ -224,4 +248,9 @@ const int ImGUIState::GetSelectedCameraIndex() const
 const int ImGUIState::GetSelectedRendererIndex() const
 {
 	return mSelectedRendererIndex;
+}
+
+bool ImGUIState::GetCPUShading() const
+{
+	return mCPUShading;
 }

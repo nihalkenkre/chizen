@@ -119,7 +119,7 @@ void App::ProcessEvent(SDL_Event* event)
 
 		mImGUIState->SetCameraNames(scene.GetCameraNames());
 
-		mVulkanScene = std::make_unique<VulkanScene>(scene, mVulkanInterface.get());
+		mVulkanScene = std::make_unique<VulkanScene>(scene, mVulkanInterface.get(), mImGUIState->GetCPUShading());
 		mViewportScene = std::make_unique<ViewportWorldScene>(mVulkanScene.get(), mVulkanInterface.get());
 		mVulkanRaytracerScene = std::make_unique<VulkanRaytracerScene>(scene, mVulkanScene.get(), mVulkanInterface.get());
 		mEmbreeRaytacerScene = std::make_unique<EmbreeRaytracerScene>(scene);
@@ -300,7 +300,8 @@ void App::RunViewport()
 {
 	mViewport->Render(mViewportScene.get(), mVulkanInterface->GetSwapchain(),
 		mVulkanInterface->GetSurfaceKHR()->GetSurfaceCapabilities().surfaceCapabilities.currentExtent,
-		mImGUIState.get());
+		mImGUIState.get()
+	);
 }
 
 void App::RunDisplay()

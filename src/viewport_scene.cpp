@@ -22,6 +22,12 @@ public:
 	VkPipelineLayout GetPipelineLayout() const;
 	const std::vector<VkDescriptorSetLayout>& GetDescriptorSetLayouts() const;
 
+	struct PushConstants
+	{
+		uint32_t material_index;
+		uint32_t is_cpu_shading;
+	};
+
 private:
 	VkPipeline mPipeline = VK_NULL_HANDLE;
 	VkPipelineLayout mPipelineLayout = VK_NULL_HANDLE;
@@ -394,7 +400,7 @@ ViewportScenePipelineData::ViewportScenePipelineData(const VkDevice device, cons
 	const VkPushConstantRange pc_ranges[] = {
 		{
 			.stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT,
-			.size = sizeof(uint32_t),
+			.size = sizeof(ViewportScenePipelineData::PushConstants),
 		}
 	};
 
@@ -634,7 +640,7 @@ ViewportWorldScene::ViewportWorldScene(const VulkanScene* scene, const VulkanInt
 	vkUpdateDescriptorSets(mDevice, std::size(write_descs), write_descs, 0, nullptr);
 }
 
-void ViewportWorldScene::Render(const VkCommandBuffer cmd_buff, const uint32_t cam_index) const
+void ViewportWorldScene::Render(const VkCommandBuffer cmd_buff, const uint32_t cam_index, const bool is_cpu_shading) const
 {
 	vkCmdBindPipeline(cmd_buff, VK_PIPELINE_BIND_POINT_GRAPHICS, mPipelineData->GetPipeline());
 
@@ -684,14 +690,17 @@ void ViewportWorldScene::Render(const VkCommandBuffer cmd_buff, const uint32_t c
 
 			vkCmdBindDescriptorSets2KHR(cmd_buff, &bind_ds_info);
 
-			int32_t material_index = curr_prim.GetMaterialIndex();
+			const ViewportScenePipelineData::PushConstants pc = {
+				.material_index = curr_prim.GetMaterialIndex(),
+				.is_cpu_shading = is_cpu_shading,
+			};
 
 			const VkPushConstantsInfoKHR pc_info = {
 				.sType = VK_STRUCTURE_TYPE_PUSH_CONSTANTS_INFO_KHR,
 				.layout = mPipelineData->GetPipelineLayout(),
 				.stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT,
-				.size = sizeof(int32_t),
-				.pValues = &material_index,
+				.size = sizeof(ViewportScenePipelineData::PushConstants),
+				.pValues = &pc
 			};
 			vkCmdPushConstants2KHR(cmd_buff, &pc_info);
 
