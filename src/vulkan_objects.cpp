@@ -678,7 +678,6 @@ Device::Device(const PhysicalDeviceData* physical_device_data)
 		VK_KHR_COPY_COMMANDS_2_EXTENSION_NAME,
 		VK_KHR_RAY_TRACING_POSITION_FETCH_EXTENSION_NAME,
 		VK_KHR_SEPARATE_DEPTH_STENCIL_LAYOUTS_EXTENSION_NAME,
-		VK_KHR_SHADER_RELAXED_EXTENDED_INSTRUCTION_EXTENSION_NAME,
 		"VK_KHR_maintenance5",
 		"VK_KHR_maintenance6",
 		VK_EXT_DESCRIPTOR_INDEXING_EXTENSION_NAME,
@@ -748,17 +747,8 @@ Device::Device(const PhysicalDeviceData* physical_device_data)
 		}
 	}
 
-	VkPhysicalDeviceDescriptorIndexingFeaturesEXT desc_indx_feats = {
-		.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_DESCRIPTOR_INDEXING_FEATURES_EXT,
-	};
-
-	VkPhysicalDeviceShaderRelaxedExtendedInstructionFeaturesKHR rlxd_ext_instr = {
-		.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SHADER_RELAXED_EXTENDED_INSTRUCTION_FEATURES_KHR,
-	};
-
 	VkPhysicalDeviceRobustness2FeaturesEXT rob2_feats = {
 		.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_ROBUSTNESS_2_FEATURES_EXT,
-		.pNext = &rlxd_ext_instr,
 	};
 
 	VkPhysicalDeviceRayTracingPositionFetchFeaturesKHR rt_pos_fetch_feats = {

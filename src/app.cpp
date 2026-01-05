@@ -14,6 +14,8 @@
 #include "embree_raytracer_scene.hpp"
 #include "vulkan_raytracer_scene.hpp"
 #include "sw_rasterizer_scene.hpp"
+#include "vulkan_scene.hpp"
+
 #include "events.hpp"
 
 App::App(SDL_Window* window, const std::string& current_path) : mWindow(window)
@@ -28,7 +30,8 @@ App::App(SDL_Window* window, const std::string& current_path) : mWindow(window)
 		extent, VK_FORMAT_R32G32B32A32_SFLOAT, VK_IMAGE_USAGE_STORAGE_BIT | VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT,
 		mVulkanInterface->GetVmaAllocator(),
 		std::vector<uint32_t>{ mVulkanInterface->GetPhysicalDeviceData()->GraphicsQueueFamilyIndex, mVulkanInterface->GetPhysicalDeviceData()->ComputeQueueFamilyIndex, mVulkanInterface->GetPhysicalDeviceData()->TransferQueueFamilyIndex },
-		"final render target");
+		"final render target"
+	);
 
 	mStagingRenderTarget = std::make_unique<HostBufferResource>(
 		mVulkanInterface->GetVkDevice(), mVulkanInterface->GetVmaAllocator(),
@@ -44,7 +47,8 @@ App::App(SDL_Window* window, const std::string& current_path) : mWindow(window)
 		VK_PIPELINE_STAGE_2_BOTTOM_OF_PIPE_BIT, 0,
 		VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_GENERAL,
 		VK_QUEUE_FAMILY_IGNORED, VK_QUEUE_FAMILY_IGNORED, VK_IMAGE_ASPECT_COLOR_BIT,
-		mFinalRenderTarget->GetVkImage());
+		mFinalRenderTarget->GetVkImage()
+	);
 	transfer_helpers->SubmitBatch();
 
 	mViewport = std::make_unique<Viewport>(mVulkanInterface.get(), current_path, "rasterizer");
@@ -116,32 +120,9 @@ void App::ProcessEvent(SDL_Event* event)
 
 		mImGUIState->SetCameraNames(scene.GetCameraNames());
 
-		mViewportScene = std::make_unique<ViewportWorldScene>(
-			scene,
-			mVulkanInterface->GetVkDevice(),
-			mVulkanInterface->GetVmaAllocator(),
-			std::vector<uint32_t>{
-			mVulkanInterface->GetPhysicalDeviceData()->GraphicsQueueFamilyIndex,
-				mVulkanInterface->GetPhysicalDeviceData()->ComputeQueueFamilyIndex,
-				mVulkanInterface->GetPhysicalDeviceData()->TransferQueueFamilyIndex},
-			mCurrentPath,
-			mVulkanInterface->GetTransferHelpers()
-		);
-
-		mVulkanRaytracerScene = std::make_unique<VulkanRaytracerScene>(
-			scene, mVulkanInterface->GetVkDevice(),
-			mVulkanInterface->GetVmaAllocator(),
-			std::vector<uint32_t>{
-			mVulkanInterface->GetPhysicalDeviceData()->GraphicsQueueFamilyIndex,
-				mVulkanInterface->GetPhysicalDeviceData()->ComputeQueueFamilyIndex,
-				mVulkanInterface->GetPhysicalDeviceData()->TransferQueueFamilyIndex},
-			mCurrentPath,
-			mVulkanInterface->GetPhysicalDeviceData()->RayTracingProperties,
-			mVulkanInterface->GetPhysicalDeviceData()->AccelerationStructureProperties.minAccelerationStructureScratchOffsetAlignment,
-			Utils_GetMemoryTypeId(mVulkanInterface->GetPhysicalDeviceData()->MemoryProperties, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT),
-			mVulkanInterface->GetComputeHelpers()
-		);
-
+		mVulkanScene = std::make_unique<VulkanScene>(scene, mVulkanInterface.get(), mCurrentPath);
+		mViewportScene = std::make_unique<ViewportWorldScene>(mVulkanScene.get(), mVulkanInterface.get(), mCurrentPath);
+		mVulkanRaytracerScene = std::make_unique<VulkanRaytracerScene>(scene, mVulkanScene.get(), mVulkanInterface.get(), mCurrentPath);
 		mEmbreeRaytacerScene = std::make_unique<EmbreeRaytracerScene>(scene);
 		mSWRasterizerScene = std::make_unique<SWRasterizerScene>(scene);
 
@@ -155,7 +136,7 @@ void App::ProcessEvent(SDL_Event* event)
 		{
 			const VkClearColorValue clear_color = {
 				.float32 = {
-					0, 0, 0, 0
+					0, 0, 0, 1
 				},
 			};
 

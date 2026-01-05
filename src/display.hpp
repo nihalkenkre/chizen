@@ -25,7 +25,6 @@ public:
 	void Render(const Swapchain* swapchain, const VkExtent2D extent, const float position_offset[], const float zoom_level, ImGUIState* imgui_state, const ComputeHelpers* compute_helpers);
 
 private:
-
 	std::unique_ptr<FrameObjects> mFrameObjects = nullptr;
 	std::vector<VkSemaphore> mPresentWaitSemaphores;
 	std::vector<VkSemaphore> mAcquireSignalSemaphores;

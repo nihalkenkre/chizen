@@ -5,7 +5,7 @@
 class DeviceBufferResource;
 class ImageResource;
 class ViewportScenePipelineData;
-class TransferHelpers;
+class VulkanScene;
 
 class ViewportScene
 {
@@ -23,104 +23,75 @@ public:
 class ViewportWorldScene : public ViewportScene
 {
 public:
-	ViewportWorldScene(const Scene& scene, const VkDevice device, const VmaAllocator allocator, const std::vector<uint32_t>& queue_family_indices, const std::string& current_path, TransferHelpers* transfer_helpers);
+	ViewportWorldScene(const VulkanScene* scene, const VulkanInterface* vulkan_interface, const std::string& current_path);
 
 	void Render(const VkCommandBuffer cmd_buff, const uint32_t cam_index) const override;
 
-	class MeshInstance : public Scene::MeshInstance
-	{
-	public:
-		MeshInstance(const Scene::MeshInstance& mesh_instance);
+	//class MeshInstance : public Scene::MeshInstance
+	//{
+	//public:
+	//	MeshInstance(const Scene::MeshInstance& mesh_instance) : Scene::MeshInstance(mesh_instance) {};
+	//};
 
-		~MeshInstance() noexcept;
+	//class Material : public Scene::Material
+	//{
+	//public:
+	//	Material() {}
+	//	Material(const Scene::Material& material) : Scene::Material(material) {}
+	//};
 
-		VkDescriptorSet GetModelMatDescSet() const;
+	//class Image : public Scene::Image
+	//{
+	//public:
+	//	Image(const char* image_path, const VulkanInterface* vulkan_interface);
+	//	Image(const Scene::Image& image, const std::vector<uint8_t>& images_data, const VulkanInterface* vulkan_interface);
 
-	private:
-		VkDescriptorSet mModelMatDescSet = VK_NULL_HANDLE;
-	};
+	//	ImageResource* GetImageResource() const;
 
-	class Material : public Scene::Material
-	{
-	public:
-		Material() {}
-		Material(const Scene::Material& material) : Scene::Material(material) {}
-	};
+	//private:
+	//	std::unique_ptr<ImageResource> mImageResource;
+	//};
 
-	class Image : public Scene::Image
-	{
-	public:
-		Image(const char* image_path, const VkDevice device, const VmaAllocator allocator, const std::vector<uint32_t>& queue_family_indices, TransferHelpers* transfer_helpers);
-		Image(const Scene::Image& image, const std::vector<uint8_t>& images_data, const VkDevice device, const VmaAllocator allocator, const std::vector<uint32_t>& queue_family_indices, TransferHelpers* transfer_helpers);
+	//class Mesh : public Scene::Mesh
+	//{
+	//public:
+	//	Mesh(const Scene::Mesh& mesh);
 
-		ImageResource* GetImageResource() const;
+	//	class Primitive : public Scene::Mesh::Primitive
+	//	{
+	//	public:
+	//		Primitive(const Scene::Mesh::Primitive& primitive) : Scene::Mesh::Primitive(primitive) {}
+	//	};
 
-	private:
-		std::unique_ptr<ImageResource> mImageResource;
-	};
+	//	const std::vector<Primitive>& GetPrimitives() const;
 
-	class Mesh : public Scene::Mesh
-	{
-	public:
-		Mesh(const Scene::Mesh& mesh);
+	//private:
+	//	std::vector<Primitive> mPrimitives;
+	//};
 
-		class Primitive : public Scene::Mesh::Primitive
-		{
-		public:
-			Primitive(const Scene::Mesh::Primitive& primitive) : Scene::Mesh::Primitive(primitive) {}
+	//class CameraInstance : public Scene::CameraInstance
+	//{
+	//public:
+	//	CameraInstance(const Scene::CameraInstance& camera_instance) : Scene::CameraInstance(camera_instance) {};
+	//};
 
-			VkDescriptorSet GetTexDescSet() const;
-
-		private:
-			VkDescriptorSet mTexsDescSet = VK_NULL_HANDLE;
-
-			std::unique_ptr<ImageResource> mBaseColorImage = nullptr;
-		};
-
-		const std::vector<Primitive>& GetPrimitives() const;
-
-	private:
-		std::vector<Primitive> mPrimitives;
-	};
-
-	class CameraInstance : public Scene::CameraInstance
-	{
-	public:
-		CameraInstance(const Scene::CameraInstance& camera_instance);
-
-		VkDescriptorSet GetViewProjDescSet() const;
-
-	private:
-		VkDescriptorSet mViewProjDescSet = VK_NULL_HANDLE;
-	};
-
-	class Camera : public Scene::Camera
-	{
-	public:
-		Camera(const Scene::Camera& camera);
-	};
+	//class Camera : public Scene::Camera
+	//{
+	//public:
+	//	Camera(const Scene::Camera& camera) : Scene::Camera(camera) {};
+	//};
 
 	~ViewportWorldScene() noexcept override;
 
 private:
-	std::vector<ViewportWorldScene::MeshInstance> mMeshInstances;
-	std::vector<ViewportWorldScene::Mesh> mMeshes;
-	std::vector<ViewportWorldScene::CameraInstance> mCameraInstances;
-	std::vector<ViewportWorldScene::Camera> mCameras;
-	std::vector<ViewportWorldScene::Image> mImages;
-	std::vector<ViewportWorldScene::Material> mMaterials;
-
-	std::unique_ptr<DeviceBufferResource> mVertexData = nullptr;
-	std::unique_ptr<DeviceBufferResource> mUniformData = nullptr;
-
 	std::unique_ptr<ViewportScenePipelineData> mPipelineData = nullptr;
 
-	std::unique_ptr<DeviceBufferResource> mMaterialsBuffer = nullptr;
-	// All the descs in the scene
 	VkDescriptorPool mDescriptorPool = VK_NULL_HANDLE;
 	VkDescriptorSet mMTexturesDescSet = VK_NULL_HANDLE;
 	VkDescriptorBufferInfo mCameraDescBuffer = {};
 	VkDescriptorSet mCameraMatrixDescSet = VK_NULL_HANDLE;
 	VkDescriptorSet mModelMatrixDescSet = VK_NULL_HANDLE;
+
+	const VulkanScene* mScene = nullptr;
 	VkDevice mDevice = VK_NULL_HANDLE;
 };

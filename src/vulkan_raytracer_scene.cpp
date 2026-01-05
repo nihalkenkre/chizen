@@ -1,8 +1,9 @@
 #include "vulkan_raytracer_scene.hpp"
 #include "vulkan_objects.hpp"
 #include "resources.hpp"
-#include "utils.hpp"
 #include "vulkan_interface.hpp"
+#include "vulkan_scene.hpp"
+#include "utils.hpp"
 
 #include <stb_image.h>
 
@@ -461,65 +462,46 @@ const std::vector<VkRayTracingShaderGroupCreateInfoKHR>& VulkanRaytracerScenePip
 	return mShaderGroups;
 }
 
-VulkanRaytracerScene::VulkanRaytracerScene(const Scene& scene, const VkDevice device, const VmaAllocator allocator, const std::vector<uint32_t>& queue_family_indices, const std::string& current_path, const VkPhysicalDeviceRayTracingPipelinePropertiesKHR& raytracing_properties, const size_t scratch_buffer_alignment, const uint32_t mem_type_id, ComputeHelpers* compute_helpers)
-	: mDevice(device), mRaytracingProperties(raytracing_properties)
+VulkanRaytracerScene::VulkanRaytracerScene(const Scene& scene, const VulkanScene* vulkan_scene, const VulkanInterface* vulkan_interface, const std::string& current_path)
+	: mDevice(vulkan_interface->GetVkDevice()), mRaytracingProperties(vulkan_interface->GetPhysicalDeviceData()->RayTracingProperties), mScene(vulkan_scene)
 {
-	mPipelineData = std::make_unique<VulkanRaytracerScenePipelineData>(device, current_path, std::max(static_cast<size_t>(1), scene.GetImages().size()), "vulkan raytracer");
-	mScratchBufferPool = std::make_unique<Pool>(allocator, scratch_buffer_alignment, mem_type_id);
-	mSBTBufferPool = std::make_unique<Pool>(allocator, raytracing_properties.shaderGroupBaseAlignment, mem_type_id);
+	VmaAllocator allocator = vulkan_interface->GetVmaAllocator();
+	uint32_t mem_type_id = Utils_GetMemoryTypeId(vulkan_interface->GetPhysicalDeviceData()->MemoryProperties, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT);
+	VkDeviceSize scratch_buffer_alignment = vulkan_interface->GetPhysicalDeviceData()->AccelerationStructureProperties.minAccelerationStructureScratchOffsetAlignment;
+	ComputeHelpers* compute_helpers = vulkan_interface->GetComputeHelpers();
 
-	const VkDeviceSize sbt_handle_size = raytracing_properties.shaderGroupHandleSize;
-	const VkDeviceSize sbt_handle_aligned_size = ALIGNED_SIZE(raytracing_properties.shaderGroupHandleSize, raytracing_properties.shaderGroupHandleAlignment);
+	mPipelineData = std::make_unique<VulkanRaytracerScenePipelineData>(mDevice, current_path, std::max(static_cast<size_t>(1), scene.GetImages().size()), "vulkan raytracer");
+	mScratchBufferPool = std::make_unique<Pool>(allocator, scratch_buffer_alignment, mem_type_id);
+	mSBTBufferPool = std::make_unique<Pool>(allocator, mRaytracingProperties.shaderGroupBaseAlignment, mem_type_id);
+
+	const VkDeviceSize sbt_handle_size = mRaytracingProperties.shaderGroupHandleSize;
+	const VkDeviceSize sbt_handle_aligned_size = ALIGNED_SIZE(mRaytracingProperties.shaderGroupHandleSize, mRaytracingProperties.shaderGroupHandleAlignment);
 	const size_t group_count = mPipelineData->GetShaderGroups().size();
 	const size_t sbt_size = group_count * sbt_handle_size;
 
 	std::vector<uint8_t> sbt_handles(sbt_size);
-	VK_CHECK("get sbt group handles", vkGetRayTracingShaderGroupHandlesKHR(device, mPipelineData->GetPipeline(), 0, static_cast<uint32_t>(group_count), sbt_size, sbt_handles.data()));
+	VK_CHECK("get sbt group handles", vkGetRayTracingShaderGroupHandlesKHR(mDevice, mPipelineData->GetPipeline(), 0, static_cast<uint32_t>(group_count), sbt_size, sbt_handles.data()));
 
 	auto staging_rg_sbt = std::make_unique<HostBufferResource>(
-		device, allocator, VK_BUFFER_USAGE_TRANSFER_SRC_BIT, VMA_ALLOCATION_CREATE_HOST_ACCESS_SEQUENTIAL_WRITE_BIT,
-		ALIGNED_SIZE(sbt_handle_aligned_size, raytracing_properties.shaderGroupBaseAlignment), "staging rg sbt"
+		mDevice, allocator, VK_BUFFER_USAGE_TRANSFER_SRC_BIT, VMA_ALLOCATION_CREATE_HOST_ACCESS_SEQUENTIAL_WRITE_BIT,
+		ALIGNED_SIZE(sbt_handle_aligned_size, mRaytracingProperties.shaderGroupBaseAlignment), "staging rg sbt"
 	);
 	std::memcpy(staging_rg_sbt->GetAllocationInfo2().allocationInfo.pMappedData, sbt_handles.data(), sbt_handle_size);
 
 	mRGSbt = std::make_unique<DeviceBufferResource>(
-		device, allocator, VK_BUFFER_USAGE_SHADER_BINDING_TABLE_BIT_KHR | VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT,
-		ALIGNED_SIZE(sbt_handle_aligned_size, raytracing_properties.shaderGroupBaseAlignment), "rg sbt", mSBTBufferPool->GetPool()
+		mDevice, allocator, VK_BUFFER_USAGE_SHADER_BINDING_TABLE_BIT_KHR | VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT,
+		ALIGNED_SIZE(sbt_handle_aligned_size, mRaytracingProperties.shaderGroupBaseAlignment), "rg sbt", mSBTBufferPool->GetPool()
 	);
 
 	auto staging_ms_sbt = std::make_unique<HostBufferResource>(
-		device, allocator, VK_BUFFER_USAGE_TRANSFER_SRC_BIT, VMA_ALLOCATION_CREATE_HOST_ACCESS_SEQUENTIAL_WRITE_BIT,
-		ALIGNED_SIZE(sbt_handle_aligned_size, raytracing_properties.shaderGroupBaseAlignment), "staging ms sbt"
+		mDevice, allocator, VK_BUFFER_USAGE_TRANSFER_SRC_BIT, VMA_ALLOCATION_CREATE_HOST_ACCESS_SEQUENTIAL_WRITE_BIT,
+		ALIGNED_SIZE(sbt_handle_aligned_size, mRaytracingProperties.shaderGroupBaseAlignment), "staging ms sbt"
 	);
 	std::memcpy(staging_ms_sbt->GetAllocationInfo2().allocationInfo.pMappedData, sbt_handles.data() + sbt_handle_aligned_size, sbt_handle_size);
 
 	mMSSbt = std::make_unique<DeviceBufferResource>(
-		device, allocator, VK_BUFFER_USAGE_SHADER_BINDING_TABLE_BIT_KHR | VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT,
-		ALIGNED_SIZE(sbt_handle_aligned_size, raytracing_properties.shaderGroupBaseAlignment), "ms sbt", mSBTBufferPool->GetPool()
-	);
-
-	auto uniform_data = scene.GetUniformData();
-	auto staging_uniform_data = std::make_unique<HostBufferResource>(
-		device, allocator,
-		VK_BUFFER_USAGE_TRANSFER_SRC_BIT, VMA_ALLOCATION_CREATE_HOST_ACCESS_SEQUENTIAL_WRITE_BIT,
-		uniform_data, "staging uniform data"
-	);
-	mUniformData = std::make_unique<DeviceBufferResource>(
-		device, allocator,
-		VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT,
-		uniform_data.size(), "scene uniform data"
-	);
-
-	auto vertex_data = scene.GetVertexData();
-	auto staging_vertex_data = std::make_unique<HostBufferResource>(
-		device, allocator,
-		VK_BUFFER_USAGE_TRANSFER_SRC_BIT, VMA_ALLOCATION_CREATE_HOST_ACCESS_SEQUENTIAL_WRITE_BIT,
-		vertex_data, "staging vertex data"
-	);
-	mVertexData = std::make_unique<DeviceBufferResource>(
-		device, allocator,
-		VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT | VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
-		vertex_data.size(), "scene vertex data"
+		mDevice, allocator, VK_BUFFER_USAGE_SHADER_BINDING_TABLE_BIT_KHR | VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT,
+		ALIGNED_SIZE(sbt_handle_aligned_size, mRaytracingProperties.shaderGroupBaseAlignment), "ms sbt", mSBTBufferPool->GetPool()
 	);
 
 	struct CHSbtRecordData
@@ -532,7 +514,7 @@ VulkanRaytracerScene::VulkanRaytracerScene(const Scene& scene, const VkDevice de
 	};
 
 	std::vector<uint8_t> ch_sbt;
-	mCHSbtRecordAlignedSize = ALIGNED_SIZE(raytracing_properties.shaderGroupHandleSize + sizeof(CHSbtRecordData), raytracing_properties.shaderGroupHandleAlignment);
+	mCHSbtRecordAlignedSize = ALIGNED_SIZE(mRaytracingProperties.shaderGroupHandleSize + sizeof(CHSbtRecordData), mRaytracingProperties.shaderGroupHandleAlignment);
 
 	std::vector<VkAccelerationStructureInstanceKHR> instances;
 	instances.reserve(scene.GetMeshInstances().size());
@@ -544,7 +526,7 @@ VulkanRaytracerScene::VulkanRaytracerScene(const Scene& scene, const VkDevice de
 		{
 			mBLASes.push_back(
 				std::make_unique<BLAccelerationStructure>(
-					device, allocator, prim, scene.GetVertexData(), mScratchBufferPool->GetPool(), scratch_buffer_alignment, compute_helpers, "BLAS"
+					mDevice, allocator, prim, scene.GetVertexData(), mScratchBufferPool->GetPool(), scratch_buffer_alignment, compute_helpers, "BLAS"
 				)
 			);
 
@@ -564,14 +546,14 @@ VulkanRaytracerScene::VulkanRaytracerScene(const Scene& scene, const VkDevice de
 				.transform = inst_xform,
 				.mask = 0xFF,
 				.instanceShaderBindingTableRecordOffset = static_cast<uint32_t>(instances.size()),
-				.accelerationStructureReference = vkGetAccelerationStructureDeviceAddressKHR(device, &blas_addr_info),
+				.accelerationStructureReference = vkGetAccelerationStructureDeviceAddressKHR(mDevice, &blas_addr_info),
 			};
 
 			const CHSbtRecordData ch_sbt_record = {
-				.positions = mVertexData->GetDeviceOrHostAddressConstKHR().deviceAddress + prim.GetPositionsOffset(),
-				.normals = mVertexData->GetDeviceOrHostAddressConstKHR().deviceAddress + prim.GetNormalsOffset(),
-				.uv0s = mVertexData->GetDeviceOrHostAddressConstKHR().deviceAddress + prim.GetTexcoordsOffset(),
-				.indices = mVertexData->GetDeviceOrHostAddressConstKHR().deviceAddress + prim.GetIndicesOffset(),
+				.positions = vulkan_scene->GetVertexData()->GetDeviceOrHostAddressConstKHR().deviceAddress + prim.GetPositionsOffset(),
+				.normals = vulkan_scene->GetVertexData()->GetDeviceOrHostAddressConstKHR().deviceAddress + prim.GetNormalsOffset(),
+				.uv0s = vulkan_scene->GetVertexData()->GetDeviceOrHostAddressConstKHR().deviceAddress + prim.GetTexcoordsOffset(),
+				.indices = vulkan_scene->GetVertexData()->GetDeviceOrHostAddressConstKHR().deviceAddress + prim.GetIndicesOffset(),
 				.material_index = static_cast<uint64_t>(prim.GetMaterialIndex()),
 			};
 
@@ -585,21 +567,21 @@ VulkanRaytracerScene::VulkanRaytracerScene(const Scene& scene, const VkDevice de
 		}
 	}
 
-	mCHSbtAlignedSize = ALIGNED_SIZE(ch_sbt.size(), raytracing_properties.shaderGroupBaseAlignment);
+	mCHSbtAlignedSize = ALIGNED_SIZE(ch_sbt.size(), mRaytracingProperties.shaderGroupBaseAlignment);
 
 	auto staging_ch_sbt = std::make_unique<HostBufferResource>(
-		device, allocator, VK_BUFFER_USAGE_TRANSFER_SRC_BIT, VMA_ALLOCATION_CREATE_HOST_ACCESS_SEQUENTIAL_WRITE_BIT,
+		mDevice, allocator, VK_BUFFER_USAGE_TRANSFER_SRC_BIT, VMA_ALLOCATION_CREATE_HOST_ACCESS_SEQUENTIAL_WRITE_BIT,
 		mCHSbtAlignedSize, "staging ch sbt"
 	);
 	std::memcpy(staging_ch_sbt->GetAllocationInfo2().allocationInfo.pMappedData, ch_sbt.data(), ch_sbt.size());
 
 	mCHSbt = std::make_unique<DeviceBufferResource>(
-		device, allocator, VK_BUFFER_USAGE_SHADER_BINDING_TABLE_BIT_KHR | VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT,
+		mDevice, allocator, VK_BUFFER_USAGE_SHADER_BINDING_TABLE_BIT_KHR | VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT,
 		mCHSbtAlignedSize, "ch sbt", mSBTBufferPool->GetPool()
 	);
 
 	mTLAS = std::make_unique<TLAccelerationStructure>(
-		device, allocator, instances, mScratchBufferPool->GetPool(), scratch_buffer_alignment, compute_helpers, "TLAS"
+		mDevice, allocator, instances, mScratchBufferPool->GetPool(), scratch_buffer_alignment, compute_helpers, "TLAS"
 	);
 
 	const VkDescriptorPoolSize pool_sizes[] = {
@@ -660,10 +642,10 @@ VulkanRaytracerScene::VulkanRaytracerScene(const Scene& scene, const VkDevice de
 		.pSetLayouts = desc_set_layouts.data(),
 	};
 
-	VK_CHECK("allocate desc set", vkAllocateDescriptorSets(device, &cam_ds_ai, &mCameraDescSet));
+	VK_CHECK("allocate desc set", vkAllocateDescriptorSets(mDevice, &cam_ds_ai, &mCameraDescSet));
 
 #ifdef _DEBUG
-	Utils_SetObjectName(device, VK_OBJECT_TYPE_DESCRIPTOR_SET, reinterpret_cast<uint64_t>(mCameraDescSet), "vulkan raytracer cam descriptor set");
+	Utils_SetObjectName(mDevice, VK_OBJECT_TYPE_DESCRIPTOR_SET, reinterpret_cast<uint64_t>(mCameraDescSet), "vulkan raytracer cam descriptor set");
 #endif // _DEBUG
 
 	const uint32_t tex_desc_counts[] = {
@@ -684,63 +666,26 @@ VulkanRaytracerScene::VulkanRaytracerScene(const Scene& scene, const VkDevice de
 		.pSetLayouts = desc_set_layouts.data() + 1,
 	};
 
-	VK_CHECK("allocate desc set", vkAllocateDescriptorSets(device, &ds_ai, &mSceneDescSet));
+	VK_CHECK("allocate desc set", vkAllocateDescriptorSets(mDevice, &ds_ai, &mSceneDescSet));
 
 #ifdef _DEBUG
-	Utils_SetObjectName(device, VK_OBJECT_TYPE_DESCRIPTOR_SET, reinterpret_cast<uint64_t>(mSceneDescSet), "vulkan raytracer scene descriptor set");
+	Utils_SetObjectName(mDevice, VK_OBJECT_TYPE_DESCRIPTOR_SET, reinterpret_cast<uint64_t>(mSceneDescSet), "vulkan raytracer scene descriptor set");
 #endif // _DEBUG
 
 	mCameraDescBuffer = {
-		.buffer = mUniformData->GetVkBuffer(),
+		.buffer = vulkan_scene->GetUniformData()->GetVkBuffer(),
 		.range = sizeof(glm::mat4) * 2,
 	};
 
-	mCameraInstances.reserve(scene.GetCameraInstances().size());
-	for (const auto& camera_instance : scene.GetCameraInstances())
-	{
-		mCameraInstances.push_back(VulkanRaytracerScene::CameraInstance(camera_instance));
-	}
-
-	mMaterials.reserve(scene.GetMaterials().size());
-	for (const auto& material : scene.GetMaterials())
-	{
-		mMaterials.push_back(VulkanRaytracerScene::Material(material));
-	}
-
-	std::vector<uint8_t> materials_data(mMaterials.size() * sizeof(Material));
-	std::memcpy(materials_data.data(), mMaterials.data(), materials_data.size());
-
-	auto staging_materials_data = std::make_unique<HostBufferResource>(
-		device, allocator,
-		VK_BUFFER_USAGE_TRANSFER_SRC_BIT, VMA_ALLOCATION_CREATE_HOST_ACCESS_SEQUENTIAL_WRITE_BIT,
-		materials_data, "staging materials"
-	);
-
-	mMaterialsBuffer = std::make_unique<DeviceBufferResource>(device, allocator,
-		VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_STORAGE_BUFFER_BIT,
-		mMaterials.size() * sizeof(Material), "materials"
-	);
-
 	const VkDescriptorBufferInfo mat_desc_buff = {
-		.buffer = mMaterialsBuffer->GetVkBuffer(),
+		.buffer = vulkan_scene->GetMaterialsData()->GetVkBuffer(),
 		.range = VK_WHOLE_SIZE,
 	};
 
-	mImages.reserve(scene.GetImages().size());
-	for (const auto& image : scene.GetImages())
-	{
-		mImages.push_back(VulkanRaytracerScene::Image(image, scene.GetImagesData(), device, allocator, queue_family_indices, compute_helpers));
-	}
-
-	if (mImages.size() == 0)
-	{
-		mImages.push_back(VulkanRaytracerScene::Image(std::string(current_path).append("/images/one_pix.jpg").c_str(), device, allocator, queue_family_indices, compute_helpers));
-	}
-
 	std::vector<VkDescriptorImageInfo> image_descs;
-	image_descs.reserve(mImages.size());
+	image_descs.reserve(vulkan_scene->GetImages().size());
 
-	for (const auto& image : mImages)
+	for (const auto& image : vulkan_scene->GetImages())
 	{
 		image_descs.push_back(image.GetImageResource()->GetDescriptorInfo());
 	}
@@ -787,15 +732,12 @@ VulkanRaytracerScene::VulkanRaytracerScene(const Scene& scene, const VkDevice de
 		},
 	};
 
-	vkUpdateDescriptorSets(device, std::size(ds_writes), ds_writes, 0, nullptr);
+	vkUpdateDescriptorSets(mDevice, std::size(ds_writes), ds_writes, 0, nullptr);
 
 	compute_helpers->RecordBatch();
 	compute_helpers->CopyBufferToBuffer(staging_rg_sbt->GetVkBuffer(), mRGSbt->GetVkBuffer(), staging_rg_sbt->GetAllocationInfo2().allocationInfo.size);
 	compute_helpers->CopyBufferToBuffer(staging_ms_sbt->GetVkBuffer(), mMSSbt->GetVkBuffer(), staging_ms_sbt->GetAllocationInfo2().allocationInfo.size);
-	compute_helpers->CopyBufferToBuffer(staging_uniform_data->GetVkBuffer(), mUniformData->GetVkBuffer(), uniform_data.size());
-	compute_helpers->CopyBufferToBuffer(staging_vertex_data->GetVkBuffer(), mVertexData->GetVkBuffer(), vertex_data.size());
 	compute_helpers->CopyBufferToBuffer(staging_ch_sbt->GetVkBuffer(), mCHSbt->GetVkBuffer(), staging_ch_sbt->GetAllocationInfo2().allocationInfo.size);
-	compute_helpers->CopyBufferToBuffer(staging_materials_data->GetVkBuffer(), mMaterialsBuffer->GetVkBuffer(), materials_data.size());
 	compute_helpers->SubmitBatch();
 }
 
@@ -803,86 +745,6 @@ VulkanRaytracerScene::~VulkanRaytracerScene() noexcept
 {
 	if (mDevice != VK_NULL_HANDLE)
 		vkDestroyDescriptorPool(mDevice, mDescriptorPool, nullptr);
-}
-
-VulkanRaytracerScene::Image::Image(const Scene::Image& image, const std::vector<uint8_t>& images_data, const VkDevice device, const VmaAllocator allocator, const std::vector<uint32_t>& queue_family_indices, ComputeHelpers* compute_helpers)
-	: Scene::Image(image)
-{
-	uint32_t w, h, c;
-	uint8_t* pixels = stbi_load_from_memory(images_data.data() + image.GetDataOffset(), static_cast<int>(image.GetDataSize()),
-		reinterpret_cast<int*>(&w), reinterpret_cast<int*>(&h), reinterpret_cast<int*>(&c), 4);
-
-	VkFormat format = VK_FORMAT_R8G8B8A8_SRGB;
-	if (image.GetName().contains("normal") || image.GetName().contains("NRM") || image.GetName().contains("nrm"))
-	{
-		format = VK_FORMAT_R8G8B8A8_SNORM;
-	}
-
-	mImageResource = std::make_unique<ImageResource>(
-		device, VkExtent3D{ w, h, 1 }, format, VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_SAMPLED_BIT,
-		allocator,
-		queue_family_indices,
-		"texture"
-	);
-
-	auto staging_buffer = std::make_unique<HostBufferResource>(
-		device, allocator, VK_IMAGE_USAGE_TRANSFER_SRC_BIT, VMA_ALLOCATION_CREATE_HOST_ACCESS_SEQUENTIAL_WRITE_BIT,
-		mImageResource->GetAllocationInfo2().allocationInfo.size, "texture staging"
-	);
-
-	std::memcpy(
-		staging_buffer->GetAllocationInfo2().allocationInfo.pMappedData,
-		pixels,
-		w * h * 4
-	);
-
-	compute_helpers->RecordBatch();
-	compute_helpers->ChangeImageLayout(
-		VK_PIPELINE_STAGE_2_TOP_OF_PIPE_BIT, 0,
-		VK_PIPELINE_STAGE_2_COPY_BIT, VK_ACCESS_2_TRANSFER_WRITE_BIT,
-		VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_GENERAL,
-		VK_QUEUE_FAMILY_IGNORED, VK_QUEUE_FAMILY_IGNORED,
-		VK_IMAGE_ASPECT_COLOR_BIT, mImageResource->GetVkImage()
-	);
-	compute_helpers->CopyBufferToImage(staging_buffer->GetVkBuffer(), mImageResource->GetVkImage(), VkExtent3D{ w,h,1 });
-	compute_helpers->SubmitBatch();
-}
-
-VulkanRaytracerScene::Image::Image(const char* image_path, const VkDevice device, const VmaAllocator allocator, const std::vector<uint32_t>& queue_family_indices, ComputeHelpers* compute_helpers)
-{
-	uint32_t w, h, c;
-	uint8_t* pixels = stbi_load(image_path, reinterpret_cast<int*>(&w), reinterpret_cast<int*>(&h), reinterpret_cast<int*>(&c), 4);
-
-	VkFormat format = VK_FORMAT_R8G8B8A8_SRGB;
-
-	mImageResource = std::make_unique<ImageResource>(
-		device, VkExtent3D{ w, h, 1 }, format, VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_SAMPLED_BIT,
-		allocator,
-		queue_family_indices,
-		"texture"
-	);
-
-	auto staging_buffer = std::make_unique<HostBufferResource>(
-		device, allocator, VK_IMAGE_USAGE_TRANSFER_SRC_BIT, VMA_ALLOCATION_CREATE_HOST_ACCESS_SEQUENTIAL_WRITE_BIT,
-		mImageResource->GetAllocationInfo2().allocationInfo.size, "texture staging"
-	);
-
-	std::memcpy(
-		staging_buffer->GetAllocationInfo2().allocationInfo.pMappedData,
-		pixels,
-		w * h * 4
-	);
-
-	compute_helpers->RecordBatch();
-	compute_helpers->ChangeImageLayout(
-		VK_PIPELINE_STAGE_2_TOP_OF_PIPE_BIT, 0,
-		VK_PIPELINE_STAGE_2_COPY_BIT, VK_ACCESS_2_TRANSFER_WRITE_BIT,
-		VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_GENERAL,
-		VK_QUEUE_FAMILY_IGNORED, VK_QUEUE_FAMILY_IGNORED,
-		VK_IMAGE_ASPECT_COLOR_BIT, mImageResource->GetVkImage()
-	);
-	compute_helpers->CopyBufferToImage(staging_buffer->GetVkBuffer(), mImageResource->GetVkImage(), VkExtent3D{ w,h,1 });
-	compute_helpers->SubmitBatch();
 }
 
 void VulkanRaytracerScene::Render(const VkCommandBuffer cmd_buff, const DeviceBufferResource* rand_states, const ImageResource* accum_target, const ImageResource* final_render_target, const uint32_t current_sample, const uint32_t width, const uint32_t height, const uint32_t cam_index) const
@@ -922,7 +784,7 @@ void VulkanRaytracerScene::Render(const VkCommandBuffer cmd_buff, const DeviceBu
 
 	vkUpdateDescriptorSets(mDevice, std::size(write_desc_sets), write_desc_sets, 0, nullptr);
 
-	const uint32_t offset = static_cast<uint32_t>(mCameraInstances[cam_index].GetViewInverseMatrixOffset());
+	const uint32_t offset = static_cast<uint32_t>(mScene->GetCameraInstances()[cam_index].GetViewInverseMatrixOffset());
 	const VkBindDescriptorSetsInfoKHR cam_ds_bind_info = {
 		.sType = VK_STRUCTURE_TYPE_BIND_DESCRIPTOR_SETS_INFO_KHR,
 		.stageFlags = VK_SHADER_STAGE_RAYGEN_BIT_KHR,

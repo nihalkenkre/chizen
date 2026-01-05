@@ -9,10 +9,12 @@ class SWRasterizer;
 class ImGUIState;
 class ImageResource;
 class HostBufferResource;
+class VulkanScene;
 class ViewportScene;
 class VulkanRaytracerScene;
 class EmbreeRaytracerScene;
 class SWRasterizerScene;
+class VulkanScene;
 
 class App
 {
@@ -71,6 +73,7 @@ private:
 	std::unique_ptr<SWRasterizer> mSWRasterizer = nullptr;
 	std::unique_ptr<ImageResource> mFinalRenderTarget = nullptr;
 	std::unique_ptr<HostBufferResource> mStagingRenderTarget = nullptr;
+	std::unique_ptr<VulkanScene> mVulkanScene = nullptr;
 	SDL_Window* mWindow = nullptr;
 	VkExtent3D mFinalRenderTargetExtent = { 1280, 720, 1 };
 	std::thread mRenderThread = {};
