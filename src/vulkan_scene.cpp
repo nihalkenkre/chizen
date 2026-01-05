@@ -4,7 +4,7 @@
 #include "resources.hpp"
 #include <stb_image.h>
 
-VulkanScene::VulkanScene(const Scene& scene, const VulkanInterface* vulkan_interface, const std::string& current_path)
+VulkanScene::VulkanScene(const Scene& scene, const VulkanInterface* vulkan_interface)
 	: mDevice(vulkan_interface->GetVkDevice())
 {
 	VmaAllocator allocator = vulkan_interface->GetVmaAllocator();
@@ -90,7 +90,7 @@ VulkanScene::VulkanScene(const Scene& scene, const VulkanInterface* vulkan_inter
 
 	if (mImages.size() == 0)
 	{
-		mImages.push_back(VulkanScene::Image(std::string(current_path).append("/images/one_pix.jpg").c_str(), vulkan_interface));
+		mImages.push_back(VulkanScene::Image(std::string(SDL_GetBasePath()).append("/images/one_pix.jpg").c_str(), vulkan_interface));
 	}
 
 	mMeshes.reserve(scene.GetMeshes().size());

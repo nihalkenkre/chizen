@@ -18,12 +18,11 @@
 
 #include "events.hpp"
 
-App::App(SDL_Window* window, const std::string& current_path) : mWindow(window)
+App::App(SDL_Window* window) : mWindow(window)
 {
 	mVulkanInterface = std::make_unique<VulkanInterface>(window);
 	mImGUIState = std::make_unique<ImGUIState>(mVulkanInterface.get());
 	mViewportScene = std::make_unique<ViewportEmptyScene>();
-	mCurrentPath = current_path;
 
 	VkExtent3D extent = VkExtent3D{ mFinalRenderTargetExtent.width, mFinalRenderTargetExtent.height, 1 };
 	mFinalRenderTarget = std::make_unique<ImageResource>(mVulkanInterface->GetVkDevice(),
@@ -51,9 +50,9 @@ App::App(SDL_Window* window, const std::string& current_path) : mWindow(window)
 	);
 	transfer_helpers->SubmitBatch();
 
-	mViewport = std::make_unique<Viewport>(mVulkanInterface.get(), current_path, "rasterizer");
-	mDisplay = std::make_unique<Display>(mVulkanInterface.get(), mFinalRenderTarget.get(), current_path);
-	mVulkanRaytracer = std::make_unique<VulkanRaytracer>(mVulkanInterface.get(), extent, current_path, "vulkan raytracer");
+	mViewport = std::make_unique<Viewport>(mVulkanInterface.get());
+	mDisplay = std::make_unique<Display>(mVulkanInterface.get(), mFinalRenderTarget.get());
+	mVulkanRaytracer = std::make_unique<VulkanRaytracer>(mVulkanInterface.get(), extent);
 	mEmbreeRaytracer = std::make_unique<EmbreeRaytracer>();
 	mSWRasterizer = std::make_unique<SWRasterizer>();
 }
@@ -120,9 +119,9 @@ void App::ProcessEvent(SDL_Event* event)
 
 		mImGUIState->SetCameraNames(scene.GetCameraNames());
 
-		mVulkanScene = std::make_unique<VulkanScene>(scene, mVulkanInterface.get(), mCurrentPath);
-		mViewportScene = std::make_unique<ViewportWorldScene>(mVulkanScene.get(), mVulkanInterface.get(), mCurrentPath);
-		mVulkanRaytracerScene = std::make_unique<VulkanRaytracerScene>(scene, mVulkanScene.get(), mVulkanInterface.get(), mCurrentPath);
+		mVulkanScene = std::make_unique<VulkanScene>(scene, mVulkanInterface.get());
+		mViewportScene = std::make_unique<ViewportWorldScene>(mVulkanScene.get(), mVulkanInterface.get());
+		mVulkanRaytracerScene = std::make_unique<VulkanRaytracerScene>(scene, mVulkanScene.get(), mVulkanInterface.get());
 		mEmbreeRaytacerScene = std::make_unique<EmbreeRaytracerScene>(scene);
 		mSWRasterizerScene = std::make_unique<SWRasterizerScene>(scene);
 

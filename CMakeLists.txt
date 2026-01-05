@@ -26,7 +26,6 @@ endif()
 set_property(TARGET ${PROJECT_NAME} PROPERTY CXX_STANDARD 23)
 target_precompile_headers(${PROJECT_NAME} PRIVATE 
                                        <vector>
-                                       <filesystem>
                                        <print>
                                        <SDL3/SDL.h>
 	                                    <SDL3/SDL_main.h>

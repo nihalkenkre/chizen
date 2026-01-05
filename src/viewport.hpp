@@ -14,8 +14,7 @@ class Viewport
 {
 public:
 	Viewport() = delete;
-
-	Viewport(const VulkanInterface* vulkan_interface, const std::string& current_path, const std::string& name);
+	Viewport(const VulkanInterface* vulkan_interface);
 
 	Viewport(const Viewport& other) = delete;
 	Viewport& operator=(const Viewport& other) = delete;

@@ -43,7 +43,6 @@ struct Payload
 
 struct CH_SBT_Record
 {
-    float3* positions;
     float3* normals;
     float2* uv0s;
     uint3* indices;
@@ -93,7 +92,8 @@ void raygen()
 
     TraceRay(tlas, RAY_FLAG_FORCE_OPAQUE, 0xFF, 0, 0, 0, ray_desc, payload);
 
-    final_target[launch_id.xy] = float4(payload.hit_value, 1);
+    accum_target[launch_id.xy] += float4(payload.hit_value, 1);
+    final_target[launch_id.xy] = accum_target[launch_id.xy] / pc.current_sample;
 }
 
 [shader("miss")]
@@ -105,8 +105,8 @@ void miss(inout Payload p)
     uint flat_index = launch_id.y * launch_size.x + launch_id.x;
     uint4 z = rand_states[flat_index];
 
-    // p.hit_value = float3(HybridTaus(z), HybridTaus(z), HybridTaus(z));
-    p.hit_value = float3(0.2f, 0.2f, 0.2f);
+    p.hit_value = float3(HybridTaus(z), HybridTaus(z), HybridTaus(z));
+    // p.hit_value = float3(0.2f, 0.2f, 0.2f);
     rand_states[flat_index] = z;
 }
 

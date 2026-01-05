@@ -11,7 +11,7 @@ class VulkanRaytracerScenePipelineData
 {
 public:
 	VulkanRaytracerScenePipelineData() = delete;
-	VulkanRaytracerScenePipelineData(const VkDevice device, const std::string& current_path, const size_t num_images, const std::string& name);
+	VulkanRaytracerScenePipelineData(const VkDevice device, const size_t num_images, const std::string& name);
 
 	VulkanRaytracerScenePipelineData(const VulkanRaytracerScenePipelineData& other) = delete;
 	VulkanRaytracerScenePipelineData& operator=(const VulkanRaytracerScenePipelineData& other) = delete;
@@ -37,7 +37,7 @@ private:
 	VkDevice mDevice = VK_NULL_HANDLE;
 };
 
-VulkanRaytracerScenePipelineData::VulkanRaytracerScenePipelineData(const VkDevice device, const std::string& current_path, const size_t num_images, const std::string& name)
+VulkanRaytracerScenePipelineData::VulkanRaytracerScenePipelineData(const VkDevice device, const size_t num_images, const std::string& name)
 	: mDevice(device)
 {
  	Slang::ComPtr<slang::IGlobalSession> slang_global_session;
@@ -94,7 +94,7 @@ VulkanRaytracerScenePipelineData::VulkanRaytracerScenePipelineData(const VkDevic
  	Slang::ComPtr<slang::ISession> compile_session;
  	SLANG_CHECK("create compile session", slang_global_session->createSession(compile_session_desc, compile_session.writeRef()));
 
- 	const std::string slang_shader_path = std::string(current_path).append("/shaders/slang/raytrace.slang");
+ 	const std::string slang_shader_path = std::string(SDL_GetBasePath()).append("/shaders/slang/raytrace.slang");
 
  	Slang::ComPtr<slang::IBlob> diagnostic_blob;
  	slang::IModule* slang_module = compile_session->loadModule(slang_shader_path.c_str(), diagnostic_blob.writeRef());
@@ -462,7 +462,7 @@ const std::vector<VkRayTracingShaderGroupCreateInfoKHR>& VulkanRaytracerScenePip
 	return mShaderGroups;
 }
 
-VulkanRaytracerScene::VulkanRaytracerScene(const Scene& scene, const VulkanScene* vulkan_scene, const VulkanInterface* vulkan_interface, const std::string& current_path)
+VulkanRaytracerScene::VulkanRaytracerScene(const Scene& scene, const VulkanScene* vulkan_scene, const VulkanInterface* vulkan_interface)
 	: mDevice(vulkan_interface->GetVkDevice()), mRaytracingProperties(vulkan_interface->GetPhysicalDeviceData()->RayTracingProperties), mScene(vulkan_scene)
 {
 	VmaAllocator allocator = vulkan_interface->GetVmaAllocator();
@@ -470,7 +470,7 @@ VulkanRaytracerScene::VulkanRaytracerScene(const Scene& scene, const VulkanScene
 	VkDeviceSize scratch_buffer_alignment = vulkan_interface->GetPhysicalDeviceData()->AccelerationStructureProperties.minAccelerationStructureScratchOffsetAlignment;
 	ComputeHelpers* compute_helpers = vulkan_interface->GetComputeHelpers();
 
-	mPipelineData = std::make_unique<VulkanRaytracerScenePipelineData>(mDevice, current_path, std::max(static_cast<size_t>(1), scene.GetImages().size()), "vulkan raytracer");
+	mPipelineData = std::make_unique<VulkanRaytracerScenePipelineData>(mDevice, std::max(static_cast<size_t>(1), scene.GetImages().size()), "vulkan raytracer");
 	mScratchBufferPool = std::make_unique<Pool>(allocator, scratch_buffer_alignment, mem_type_id);
 	mSBTBufferPool = std::make_unique<Pool>(allocator, mRaytracingProperties.shaderGroupBaseAlignment, mem_type_id);
 
@@ -506,7 +506,6 @@ VulkanRaytracerScene::VulkanRaytracerScene(const Scene& scene, const VulkanScene
 
 	struct CHSbtRecordData
 	{
-		VkDeviceAddress positions;
 		VkDeviceAddress normals;
 		VkDeviceAddress uv0s;
 		VkDeviceAddress indices;
@@ -550,7 +549,6 @@ VulkanRaytracerScene::VulkanRaytracerScene(const Scene& scene, const VulkanScene
 			};
 
 			const CHSbtRecordData ch_sbt_record = {
-				.positions = vulkan_scene->GetVertexData()->GetDeviceOrHostAddressConstKHR().deviceAddress + prim.GetPositionsOffset(),
 				.normals = vulkan_scene->GetVertexData()->GetDeviceOrHostAddressConstKHR().deviceAddress + prim.GetNormalsOffset(),
 				.uv0s = vulkan_scene->GetVertexData()->GetDeviceOrHostAddressConstKHR().deviceAddress + prim.GetTexcoordsOffset(),
 				.indices = vulkan_scene->GetVertexData()->GetDeviceOrHostAddressConstKHR().deviceAddress + prim.GetIndicesOffset(),

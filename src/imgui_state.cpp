@@ -100,21 +100,13 @@ void ImGUIState::Render(const VkCommandBuffer cmd_buff)
 
 	ImGui::Begin("Awesome Panel");
 
+	ImGui::Text("Frame time: %0.3f ms", 1000.f / ImGui::GetIO().Framerate);
 	ImGui::BeginDisabled(mRaytracingStarted);
 	if (ImGui::Button("Load GLTF Binary"))
 	{
 		IGFD::FileDialogConfig config;
 		config.path = ".";
 		ImGuiFileDialog::Instance()->OpenDialog("GLTFDlg", "Choose GLTF Binary File", ".glb", config);
-	}
-
-	if (ImGui::Button("Reload"))
-	{
-		if (!file_path.empty())
-		{
-			events.FileOpen.user.data1 = reinterpret_cast<void*>((char*)file_path.c_str());
-			SDL_CHECK(SDL_PushEvent(&events.FileOpen));
-		}
 	}
 
 	if (ImGuiFileDialog::Instance()->Display("GLTFDlg"))
@@ -128,6 +120,15 @@ void ImGUIState::Render(const VkCommandBuffer cmd_buff)
 		}
 
 		ImGuiFileDialog::Instance()->Close();
+	}
+
+	if (ImGui::Button("Reload"))
+	{
+		if (!file_path.empty())
+		{
+			events.FileOpen.user.data1 = reinterpret_cast<void*>((char*)file_path.c_str());
+			SDL_CHECK(SDL_PushEvent(&events.FileOpen));
+		}
 	}
 
 	if (ImGui::InputInt2("Render Dims", mRenderTargetExtent))

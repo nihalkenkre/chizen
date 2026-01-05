@@ -31,7 +31,7 @@ SDL_AppResult SDL_AppInit(void** appstate, int argc, char** argv)
 		return SDL_APP_FAILURE;
 	}
 
-	static App app(window, std::filesystem::path(std::string(argv[0])).parent_path().string());
+	static App app(window);
 	*appstate = &app;
 
 	SDL_CHECK(ImGui_ImplSDL3_InitForVulkan(window));

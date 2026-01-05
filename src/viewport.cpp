@@ -9,7 +9,7 @@
 
 #include "utils.hpp"
 
-Viewport::Viewport(const VulkanInterface* vulkan_interface, const std::string& current_path, const std::string& name) :
+Viewport::Viewport(const VulkanInterface* vulkan_interface) :
 	mDevice(vulkan_interface->GetVkDevice()),
 	mQueue(vulkan_interface->GetDevice()->GetGraphicsQueue()),
 	mAllocator(vulkan_interface->GetAllocator()),

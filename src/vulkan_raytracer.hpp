@@ -13,7 +13,7 @@ class VulkanRaytracer
 {
 public:
 	VulkanRaytracer() = delete;
-	VulkanRaytracer(const VulkanInterface* const vulkan_interface, const VkExtent3D& extent, const std::string& current_path, const std::string& name);
+	VulkanRaytracer(const VulkanInterface* const vulkan_interface, const VkExtent3D& extent);
 
 	VulkanRaytracer(const VulkanRaytracer& other) = delete;
 	VulkanRaytracer& operator=(const VulkanRaytracer& other) = delete;

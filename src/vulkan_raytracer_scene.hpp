@@ -17,8 +17,7 @@ class VulkanRaytracerScene
 {
 public:
 	VulkanRaytracerScene() = delete;
-
-	VulkanRaytracerScene(const Scene& scene, const VulkanScene* vulkan_scene, const VulkanInterface* vulkan_interface, const std::string& current_path);
+	VulkanRaytracerScene(const Scene& scene, const VulkanScene* vulkan_scene, const VulkanInterface* vulkan_interface);
 	
 	VulkanRaytracerScene(const VulkanRaytracerScene& other) = delete;
 	VulkanRaytracerScene& operator=(const VulkanRaytracerScene& other) = delete;

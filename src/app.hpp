@@ -20,7 +20,7 @@ class App
 {
 public:
 	App() = delete;
-	App(SDL_Window* window, const std::string& current_path);
+	App(SDL_Window* window);
 
 	App(const App& other) = delete;
 	App& operator=(const App& other) = delete;
@@ -59,7 +59,6 @@ private:
 	float mLastMousePosition[2] = {};
 	float mZoomLevel = 1.f;
 	uint32_t mMaxSamples = 1024;
-	std::string mCurrentPath;
 	std::unique_ptr<VulkanInterface> mVulkanInterface = nullptr;
 	std::unique_ptr<Viewport> mViewport = nullptr;
 	std::unique_ptr<Display> mDisplay = nullptr;

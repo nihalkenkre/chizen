@@ -10,7 +10,7 @@ class DisplayPipelineData
 {
 public:
 	DisplayPipelineData() = delete;
-	DisplayPipelineData(const VulkanInterface* vulkan_interface, const std::string& current_path, const std::string& name);
+	DisplayPipelineData(const VulkanInterface* vulkan_interface, const std::string& name);
 
 	DisplayPipelineData(const DisplayPipelineData& other) = delete;
 	DisplayPipelineData& operator=(const DisplayPipelineData& other) = delete;
@@ -36,7 +36,7 @@ private:
 	VkDevice mDevice = VK_NULL_HANDLE;
 };
 
-DisplayPipelineData::DisplayPipelineData(const VulkanInterface* vulkan_interface, const std::string& current_path, const std::string& name)
+DisplayPipelineData::DisplayPipelineData(const VulkanInterface* vulkan_interface, const std::string& name)
 {
 	mDevice = vulkan_interface->GetVkDevice();
 
@@ -96,7 +96,7 @@ DisplayPipelineData::DisplayPipelineData(const VulkanInterface* vulkan_interface
 	Slang::ComPtr<slang::ISession> compile_session;
 	SLANG_CHECK("create compile session", slang_global_session->createSession(session_desc, compile_session.writeRef()));
 
-	const std::string slang_shader_path = std::string(current_path).append("/shaders/slang/display.slang");
+	const std::string slang_shader_path = std::string(SDL_GetBasePath()).append("/shaders/slang/display.slang");
 
 	Slang::ComPtr<slang::IBlob> diagnostic_blob;
 	slang::IModule* slang_module = compile_session->loadModule(slang_shader_path.c_str(), diagnostic_blob.writeRef());
@@ -412,14 +412,14 @@ const std::vector<VkDescriptorSetLayout>& DisplayPipelineData::GetDescriptorSetL
 	return mDescriptorSetLayouts;
 }
 
-Display::Display(const VulkanInterface* vulkan_interface, const ImageResource* final_render_target, const std::string& current_path)
+Display::Display(const VulkanInterface* vulkan_interface, const ImageResource* final_render_target)
 {
 	mMaxFramesInFlight = static_cast<uint8_t>(vulkan_interface->GetSwapchain()->GetImagesCount());
 	mTransferHelpers = vulkan_interface->GetTransferHelpers();
 	mQueue = vulkan_interface->GetDevice()->GetGraphicsQueue();
 	mDevice = vulkan_interface->GetVkDevice();
 	mFrameObjects = std::make_unique<FrameObjects>(mDevice, vulkan_interface->GetPhysicalDeviceData()->GraphicsQueueFamilyIndex, mMaxFramesInFlight, "display frame objects");
-	mPipelineData = std::make_unique<DisplayPipelineData>(vulkan_interface, current_path, "display pipeline");
+	mPipelineData = std::make_unique<DisplayPipelineData>(vulkan_interface, "display pipeline");
 
 	mAcquireSignalSemaphores.resize(mMaxFramesInFlight, VK_NULL_HANDLE);
 	mPresentWaitSemaphores.resize(mMaxFramesInFlight, VK_NULL_HANDLE);

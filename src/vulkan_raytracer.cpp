@@ -7,16 +7,15 @@
 #include "events.hpp"
 #include "vulkan_raytracer_scene.hpp"
 
-VulkanRaytracer::VulkanRaytracer(const VulkanInterface* const vulkan_interface, const VkExtent3D& extent, const std::string& current_path, const std::string& name)
-	: mDevice(vulkan_interface->GetVkDevice()), mAllocator(vulkan_interface->GetVmaAllocator())
-{
-	mDevice = vulkan_interface->GetVkDevice();
-	mRayTracingProperties = vulkan_interface->GetPhysicalDeviceData()->RayTracingProperties;
-	mQueueFamilyIndices = {
+VulkanRaytracer::VulkanRaytracer(const VulkanInterface* const vulkan_interface, const VkExtent3D& extent)
+	: mDevice(vulkan_interface->GetVkDevice()), mAllocator(vulkan_interface->GetVmaAllocator()), mRayTracingProperties(vulkan_interface->GetPhysicalDeviceData()->RayTracingProperties),
+	mQueueFamilyIndices(std::vector<uint32_t>{
 		vulkan_interface->GetPhysicalDeviceData()->GraphicsQueueFamilyIndex,
 		vulkan_interface->GetPhysicalDeviceData()->ComputeQueueFamilyIndex,
 		vulkan_interface->GetPhysicalDeviceData()->TransferQueueFamilyIndex
-	};
+		}
+	)
+{
 	mAccumRenderTarget = std::make_unique<ImageResource>(
 		mDevice, extent, VK_FORMAT_R32G32B32A32_SFLOAT,
 		VK_IMAGE_USAGE_STORAGE_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT, vulkan_interface->GetVmaAllocator(), mQueueFamilyIndices, "accum render target");

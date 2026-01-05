@@ -10,7 +10,7 @@ class VulkanScene
 {
 public:
    VulkanScene() = delete;
-	VulkanScene(const Scene& scene, const VulkanInterface* vulkan_interface, const std::string& current_path);
+	VulkanScene(const Scene& scene, const VulkanInterface* vulkan_interface);
 
    VulkanScene(const VulkanScene& scene) = delete;
    VulkanScene& operator=(const VulkanScene& scene) = delete;

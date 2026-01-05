@@ -11,7 +11,7 @@ class ViewportScenePipelineData
 {
 public:
 	ViewportScenePipelineData() = delete;
-	ViewportScenePipelineData(const VkDevice device, const std::string& current_path, const size_t num_images, const std::string& name);
+	ViewportScenePipelineData(const VkDevice device, const size_t num_images, const std::string& name);
 
 	ViewportScenePipelineData(const ViewportScenePipelineData& other) = delete;
 	ViewportScenePipelineData& operator=(const ViewportScenePipelineData& other) = delete;
@@ -30,7 +30,7 @@ private:
 	VkDevice mDevice = VK_NULL_HANDLE;
 };
 
-ViewportScenePipelineData::ViewportScenePipelineData(const VkDevice device, const std::string& current_path, const size_t num_images, const std::string& name) : mDevice(device)
+ViewportScenePipelineData::ViewportScenePipelineData(const VkDevice device, const size_t num_images, const std::string& name) : mDevice(device)
 {
 	Slang::ComPtr<slang::IGlobalSession> slang_global_session;
 	SLANG_CHECK("create global session", slang::createGlobalSession(slang_global_session.writeRef()));
@@ -86,7 +86,7 @@ ViewportScenePipelineData::ViewportScenePipelineData(const VkDevice device, cons
 	Slang::ComPtr<slang::ISession> compile_session;
 	SLANG_CHECK("create compile session", slang_global_session->createSession(session_desc, compile_session.writeRef()));
 
-	const std::string slang_shader_path = std::string(current_path).append("/shaders/slang/viewport.slang");
+	const std::string slang_shader_path = std::string(SDL_GetBasePath()).append("/shaders/slang/viewport.slang");
 
 	Slang::ComPtr<slang::IBlob> diagnostic_blob;
 	slang::IModule* slang_module = compile_session->loadModule(slang_shader_path.c_str(), diagnostic_blob.writeRef());
@@ -480,10 +480,10 @@ const std::vector<VkDescriptorSetLayout>& ViewportScenePipelineData::GetDescript
 	return mDescriptorSetLayouts;
 }
 
-ViewportWorldScene::ViewportWorldScene(const VulkanScene* scene, const VulkanInterface* vulkan_interface, const std::string& current_path)
+ViewportWorldScene::ViewportWorldScene(const VulkanScene* scene, const VulkanInterface* vulkan_interface)
 	: mDevice(vulkan_interface->GetVkDevice()), mScene(scene)
 {
-	mPipelineData = std::make_unique<ViewportScenePipelineData>(mDevice, current_path, std::max(static_cast<size_t>(1), scene->GetImages().size()), "Scene");
+	mPipelineData = std::make_unique<ViewportScenePipelineData>(mDevice, std::max(static_cast<size_t>(1), scene->GetImages().size()), "Scene");
 
 	VmaAllocator allocator = vulkan_interface->GetVmaAllocator();
 
