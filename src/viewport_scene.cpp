@@ -219,12 +219,7 @@ ViewportScenePipelineData::ViewportScenePipelineData(const VkDevice device, cons
 		},
 		{
 			.binding = 1,
-			.stride = sizeof(float) * 3,
-			.inputRate = VK_VERTEX_INPUT_RATE_VERTEX,
-		},
-		{
-			.binding = 2,
-			.stride = sizeof(float) * 2,
+			.stride = sizeof(glm::vec3) + sizeof(glm::vec2),
 			.inputRate = VK_VERTEX_INPUT_RATE_VERTEX,
 		},
 	};
@@ -242,8 +237,9 @@ ViewportScenePipelineData::ViewportScenePipelineData(const VkDevice device, cons
 		},
 		{
 			.location = 2,
-			.binding = 2,
+			.binding = 1,
 			.format = VK_FORMAT_R32G32_SFLOAT,
+			.offset = sizeof(glm::vec3),
 		},
 	};
 
@@ -707,13 +703,11 @@ void ViewportWorldScene::Render(const VkCommandBuffer cmd_buff, const uint32_t c
 			const VkBuffer buffers[] = {
 				mScene->GetVertexData()->GetVkBuffer(),
 				mScene->GetVertexData()->GetVkBuffer(),
-				mScene->GetVertexData()->GetVkBuffer(),
 			};
 
 			const VkDeviceSize offsets[] = {
 				curr_prim.GetPositionsOffset(),
-				curr_prim.GetNormalsOffset(),
-				curr_prim.GetTexcoordsOffset(),
+				curr_prim.GetVerticesDataOffset(),
 			};
 
 			vkCmdBindVertexBuffers2EXT(cmd_buff, 0, std::size(buffers), buffers, offsets, nullptr, nullptr);

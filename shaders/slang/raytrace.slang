@@ -14,7 +14,13 @@ struct PushConstants
 {
     uint current_sample;
     uint is_cpu_shading;
-}
+};
+
+struct VertexData
+{
+    float3 normal;
+    float2 uv;
+};
 
 [[vk::binding(0, 0)]]
 ConstantBuffer<CamInfo> cam_info;
@@ -44,8 +50,7 @@ struct Payload
 
 struct CH_SBT_Record
 {
-    float3 *normals;
-    float2 *uv0s;
+    VertexData *vertex_data;
     uint3 *indices;
     uint64_t material_index;
 };
@@ -106,8 +111,7 @@ void miss(inout Payload p)
     uint flat_index = launch_id.y * launch_size.x + launch_id.x;
     uint4 z = rand_states[flat_index];
 
-    p.hit_value = float4(HybridTaus(z), HybridTaus(z), HybridTaus(z), HybridTaus(z));
-    // p.hit_value = float3(0.2f, 0.2f, 0.2f);
+    p.hit_value = float4(HybridTaus(z), HybridTaus(z), HybridTaus(z), 1);
     rand_states[flat_index] = z;
 }
 
@@ -123,12 +127,12 @@ void closesthit(inout Payload p, in Attributes attribs)
 
     uint3 index_triplet = *(ch_sbt.indices + PrimitiveIndex());
 
-    float2 uv = ch_sbt.uv0s[index_triplet.x] * bary_coords.z +
-                ch_sbt.uv0s[index_triplet.y] * bary_coords.x +
-                ch_sbt.uv0s[index_triplet.z] * bary_coords.y;
-    float3 normal = ch_sbt.normals[index_triplet.x] * bary_coords.z +
-                    ch_sbt.normals[index_triplet.y] * bary_coords.x +
-                    ch_sbt.normals[index_triplet.z] * bary_coords.y;
+    float2 uv = ch_sbt.vertex_data[index_triplet.x].uv * bary_coords.z +
+                ch_sbt.vertex_data[index_triplet.y].uv * bary_coords.x +
+                ch_sbt.vertex_data[index_triplet.z].uv * bary_coords.y;
+    float3 normal = ch_sbt.vertex_data[index_triplet.x].normal * bary_coords.z +
+                    ch_sbt.vertex_data[index_triplet.y].normal * bary_coords.x +
+                    ch_sbt.vertex_data[index_triplet.z].normal * bary_coords.y;
 
     float4 base_color = materials[ch_sbt.material_index].base_color_factor;
     if (pc.is_cpu_shading == 0)

@@ -237,58 +237,29 @@ void Scene::AddMesh(const cgltf_data* gltf, const cgltf_mesh* mesh)
 	std::vector<Scene::Mesh::Primitive> primitives;
 	primitives.reserve(mesh->primitives_count);
 
+	struct VertexData
+	{
+		glm::vec3 normal;
+		glm::vec2 uv;
+	};
+
 	for (size_t p = 0; p < mesh->primitives_count; ++p)
 	{
 		cgltf_primitive* curr_prim = mesh->primitives + p;
 
 		size_t positions_size = 0;
 		size_t positions_offset = 0;
-		size_t normals_size = 0;
-		size_t normals_offset = 0;
-		size_t texcoords_size = 0;
-		size_t texcoords_offset = 0;
 		size_t indices_size = 0;
 		size_t indices_offset = 0;
 		size_t vertex_count = 0;
 		size_t index_count = 0;
 		int32_t MaterialIndex = static_cast<int32_t>(mMaterials.size()) - 1;
 
-		for (size_t a = 0; a < curr_prim->attributes_count; ++a)
-		{
-			cgltf_attribute* curr_attr = curr_prim->attributes + a;
-
-			std::vector<uint8_t>attr_data(curr_attr->data->buffer_view->size);
-			std::memcpy(attr_data.data(),
-				reinterpret_cast<uint8_t*>(curr_attr->data->buffer_view->buffer->data) + curr_attr->data->buffer_view->offset + curr_attr->data->offset,
-				curr_attr->data->buffer_view->size
-			);
-
-			if (std::string(curr_attr->name) == std::string("POSITION"))
-			{
-				positions_offset = mVertexData.size();
-				mVertexData.append_range(attr_data);
-
-				vertex_count = curr_attr->data->count;
-				positions_size = curr_attr->data->buffer_view->size;
-			}
-			else if (std::string(curr_attr->name) == std::string("NORMAL"))
-			{
-				normals_offset = mVertexData.size();
-				mVertexData.append_range(attr_data);
-
-				normals_size = curr_attr->data->buffer_view->size;
-			}
-			else if (std::string(curr_attr->name) == std::string("TEXCOORD_0"))
-			{
-				texcoords_offset = mVertexData.size();
-				mVertexData.append_range(attr_data);
-
-				texcoords_size = curr_attr->data->buffer_view->size;
-			}
-		}
-
 		VkIndexType index_type = VK_INDEX_TYPE_UINT32;
 		mVertexData.resize(ALIGNED_SIZE(mVertexData.size(), sizeof(uint32_t)));
+
+		std::vector<VertexData> vertices_data;
+		std::vector<uint32_t> indices(curr_prim->indices->count * sizeof(uint32_t));
 
 		if (curr_prim->indices->component_type == cgltf_component_type_r_32u)
 		{
@@ -299,6 +270,11 @@ void Scene::AddMesh(const cgltf_data* gltf, const cgltf_mesh* mesh)
 			std::vector<uint8_t> index_data(indices_size);
 			std::memcpy(
 				index_data.data(),
+				reinterpret_cast<uint8_t*>(curr_prim->indices->buffer_view->buffer->data) + curr_prim->indices->buffer_view->offset + curr_prim->indices->offset,
+				curr_prim->indices->buffer_view->size
+			);
+			std::memcpy(
+				indices.data(),
 				reinterpret_cast<uint8_t*>(curr_prim->indices->buffer_view->buffer->data) + curr_prim->indices->buffer_view->offset + curr_prim->indices->offset,
 				curr_prim->indices->buffer_view->size
 			);
@@ -326,8 +302,72 @@ void Scene::AddMesh(const cgltf_data* gltf, const cgltf_mesh* mesh)
 				indices_32.data(),
 				indices_size
 			);
+			std::memcpy(
+				indices.data(),
+				indices_32.data(),
+				indices_size
+			);
 			mVertexData.append_range(index_data);
 		}
+
+		std::vector<glm::vec3> normals;
+		std::vector<glm::vec2> uvs;
+
+		for (size_t a = 0; a < curr_prim->attributes_count; ++a)
+		{
+			cgltf_attribute* curr_attr = curr_prim->attributes + a;
+
+			if (std::string(curr_attr->name) == std::string("POSITION"))
+			{
+				std::vector<uint8_t>attr_data(curr_attr->data->buffer_view->size);
+				std::memcpy(attr_data.data(),
+					reinterpret_cast<uint8_t*>(curr_attr->data->buffer_view->buffer->data) + curr_attr->data->buffer_view->offset + curr_attr->data->offset,
+					curr_attr->data->buffer_view->size
+				);
+				positions_offset = mVertexData.size();
+				mVertexData.append_range(attr_data);
+
+				vertex_count = curr_attr->data->count;
+				positions_size = curr_attr->data->buffer_view->size;
+				vertices_data.reserve(vertex_count);
+			}
+			else if (std::string(curr_attr->name) == std::string("NORMAL"))
+			{
+				normals.resize(curr_attr->data->buffer_view->size);
+				std::memcpy(
+					normals.data(),
+					reinterpret_cast<uint8_t*>(curr_attr->data->buffer_view->buffer->data) + curr_attr->data->buffer_view->offset + curr_attr->data->offset,
+					curr_attr->data->buffer_view->size
+				);
+			}
+			else if (std::string(curr_attr->name) == std::string("TEXCOORD_0"))
+			{
+				uvs.resize(curr_attr->data->buffer_view->size);
+				std::memcpy(
+					uvs.data(),
+					reinterpret_cast<uint8_t*>(curr_attr->data->buffer_view->buffer->data) + curr_attr->data->buffer_view->offset + curr_attr->data->offset,
+					curr_attr->data->buffer_view->size
+				);
+			}
+		}
+
+		for (const auto& index : indices)
+		{
+			vertices_data.push_back(
+				VertexData{ .normal = normals[index], .uv = uvs[index] }
+			);
+		}
+
+		size_t vertices_data_offset = mVertexData.size();
+		size_t vertices_data_size = vertices_data.size() * sizeof(VertexData);
+		
+		std::vector<uint8_t> vertices_data_data(vertices_data_size);
+		std::memcpy(
+			vertices_data_data.data(),
+			vertices_data.data(),
+			vertices_data_size
+		);
+		mVertexData.append_range(vertices_data_data);
 
 		if (curr_prim->material != nullptr)
 		{
@@ -337,9 +377,7 @@ void Scene::AddMesh(const cgltf_data* gltf, const cgltf_mesh* mesh)
 		primitives.push_back(
 			Scene::Mesh::Primitive(
 				positions_size, positions_offset,
-				normals_size, normals_offset,
-				texcoords_size, texcoords_offset,
-				vertex_count,
+				vertices_data_size, vertices_data_offset, vertex_count,
 				indices_size, indices_offset, index_count, index_type,
 				MaterialIndex
 			)
@@ -511,18 +549,14 @@ const std::vector<Scene::Mesh::Primitive>& Scene::Mesh::GetPrimitives() const
 
 Scene::Mesh::Primitive::Primitive(
 	const size_t positions_size, const size_t positions_offset,
-	const size_t normals_size, const size_t normals_offset,
-	const size_t texcoords_size, const size_t texcoords_offset,
-	const size_t vertex_count,
+	const size_t vertices_data_size, const size_t vertices_data_offset, const size_t vertex_count,
 	const size_t indices_size, const size_t indices_offset, const size_t index_count, const VkIndexType index_type,
 	const uint32_t MaterialIndex
 )
 	: mPositionsSize(positions_size),
 	mPositionsOffset(positions_offset),
-	mNormalsSize(normals_size),
-	mNormalsOffset(normals_offset),
-	mTexCoordsSize(texcoords_size),
-	mTexCoordsOffset(texcoords_offset),
+	mVerticesDataSize(vertices_data_size),
+	mVerticesDataOffset(vertices_data_offset),
 	mVertexCount(vertex_count),
 	mIndicesSize(indices_size),
 	mIndicesOffset(indices_offset),
@@ -530,7 +564,6 @@ Scene::Mesh::Primitive::Primitive(
 	mIndexType(index_type),
 	mMaterialIndex(MaterialIndex)
 {
-
 }
 
 size_t Scene::Mesh::Primitive::GetPositionsSize() const
@@ -543,24 +576,14 @@ size_t Scene::Mesh::Primitive::GetPositionsOffset() const
 	return mPositionsOffset;
 }
 
-size_t Scene::Mesh::Primitive::GetNormalsSize() const
+size_t Scene::Mesh::Primitive::GetVerticesDataSize() const
 {
-	return mNormalsSize;
+	return mVerticesDataSize;
 }
 
-size_t Scene::Mesh::Primitive::GetNormalsOffset() const
+size_t Scene::Mesh::Primitive::GetVerticesDataOffset() const
 {
-	return mNormalsOffset;
-}
-
-size_t Scene::Mesh::Primitive::GetTexCoordsSize() const
-{
-	return mTexCoordsSize;
-}
-
-size_t Scene::Mesh::Primitive::GetTexcoordsOffset() const
-{
-	return mTexCoordsOffset;
+	return mVerticesDataOffset;
 }
 
 size_t Scene::Mesh::Primitive::GetIndicesSize() const

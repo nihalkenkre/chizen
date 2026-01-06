@@ -33,19 +33,15 @@ public:
 		public:
 			Primitive(
 				const size_t positions_size, const size_t positions_offset,
-				const size_t normals_size, const size_t normals_offset,
-				const size_t texcoords_size, const size_t texcoords_offset,
-				const size_t vertex_count,
+				const size_t vertices_data_size, const size_t vertices_data_offset, const size_t vertex_count,
 				const size_t indices_size, const size_t indices_offset, const size_t index_count, const VkIndexType index_type,
 				const uint32_t MaterialIndex
 			);
 
 			size_t GetPositionsSize() const;
 			size_t GetPositionsOffset() const;
-			size_t GetNormalsSize() const;
-			size_t GetNormalsOffset() const;
-			size_t GetTexCoordsSize() const;
-			size_t GetTexcoordsOffset() const;
+			size_t GetVerticesDataSize() const;
+			size_t GetVerticesDataOffset() const;
 			size_t GetIndicesSize() const;
 			size_t GetIndicesOffset() const;
 
@@ -58,10 +54,8 @@ public:
 		private:
 			size_t mPositionsSize = 0;
 			size_t mPositionsOffset = 0;
-			size_t mNormalsSize = 0;
-			size_t mNormalsOffset = 0;
-			size_t mTexCoordsSize = 0;
-			size_t mTexCoordsOffset = 0;
+			size_t mVerticesDataSize = 0;
+			size_t mVerticesDataOffset = 0;
 			size_t mIndicesSize = 0;
 			size_t mIndicesOffset = 0;
 

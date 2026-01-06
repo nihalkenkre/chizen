@@ -339,7 +339,7 @@ VulkanRaytracerScenePipelineData::VulkanRaytracerScenePipelineData(const VkDevic
 
 	const VkPushConstantRange pc_ranges[] = {
 		{
-			.stageFlags = VK_SHADER_STAGE_RAYGEN_BIT_KHR,
+			.stageFlags = VK_SHADER_STAGE_RAYGEN_BIT_KHR | VK_SHADER_STAGE_CLOSEST_HIT_BIT_KHR,
 			.size = sizeof(VulkanRaytracerScenePipelineData::PushConstants),
 		},
 	};
@@ -507,8 +507,7 @@ VulkanRaytracerScene::VulkanRaytracerScene(const Scene& scene, const VulkanScene
 
 	struct CHSbtRecordData
 	{
-		VkDeviceAddress normals;
-		VkDeviceAddress uv0s;
+		VkDeviceAddress vertices_data;
 		VkDeviceAddress indices;
 		uint64_t MaterialIndex;
 	};
@@ -529,8 +528,7 @@ VulkanRaytracerScene::VulkanRaytracerScene(const Scene& scene, const VulkanScene
 		for (const auto& prim : mesh.GetPrimitives())
 		{
 			const CHSbtRecordData ch_sbt_record = {
-				.normals = vulkan_scene->GetVertexData()->GetDeviceOrHostAddressConstKHR().deviceAddress + prim.GetNormalsOffset(),
-				.uv0s = vulkan_scene->GetVertexData()->GetDeviceOrHostAddressConstKHR().deviceAddress + prim.GetTexcoordsOffset(),
+				.vertices_data = vulkan_scene->GetVertexData()->GetDeviceOrHostAddressConstKHR().deviceAddress + prim.GetVerticesDataOffset(),
 				.indices = vulkan_scene->GetVertexData()->GetDeviceOrHostAddressConstKHR().deviceAddress + prim.GetIndicesOffset(),
 				.MaterialIndex = static_cast<uint64_t>(prim.GetMaterialIndex()),
 			};
@@ -832,7 +830,7 @@ void VulkanRaytracerScene::Render(const VkCommandBuffer cmd_buff, const DeviceBu
 	const VkPushConstantsInfoKHR pc_info = {
 		.sType = VK_STRUCTURE_TYPE_PUSH_CONSTANTS_INFO_KHR,
 		.layout = mPipelineData->GetPipelineLayout(),
-		.stageFlags = VK_SHADER_STAGE_RAYGEN_BIT_KHR,
+		.stageFlags = VK_SHADER_STAGE_RAYGEN_BIT_KHR | VK_SHADER_STAGE_CLOSEST_HIT_BIT_KHR,
 		.size = sizeof(VulkanRaytracerScenePipelineData::PushConstants),
 		.pValues = &pc,
 	};
