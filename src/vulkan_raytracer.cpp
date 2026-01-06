@@ -117,26 +117,6 @@ void VulkanRaytracer::Start(const VulkanRaytracerScene* scene, const ImageResour
 			VK_ACCESS_2_SHADER_STORAGE_WRITE_BIT | VK_ACCESS_2_TRANSFER_WRITE_BIT
 		);
 
-		// look to clear image in app.cpp, RenderStarted event.
-		if (s == 1)
-		{
-			const VkClearColorValue clear_color = {
-				.float32 = {
-					0, 0, 0, 1,
-				},
-			};
-
-			const VkImageSubresourceRange ranges[] = {
-				{
-					.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT,
-					.levelCount = 1,
-					.layerCount = 1,
-				},
-			};
-
-			vkCmdClearColorImage(cmd_buff, mAccumRenderTarget->GetVkImage(), VK_IMAGE_LAYOUT_GENERAL, &clear_color, std::size(ranges), ranges);
-		}
-
 		scene->Render(cmd_buff, mRandomStates.get(), mAccumRenderTarget.get(), final_render_target, s, extent.width, extent.height, cam_index, is_cpu_shading);
 
 		VK_CHECK("end rt cmd buffer", vkEndCommandBuffer(cmd_buff));
@@ -185,8 +165,13 @@ void VulkanRaytracer::Stop()
 	mStopRendering = true;
 }
 
-FrameObjects* VulkanRaytracer::GetFrameObjects() const
+const FrameObjects* VulkanRaytracer::GetFrameObjects() const
 {
 	return mFrameObjects.get();
+}
+
+const ImageResource* VulkanRaytracer::GetAccumRenderTarget() const
+{
+	return mAccumRenderTarget.get();
 }
 

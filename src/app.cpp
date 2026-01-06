@@ -157,6 +157,11 @@ void App::ProcessEvent(SDL_Event* event)
 					mMaxSamples = tmp_max_samples;
 				}
 
+				ComputeHelpers* compute_helpers = mVulkanInterface->GetComputeHelpers();
+				compute_helpers->RecordBatch();
+				compute_helpers->ClearImage(mVulkanRaytracer->GetAccumRenderTarget()->GetVkImage(), clear_color);
+				compute_helpers->SubmitBatch();
+
 				mRenderThread = std::thread(&VulkanRaytracer::Start, mVulkanRaytracer.get(), mVulkanRaytracerScene.get(), mFinalRenderTarget.get(), mFinalRenderTargetExtent, mMaxSamples, mImGUIState->GetSelectedCameraIndex(), mImGUIState->GetCPUShading());
 				mRenderThread.detach();
 				SDL_CHECK(SDL_PushEvent(&events.RenderStarted));

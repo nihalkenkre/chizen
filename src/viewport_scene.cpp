@@ -214,7 +214,7 @@ ViewportScenePipelineData::ViewportScenePipelineData(const VkDevice device, cons
 	const VkVertexInputBindingDescription vibds[] = {
 		{
 			.binding = 0,
-			.stride = sizeof(float) * 3,
+			.stride = sizeof(glm::vec3),
 			.inputRate = VK_VERTEX_INPUT_RATE_VERTEX,
 		},
 		{
@@ -687,7 +687,7 @@ void ViewportWorldScene::Render(const VkCommandBuffer cmd_buff, const uint32_t c
 			vkCmdBindDescriptorSets2KHR(cmd_buff, &bind_ds_info);
 
 			const ViewportScenePipelineData::PushConstants pc = {
-				.MaterialIndex = curr_prim.GetMaterialIndex(),
+				.MaterialIndex = static_cast<uint32_t>(curr_prim.GetMaterialIndex()),
 				.IsCPUShading = is_cpu_shading,
 			};
 

@@ -24,7 +24,8 @@ public:
 	void Start(const VulkanRaytracerScene* scene, const ImageResource* final_render_target, const VkExtent3D& extemt, const uint32_t max_samples, const uint32_t cam_index, const bool is_cpu_shading);
 	void Stop();
 
-	FrameObjects* GetFrameObjects() const;
+	const FrameObjects* GetFrameObjects() const;
+	const ImageResource* GetAccumRenderTarget() const;
 
 private:
 	void InitializeResources(const VkExtent3D& extent);

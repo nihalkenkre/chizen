@@ -33,7 +33,8 @@ void Utils_ChangeImageLayout(
 	const VkImageLayout old_layout, const VkImageLayout new_layout,
 	const uint32_t src_q_fly_idx, const uint32_t dst_q_fly_idx,
 	const VkImageAspectFlags aspect_mask,
-	const VkImage& image);
+	const VkImage& image
+);
 
 void Utils_InsertMemoryBarrier(
 	const VkCommandBuffer cmd_buff,

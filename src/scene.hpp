@@ -35,7 +35,7 @@ public:
 				const size_t positions_size, const size_t positions_offset,
 				const size_t vertices_data_size, const size_t vertices_data_offset, const size_t vertex_count,
 				const size_t indices_size, const size_t indices_offset, const size_t index_count, const VkIndexType index_type,
-				const uint32_t MaterialIndex
+				const size_t material_index
 			);
 
 			size_t GetPositionsSize() const;
@@ -49,7 +49,7 @@ public:
 			size_t GetVertexCount() const;
 			size_t GetIndexCount() const;
 
-			uint32_t GetMaterialIndex() const;
+			size_t GetMaterialIndex() const;
 
 		private:
 			size_t mPositionsSize = 0;
@@ -62,7 +62,7 @@ public:
 			VkIndexType mIndexType = VK_INDEX_TYPE_UINT16;
 			size_t mVertexCount = 0;
 			size_t mIndexCount = 0;
-			uint32_t mMaterialIndex = 0;
+			size_t mMaterialIndex = 0;
 		};
 
 		Mesh(std::vector<Scene::Mesh::Primitive> primitives);
