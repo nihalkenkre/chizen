@@ -10,14 +10,14 @@ class VulkanScene;
 class ViewportScene
 {
 public:
-	virtual void Render(const VkCommandBuffer cmd_buff, const uint32_t cam_index, const bool is_cpu_shading) const = 0;
+	virtual void Render(const VkCommandBuffer cmd_buff, const uint32_t cam_index, const bool IsCPUShading) const = 0;
 	virtual ~ViewportScene() noexcept {}
 };
 
 class ViewportEmptyScene : public ViewportScene
 {
 public:
-	void Render(const VkCommandBuffer cmd_buff, const uint32_t cam_index, const bool is_cpu_shading) const override {}
+	void Render(const VkCommandBuffer cmd_buff, const uint32_t cam_index, const bool IsCPUShading) const override {}
 };
 
 class ViewportWorldScene : public ViewportScene

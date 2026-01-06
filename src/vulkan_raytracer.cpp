@@ -82,7 +82,7 @@ void VulkanRaytracer::RecreateRenderResources(const VkExtent3D& extent)
 	InitializeResources(extent);
 }
 
-void VulkanRaytracer::Start(const VulkanRaytracerScene* scene, const ImageResource* final_render_target, const VkExtent3D& extent, const uint32_t max_samples, const uint32_t cam_index)
+void VulkanRaytracer::Start(const VulkanRaytracerScene* scene, const ImageResource* final_render_target, const VkExtent3D& extent, const uint32_t max_samples, const uint32_t cam_index, const bool is_cpu_shading)
 {
 	VkDevice device = mDevice;
 	VkCommandBuffer cmd_buff = mFrameObjects->GetCommandBuffer();
@@ -137,7 +137,7 @@ void VulkanRaytracer::Start(const VulkanRaytracerScene* scene, const ImageResour
 			vkCmdClearColorImage(cmd_buff, mAccumRenderTarget->GetVkImage(), VK_IMAGE_LAYOUT_GENERAL, &clear_color, std::size(ranges), ranges);
 		}
 
-		scene->Render(cmd_buff, mRandomStates.get(), mAccumRenderTarget.get(), final_render_target, s, extent.width, extent.height, cam_index);
+		scene->Render(cmd_buff, mRandomStates.get(), mAccumRenderTarget.get(), final_render_target, s, extent.width, extent.height, cam_index, is_cpu_shading);
 
 		VK_CHECK("end rt cmd buffer", vkEndCommandBuffer(cmd_buff));
 

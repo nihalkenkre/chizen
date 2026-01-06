@@ -4,7 +4,7 @@
 #include "resources.hpp"
 #include <stb_image.h>
 
-VulkanScene::VulkanScene(const Scene& scene, const VulkanInterface* vulkan_interface, const bool is_cpu_shading)
+VulkanScene::VulkanScene(const Scene& scene, const VulkanInterface* vulkan_interface, const bool IsCPUShading)
 	: mDevice(vulkan_interface->GetVkDevice())
 {
 	VmaAllocator allocator = vulkan_interface->GetVmaAllocator();
@@ -82,7 +82,7 @@ VulkanScene::VulkanScene(const Scene& scene, const VulkanInterface* vulkan_inter
 	transfer_helpers->CopyBufferToBuffer(staging_materials_data->GetVkBuffer(), mMaterialsData->GetVkBuffer(), mMaterials.size() * sizeof(Material));
 	transfer_helpers->SubmitBatch();
 
-	if (!is_cpu_shading)
+	if (!IsCPUShading)
 	{
 		mImages.reserve(scene.GetImages().size());
 		for (const auto& image : scene.GetImages())

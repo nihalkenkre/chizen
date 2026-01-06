@@ -13,6 +13,7 @@ struct Material
 struct PushConstants
 {
     uint current_sample;
+    uint is_cpu_shading;
 }
 
 [[vk::binding(0, 0)]]
@@ -38,14 +39,14 @@ PushConstants pc;
 
 struct Payload
 {
-    float3 hit_value;
+    float4 hit_value;
 };
 
 struct CH_SBT_Record
 {
-    float3* normals;
-    float2* uv0s;
-    uint3* indices;
+    float3 *normals;
+    float2 *uv0s;
+    uint3 *indices;
     uint64_t material_index;
 };
 
@@ -92,7 +93,7 @@ void raygen()
 
     TraceRay(tlas, RAY_FLAG_FORCE_OPAQUE, 0xFF, 0, 0, 0, ray_desc, payload);
 
-    accum_target[launch_id.xy] += float4(payload.hit_value, 1);
+    accum_target[launch_id.xy] += payload.hit_value;
     final_target[launch_id.xy] = accum_target[launch_id.xy] / pc.current_sample;
 }
 
@@ -105,7 +106,7 @@ void miss(inout Payload p)
     uint flat_index = launch_id.y * launch_size.x + launch_id.x;
     uint4 z = rand_states[flat_index];
 
-    p.hit_value = float3(HybridTaus(z), HybridTaus(z), HybridTaus(z));
+    p.hit_value = float4(HybridTaus(z), HybridTaus(z), HybridTaus(z), HybridTaus(z));
     // p.hit_value = float3(0.2f, 0.2f, 0.2f);
     rand_states[flat_index] = z;
 }
@@ -130,10 +131,13 @@ void closesthit(inout Payload p, in Attributes attribs)
                     ch_sbt.normals[index_triplet.z] * bary_coords.y;
 
     float4 base_color = materials[ch_sbt.material_index].base_color_factor;
-    if (materials[ch_sbt.material_index].base_color_index.x >= 0)
+    if (pc.is_cpu_shading == 0)
     {
-        base_color *= textures[NonUniformResourceIndex(materials[ch_sbt.material_index].base_color_index.x)].SampleLevel(uv, 0);
+        if (materials[ch_sbt.material_index].base_color_index.x >= 0)
+        {
+            base_color *= textures[NonUniformResourceIndex(materials[ch_sbt.material_index].base_color_index.x)].SampleLevel(uv, 0);
+        }
     }
 
-    p.hit_value = base_color.xyz;
+    p.hit_value = base_color;
 }

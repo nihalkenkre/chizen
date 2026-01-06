@@ -67,12 +67,10 @@ struct FSOutput
 [shader("fragment")]
 FSOutput fragment_main(VSOutput in)
 {
-    float4 base_color = float4(0.5f, 0.5, 0.5f, 1.f);
-    printf("cpu_shading: %d\n", pc.is_cpu_shading);
+    float4 base_color = materials[pc.material_index].base_color_factor;
 
     if (pc.is_cpu_shading == 0)
     {
-        base_color = materials[pc.material_index].base_color_factor;
         if (materials[pc.material_index].base_color_index.x >= 0)
         {
             base_color *= textures[NonUniformResourceIndex(materials[pc.material_index].base_color_index.x)].Sample(in.uv);

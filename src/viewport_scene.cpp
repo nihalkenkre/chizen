@@ -24,8 +24,8 @@ public:
 
 	struct PushConstants
 	{
-		uint32_t material_index;
-		uint32_t is_cpu_shading;
+		uint32_t MaterialIndex;
+		uint32_t IsCPUShading;
 	};
 
 private:
@@ -691,8 +691,8 @@ void ViewportWorldScene::Render(const VkCommandBuffer cmd_buff, const uint32_t c
 			vkCmdBindDescriptorSets2KHR(cmd_buff, &bind_ds_info);
 
 			const ViewportScenePipelineData::PushConstants pc = {
-				.material_index = curr_prim.GetMaterialIndex(),
-				.is_cpu_shading = is_cpu_shading,
+				.MaterialIndex = curr_prim.GetMaterialIndex(),
+				.IsCPUShading = is_cpu_shading,
 			};
 
 			const VkPushConstantsInfoKHR pc_info = {

@@ -37,7 +37,7 @@ public:
 				const size_t texcoords_size, const size_t texcoords_offset,
 				const size_t vertex_count,
 				const size_t indices_size, const size_t indices_offset, const size_t index_count, const VkIndexType index_type,
-				const uint32_t material_index
+				const uint32_t MaterialIndex
 			);
 
 			size_t GetPositionsSize() const;
