@@ -87,13 +87,28 @@ VulkanScene::VulkanScene(const Scene& scene, const VulkanInterface* vulkan_inter
 		mImages.reserve(scene.GetImages().size());
 		for (const auto& image : scene.GetImages())
 		{
-			mImages.push_back(VulkanScene::Image(image, scene.GetImagesData(), vulkan_interface));
+			mImages.push_back(VulkanScene::Image(std::string(SDL_GetBasePath()).append("/images/one_pix.jpg").c_str(), vulkan_interface, VK_FORMAT_R8G8B8A8_SRGB));
+		}
+
+		for (const auto& material : mMaterials)
+		{
+			auto base_normal_index = material.GetBaseNormalImageIndex();
+
+			if (base_normal_index.x >= 0)
+				mImages[base_normal_index.x] = VulkanScene::Image(
+					scene.GetImages()[base_normal_index.x], scene.GetImagesData(), vulkan_interface, VK_FORMAT_R8G8B8A8_SRGB
+				);
+
+			if (base_normal_index.y >= 0)
+				mImages[base_normal_index.y] = VulkanScene::Image(
+					scene.GetImages()[base_normal_index.y], scene.GetImagesData(), vulkan_interface, VK_FORMAT_R8G8B8A8_UNORM
+				);
 		}
 	}
 
 	if (mImages.size() == 0)
 	{
-		mImages.push_back(VulkanScene::Image(std::string(SDL_GetBasePath()).append("/images/one_pix.jpg").c_str(), vulkan_interface));
+		mImages.push_back(VulkanScene::Image(std::string(SDL_GetBasePath()).append("/images/one_pix.jpg").c_str(), vulkan_interface, VK_FORMAT_R8G8B8A8_SRGB));
 	}
 
 	mMeshes.reserve(scene.GetMeshes().size());
@@ -169,7 +184,7 @@ const std::vector<VulkanScene::Mesh::Primitive>& VulkanScene::Mesh::GetPrimitive
 	return mPrimitives;
 }
 
-VulkanScene::Image::Image(const char* image_path, const VulkanInterface* vulkan_interface)
+VulkanScene::Image::Image(const char* image_path, const VulkanInterface* vulkan_interface, const VkFormat format)
 {
 	VkDevice device = vulkan_interface->GetVkDevice();
 	VmaAllocator allocator = vulkan_interface->GetVmaAllocator();
@@ -181,8 +196,6 @@ VulkanScene::Image::Image(const char* image_path, const VulkanInterface* vulkan_
 
 	uint32_t w, h, c;
 	uint8_t* pixels = stbi_load(image_path, reinterpret_cast<int*>(&w), reinterpret_cast<int*>(&h), reinterpret_cast<int*>(&c), 4);
-
-	VkFormat format = VK_FORMAT_R8G8B8A8_SRGB;
 
 	mImageResource = std::make_unique<ImageResource>(
 		device, VkExtent3D{ w, h, 1 }, format, VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_SAMPLED_BIT,
@@ -216,10 +229,11 @@ VulkanScene::Image::Image(const char* image_path, const VulkanInterface* vulkan_
 	transfer_helpers->SubmitBatch();
 }
 
-VulkanScene::Image::Image(const Scene::Image& image, const std::vector<uint8_t>& images_data, const VulkanInterface* vulkan_interface)
+VulkanScene::Image::Image(const Scene::Image& image, const std::vector<uint8_t>& images_data, const VulkanInterface* vulkan_interface, const VkFormat format)
 {
 	VkDevice device = vulkan_interface->GetVkDevice();
 	VmaAllocator allocator = vulkan_interface->GetVmaAllocator();
+
 	auto queue_family_indices = std::vector<uint32_t>{
 		vulkan_interface->GetPhysicalDeviceData()->GraphicsQueueFamilyIndex,
 		vulkan_interface->GetPhysicalDeviceData()->ComputeQueueFamilyIndex,
@@ -232,14 +246,10 @@ VulkanScene::Image::Image(const Scene::Image& image, const std::vector<uint8_t>&
 		&w, &h, &c, 4
 	);
 
-	VkFormat format = VK_FORMAT_R8G8B8A8_SRGB;
-	if (image.GetName().contains("normal") || image.GetName().contains("NRM") || image.GetName().contains("nrm"))
-	{
-		format = VK_FORMAT_R8G8B8A8_SNORM;
-	}
-
 	mImageResource = std::make_unique<ImageResource>(
-		device, VkExtent3D{ static_cast<uint32_t>(w), static_cast<uint32_t>(h), 1 }, format, VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_SAMPLED_BIT,
+		device, VkExtent3D{ static_cast<uint32_t>(w), static_cast<uint32_t>(h), 1 },
+		format,
+		VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_SAMPLED_BIT,
 		allocator,
 		queue_family_indices,
 		"texture"

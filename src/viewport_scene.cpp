@@ -483,10 +483,10 @@ const std::vector<VkDescriptorSetLayout>& ViewportScenePipelineData::GetDescript
 	return mDescriptorSetLayouts;
 }
 
-ViewportWorldScene::ViewportWorldScene(const VulkanScene* scene, const VulkanInterface* vulkan_interface)
-	: mDevice(vulkan_interface->GetVkDevice()), mScene(scene)
+ViewportWorldScene::ViewportWorldScene(const VulkanScene* vulkan_scene, const VulkanInterface* vulkan_interface)
+	: mDevice(vulkan_interface->GetVkDevice()), mScene(vulkan_scene)
 {
-	mPipelineData = std::make_unique<ViewportScenePipelineData>(mDevice, std::max(static_cast<size_t>(1), scene->GetImages().size()), "Scene");
+	mPipelineData = std::make_unique<ViewportScenePipelineData>(mDevice, std::max(static_cast<size_t>(1), vulkan_scene->GetImages().size()), "Scene");
 
 	VmaAllocator allocator = vulkan_interface->GetVmaAllocator();
 
@@ -502,7 +502,7 @@ ViewportWorldScene::ViewportWorldScene(const VulkanScene* scene, const VulkanInt
 
 	const VkDescriptorPoolSize imgs_desc_pool_size = {
 		.type = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER,
-		.descriptorCount = static_cast<uint32_t>(std::max(static_cast<size_t>(1), scene->GetImages().size())),
+		.descriptorCount = static_cast<uint32_t>(std::max(static_cast<size_t>(1), vulkan_scene->GetImages().size())),
 	};
 
 	const VkDescriptorPoolSize pool_sizes[] = {
@@ -527,7 +527,7 @@ ViewportWorldScene::ViewportWorldScene(const VulkanScene* scene, const VulkanInt
 	const std::vector<VkDescriptorSetLayout>& desc_set_layouts = mPipelineData->GetDescriptorSetLayouts();
 
 	mCameraDescBuffer = {
-		.buffer = scene->GetUniformData()->GetVkBuffer(),
+		.buffer = vulkan_scene->GetUniformData()->GetVkBuffer(),
 		.offset = 0,
 		.range = sizeof(glm::mat4),
 	};
@@ -579,7 +579,7 @@ ViewportWorldScene::ViewportWorldScene(const VulkanScene* scene, const VulkanInt
 	vkUpdateDescriptorSets(mDevice, 1, &model_ds_write, 0, nullptr);
 
 	const uint32_t tex_desc_counts[] = {
-		static_cast<uint32_t>(std::max(static_cast<size_t>(1), scene->GetImages().size()))
+		static_cast<uint32_t>(std::max(static_cast<size_t>(1), vulkan_scene->GetImages().size()))
 	};
 
 	const VkDescriptorSetVariableDescriptorCountAllocateInfoEXT tex_ds_vdcai = {
@@ -603,14 +603,14 @@ ViewportWorldScene::ViewportWorldScene(const VulkanScene* scene, const VulkanInt
 #endif // _DEBUG
 
 	const VkDescriptorBufferInfo mat_desc_buff = {
-		.buffer = scene->GetMaterialsData()->GetVkBuffer(),
+		.buffer = vulkan_scene->GetMaterialsData()->GetVkBuffer(),
 		.range = VK_WHOLE_SIZE,
 	};
 
 	std::vector<VkDescriptorImageInfo> image_descs;
-	image_descs.reserve(scene->GetImages().size());
+	image_descs.reserve(vulkan_scene->GetImages().size());
 
-	for (const auto& image : scene->GetImages())
+	for (const auto& image : vulkan_scene->GetImages())
 	{
 		image_descs.push_back(image.GetImageResource()->GetDescriptorInfo());
 	}

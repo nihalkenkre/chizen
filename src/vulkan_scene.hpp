@@ -33,8 +33,8 @@ public:
    class Image : public Scene::Image
    {
 	public:
-		Image(const char* image_path, const VulkanInterface* vulkan_interface);
-		Image(const Scene::Image& image, const std::vector<uint8_t>& images_data, const VulkanInterface* vulkan_interface);
+		Image(const char* image_path, const VulkanInterface* vulkan_interface, const VkFormat format);
+		Image(const Scene::Image& image, const std::vector<uint8_t>& images_data, const VulkanInterface* vulkan_interface, const VkFormat format);
 
 		const ImageResource* GetImageResource() const;
 

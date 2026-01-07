@@ -7,7 +7,7 @@ struct CamInfo
 struct Material
 {
     float4 base_color_factor;
-    int4 base_color_index;
+    int4 base_normal_color_index;
 };
 
 struct PushConstants
@@ -145,9 +145,9 @@ void closesthit(inout Payload p, in Attributes attribs)
 
     float3 b = cross(n, t);
 
-    t = mul(ObjectToWorld(), float4(t, 0)).xyz;
-    b = mul(ObjectToWorld(), float4(b, 0)).xyz;
-    n = mul(ObjectToWorld(), float4(n, 0)).xyz;
+    t = normalize(mul(ObjectToWorld(), float4(t, 0)).xyz);
+    b = normalize(mul(ObjectToWorld(), float4(b, 0)).xyz);
+    n = normalize(mul(ObjectToWorld(), float4(n, 0)).xyz);
 
     float3x3 tbn = transpose(float3x3(t, b, n));
 
@@ -155,11 +155,20 @@ void closesthit(inout Payload p, in Attributes attribs)
 
     if (pc.is_cpu_shading == 0)
     {
-        if (materials[ch_sbt.material_index].base_color_index.x >= 0)
+        if (materials[ch_sbt.material_index].base_normal_color_index.x >= 0)
         {
-            base_color *= textures[NonUniformResourceIndex(materials[ch_sbt.material_index].base_color_index.x)].SampleLevel(uv, 0);
+            base_color *= textures[NonUniformResourceIndex(materials[ch_sbt.material_index].base_normal_color_index.x)].SampleLevel(uv, 0);
+        }
+
+        if (materials[ch_sbt.material_index].base_normal_color_index.y >= 0)
+        {
+            float3 normal = mul(
+                tbn,
+                textures[NonUniformResourceIndex(materials[ch_sbt.material_index].base_normal_color_index.y)].SampleLevel(uv, 0).xyz);
+            // base_color *= dot(normal, float3(-1, -1, -1));
+            base_color = float4(normal, 1);
         }
     }
 
-    p.hit_value = float4(mul(tbn, float3(0, 0, 1)), 1);
+    p.hit_value = base_color;
 }

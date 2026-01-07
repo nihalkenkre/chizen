@@ -112,11 +112,13 @@ public:
 	{
 	public:
 		Material() {}
-		Material(int32_t base_index, glm::vec4 base_color_factor) : mBaseImageIndex(base_index, 0, 0, 0), mBaseColorFactor(base_color_factor) {}
+		Material(const int32_t base_index, const int32_t normal_index, const glm::vec4 base_color_factor) : mBaseNormalImageIndex(base_index, normal_index, -1, -1), mBaseColorFactor(base_color_factor) {}
+
+		glm::ivec4 GetBaseNormalImageIndex() const;
 
 	private:
 		glm::vec4 mBaseColorFactor = glm::vec4(-1.f);
-		glm::ivec4 mBaseImageIndex = glm::ivec4(-1);
+		glm::ivec4 mBaseNormalImageIndex = glm::ivec4(-1, -1, -1, -1);
 	};
 
 	class Image

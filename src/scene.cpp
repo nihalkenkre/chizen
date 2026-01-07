@@ -23,7 +23,7 @@ Scene::Scene(const std::string& path, const VkDeviceSize uniform_buffer_alignmen
 	}
 
 	// Default material
-	mMaterials.push_back(Scene::Material(-1, glm::vec4(1, 0, 0, 1)));
+	mMaterials.push_back(Scene::Material(-1, -1, glm::vec4(1, 0, 0, 1)));
 
 	for (size_t n = 0; n < gltf->nodes_count; ++n)
 	{
@@ -427,9 +427,14 @@ void Scene::AddMaterial(const cgltf_data* gltf, const cgltf_material* material)
 			base_color_index = static_cast<int32_t>(cgltf_image_index(gltf, material->pbr_metallic_roughness.base_color_texture.texture->image));
 		}
 		std::memcpy(&base_color_factor, material->pbr_metallic_roughness.base_color_factor, sizeof(glm::vec4));
+
+		if (material->normal_texture.texture != nullptr)
+		{
+			normal_color_index = static_cast<int32_t>(cgltf_image_index(gltf, material->normal_texture.texture->image));
+		}
 	}
 
-	mMaterials.push_back(Scene::Material(base_color_index, base_color_factor));
+	mMaterials.push_back(Scene::Material(base_color_index, normal_color_index, base_color_factor));
 }
 
 void Scene::AddImage(const cgltf_image* image, const std::string& path)
@@ -619,4 +624,9 @@ size_t Scene::Mesh::Primitive::GetIndexCount() const
 size_t Scene::Mesh::Primitive::GetMaterialIndex() const
 {
 	return mMaterialIndex;
+}
+
+glm::ivec4 Scene::Material::GetBaseNormalImageIndex() const
+{
+	return mBaseNormalImageIndex;
 }
