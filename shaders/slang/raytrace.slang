@@ -153,21 +153,25 @@ void closesthit(inout Payload p, in Attributes attribs)
 
     float4 base_color = materials[ch_sbt.material_index].base_color_factor;
 
+    float3 l = float3(-1, 1, 1);
+
     if (pc.is_cpu_shading == 0)
     {
         if (materials[ch_sbt.material_index].base_normal_color_index.x >= 0)
+        if (materials[ch_sbt.material_index].base_normal_color_index.x >= 0)
         {
+            base_color *= textures[NonUniformResourceIndex(materials[ch_sbt.material_index].base_normal_color_index.x)].SampleLevel(uv, 0);
             base_color *= textures[NonUniformResourceIndex(materials[ch_sbt.material_index].base_normal_color_index.x)].SampleLevel(uv, 0);
         }
 
         if (materials[ch_sbt.material_index].base_normal_color_index.y >= 0)
         {
-            float3 normal = mul(
+            n = mul(
                 tbn,
-                textures[NonUniformResourceIndex(materials[ch_sbt.material_index].base_normal_color_index.y)].SampleLevel(uv, 0).xyz);
-            // base_color *= dot(normal, float3(-1, -1, -1));
-            base_color = float4(normal, 1);
+                textures[NonUniformResourceIndex(materials[ch_sbt.material_index].base_normal_color_index.y)].SampleLevel(uv, 0).xyz * 2 - 1);
         }
+
+        base_color.xyz *= dot(n, l);
     }
 
     p.hit_value = base_color;
