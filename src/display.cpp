@@ -10,7 +10,7 @@ class DisplayPipelineData
 {
 public:
 	DisplayPipelineData() = delete;
-	DisplayPipelineData(const VulkanInterface* vulkan_interface, const std::string& name);
+	DisplayPipelineData(const VkDevice device, const std::string& name);
 
 	DisplayPipelineData(const DisplayPipelineData& other) = delete;
 	DisplayPipelineData& operator=(const DisplayPipelineData& other) = delete;
@@ -36,10 +36,9 @@ private:
 	VkDevice mDevice = VK_NULL_HANDLE;
 };
 
-DisplayPipelineData::DisplayPipelineData(const VulkanInterface* vulkan_interface, const std::string& name)
+DisplayPipelineData::DisplayPipelineData(const VkDevice device, const std::string& name)
+	:mDevice(device)
 {
-	mDevice = vulkan_interface->GetVkDevice();
-
 	mDescriptorSetLayouts.resize(1);
 
 	Slang::ComPtr<slang::IGlobalSession> slang_global_session;
@@ -129,7 +128,7 @@ DisplayPipelineData::DisplayPipelineData(const VulkanInterface* vulkan_interface
 	};
 
 	VkShaderModule vert_mod = VK_NULL_HANDLE;
-	VK_CHECK("create vert shader module", vkCreateShaderModule(vulkan_interface->GetVkDevice(), &vert_mod_ci, nullptr, &vert_mod));
+	VK_CHECK("create vert shader module", vkCreateShaderModule(mDevice, &vert_mod_ci, nullptr, &vert_mod));
 
 	Slang::ComPtr<slang::IEntryPoint> frag_entry_point;
 	slang_module->findEntryPointByName("fragment_main", frag_entry_point.writeRef());
@@ -154,7 +153,7 @@ DisplayPipelineData::DisplayPipelineData(const VulkanInterface* vulkan_interface
 	};
 
 	VkShaderModule frag_mod = VK_NULL_HANDLE;
-	VK_CHECK("create frag shader module", vkCreateShaderModule(vulkan_interface->GetVkDevice(), &frag_mod_ci, nullptr, &frag_mod));
+	VK_CHECK("create frag shader module", vkCreateShaderModule(mDevice, &frag_mod_ci, nullptr, &frag_mod));
 
 	/*std::filesystem::path vert_path = std::string(current_path).append("/shaders/glsl/display.vert.glsl.spv");
 	VkShaderModule vert_mod = VK_NULL_HANDLE;
@@ -323,7 +322,7 @@ DisplayPipelineData::DisplayPipelineData(const VulkanInterface* vulkan_interface
 		.pBindings = dsl_binds,
 	};
 
-	VK_CHECK("create dsl", vkCreateDescriptorSetLayout(vulkan_interface->GetVkDevice(), &dsl_ci, nullptr, &mDescriptorSetLayouts[0]));
+	VK_CHECK("create dsl", vkCreateDescriptorSetLayout(mDevice, &dsl_ci, nullptr, &mDescriptorSetLayouts[0]));
 
 	const VkPushConstantRange pc_rngs[] = {
 		{
@@ -340,7 +339,7 @@ DisplayPipelineData::DisplayPipelineData(const VulkanInterface* vulkan_interface
 		.pPushConstantRanges = pc_rngs,
 	};
 
-	VK_CHECK("create graphics pipeline layout", vkCreatePipelineLayout(vulkan_interface->GetVkDevice(), &lyt_ci, nullptr, &mPipelineLayout));
+	VK_CHECK("create graphics pipeline layout", vkCreatePipelineLayout(mDevice, &lyt_ci, nullptr, &mPipelineLayout));
 
 	const VkFormat col_attach_forms[] = {
 		VK_FORMAT_R8G8B8A8_UNORM,
@@ -369,10 +368,10 @@ DisplayPipelineData::DisplayPipelineData(const VulkanInterface* vulkan_interface
 		},
 	};
 
-	VK_CHECK("create graphics pipeline", vkCreateGraphicsPipelines(vulkan_interface->GetVkDevice(), VK_NULL_HANDLE, std::size(cis), cis, nullptr, &mPipeline));
+	VK_CHECK("create graphics pipeline", vkCreateGraphicsPipelines(mDevice, VK_NULL_HANDLE, std::size(cis), cis, nullptr, &mPipeline));
 
-	vkDestroyShaderModule(vulkan_interface->GetVkDevice(), vert_mod, nullptr);
-	vkDestroyShaderModule(vulkan_interface->GetVkDevice(), frag_mod, nullptr);
+	vkDestroyShaderModule(mDevice, vert_mod, nullptr);
+	vkDestroyShaderModule(mDevice, frag_mod, nullptr);
 
 #ifdef _DEBUG
 	Utils_SetObjectName(mDevice, VK_OBJECT_TYPE_PIPELINE, reinterpret_cast<uint64_t>(mPipeline), std::string(name).append(" pipeline").c_str());
@@ -419,7 +418,7 @@ Display::Display(const VulkanInterface* vulkan_interface, const ImageResource* f
 	mQueue = vulkan_interface->GetDevice()->GetGraphicsQueue();
 	mDevice = vulkan_interface->GetVkDevice();
 	mFrameObjects = std::make_unique<FrameObjects>(mDevice, vulkan_interface->GetPhysicalDeviceData()->GraphicsQueueFamilyIndex, mMaxFramesInFlight, "display frame objects");
-	mPipelineData = std::make_unique<DisplayPipelineData>(vulkan_interface, "display pipeline");
+	mPipelineData = std::make_unique<DisplayPipelineData>(vulkan_interface->GetVkDevice(), "display pipeline");
 
 	mAcquireSignalSemaphores.resize(mMaxFramesInFlight, VK_NULL_HANDLE);
 	mPresentWaitSemaphores.resize(mMaxFramesInFlight, VK_NULL_HANDLE);
@@ -774,4 +773,10 @@ void Display::Render(
 	VK_CHECK("gfx q wait idle", vkQueueWaitIdle(mQueue));
 
 	mFrameObjects->NextFrame();
+}
+
+void Display::ReloadShaders()
+{
+	mPipelineData.reset();
+	mPipelineData = std::make_unique<DisplayPipelineData>(mDevice, "display");
 }

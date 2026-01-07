@@ -128,7 +128,7 @@ void ImGUIState::Render(const VkCommandBuffer cmd_buff)
 	ImVec2 center = ImGui::GetMainViewport()->GetCenter();
 	ImGui::SetNextWindowPos(center, ImGuiCond_Appearing, ImVec2(0.5f, 0.5f));
 
-	if (ImGui::BeginPopupModal("Reload", nullptr, ImGuiWindowFlags_AlwaysAutoResize))
+	if (ImGui::BeginPopupModal("Reload Scene", nullptr, ImGuiWindowFlags_AlwaysAutoResize))
 	{
 		ImGui::Text("The loaded file should be an ASCII GLTF file...");
 		ImGui::Separator();
@@ -139,13 +139,13 @@ void ImGUIState::Render(const VkCommandBuffer cmd_buff)
 		ImGui::EndPopup();
 	}
 
-	if (ImGui::Button("Reload"))
+	if (ImGui::Button("Reload Scene"))
 	{
 		if (!file_path.empty())
 		{
 			if (mCPUShading && file_path.ends_with("glb"))
 			{
-				ImGui::OpenPopup("Reload");
+				ImGui::OpenPopup("Reload Scene");
 			}
 			else
 			{
@@ -153,6 +153,11 @@ void ImGUIState::Render(const VkCommandBuffer cmd_buff)
 				SDL_CHECK(SDL_PushEvent(&events.FileOpen));
 			}
 		}
+	}
+
+	if (ImGui::Button("Reload Shaders"))
+	{
+		SDL_CHECK(SDL_PushEvent(&events.ReloadShaders));
 	}
 
 	if (ImGui::InputInt2("Render Dims", mRenderTargetExtent))

@@ -278,9 +278,9 @@ void App::ProcessEvent(SDL_Event* event)
 	}
 	else if (event->type == events.RenderSampleDone.type)
 	{
-		TransferHelpers* transfer_helpers = mVulkanInterface->GetTransferHelpers();
 		if (mRenderType == 1 || mRenderType == 2)
 		{
+			TransferHelpers* transfer_helpers = mVulkanInterface->GetTransferHelpers();
 			transfer_helpers->RecordBatch();
 			transfer_helpers->CopyBufferToImage(
 				mStagingRenderTarget->GetVkBuffer(), mFinalRenderTarget->GetVkImage(), mFinalRenderTargetExtent
@@ -288,6 +288,18 @@ void App::ProcessEvent(SDL_Event* event)
 			transfer_helpers->SubmitBatch();
 		}
 		mDisplayRender = true;
+	}
+	else if (event->type == events.ReloadShaders.type)
+	{
+		VK_CHECK("device wait idle", vkDeviceWaitIdle(mVulkanInterface->GetVkDevice()));
+		if (mViewportScene != nullptr)
+			mViewportScene->ReloadShaders();
+
+		if (mDisplay != nullptr)
+			mDisplay->ReloadShaders();
+
+		if (mVulkanRaytracerScene != nullptr)
+			mVulkanRaytracerScene->ReloadShaders();
 	}
 
 	mImGUIState->ProcessEvent(event);

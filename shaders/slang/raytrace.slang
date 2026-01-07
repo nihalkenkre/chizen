@@ -18,6 +18,7 @@ struct PushConstants
 
 struct VertexData
 {
+    float4 tangent;
     float3 normal;
     float2 uv;
 };
@@ -130,11 +131,28 @@ void closesthit(inout Payload p, in Attributes attribs)
     float2 uv = ch_sbt.vertex_data[index_triplet.x].uv * bary_coords.z +
                 ch_sbt.vertex_data[index_triplet.y].uv * bary_coords.x +
                 ch_sbt.vertex_data[index_triplet.z].uv * bary_coords.y;
-    float3 normal = ch_sbt.vertex_data[index_triplet.x].normal * bary_coords.z +
-                    ch_sbt.vertex_data[index_triplet.y].normal * bary_coords.x +
-                    ch_sbt.vertex_data[index_triplet.z].normal * bary_coords.y;
+
+    float4 tangent = ch_sbt.vertex_data[index_triplet.x].tangent * bary_coords.z +
+                     ch_sbt.vertex_data[index_triplet.y].tangent * bary_coords.x +
+                     ch_sbt.vertex_data[index_triplet.z].tangent * bary_coords.y;
+
+    float3 n = ch_sbt.vertex_data[index_triplet.x].normal * bary_coords.z +
+               ch_sbt.vertex_data[index_triplet.y].normal * bary_coords.x +
+               ch_sbt.vertex_data[index_triplet.z].normal * bary_coords.y;
+
+    float3 t = (tangent * tangent.w).xyz;
+    t = normalize(t - dot(t, n) * n);
+
+    float3 b = cross(n, t);
+
+    t = mul(ObjectToWorld(), float4(t, 0)).xyz;
+    b = mul(ObjectToWorld(), float4(b, 0)).xyz;
+    n = mul(ObjectToWorld(), float4(n, 0)).xyz;
+
+    float3x3 tbn = transpose(float3x3(t, b, n));
 
     float4 base_color = materials[ch_sbt.material_index].base_color_factor;
+
     if (pc.is_cpu_shading == 0)
     {
         if (materials[ch_sbt.material_index].base_color_index.x >= 0)
@@ -143,5 +161,5 @@ void closesthit(inout Payload p, in Attributes attribs)
         }
     }
 
-    p.hit_value = base_color;
+    p.hit_value = float4(mul(tbn, float3(0, 0, 1)), 1);
 }

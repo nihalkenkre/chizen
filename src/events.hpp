@@ -10,6 +10,7 @@ struct Events
 	SDL_Event RenderStopped = {};
 
 	SDL_Event RenderSampleDone = {};
+	SDL_Event ReloadShaders = {};
 };
 
 extern "C" Events events;

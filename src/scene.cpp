@@ -239,6 +239,7 @@ void Scene::AddMesh(const cgltf_data* gltf, const cgltf_mesh* mesh)
 
 	struct VertexData
 	{
+		glm::vec4 tangent;
 		glm::vec3 normal;
 		glm::vec2 uv;
 	};
@@ -257,8 +258,6 @@ void Scene::AddMesh(const cgltf_data* gltf, const cgltf_mesh* mesh)
 
 		VkIndexType index_type = VK_INDEX_TYPE_UINT32;
 		mVertexData.resize(ALIGNED_SIZE(mVertexData.size(), sizeof(uint32_t)));
-
-		std::vector<VertexData> vertices_data;
 
 		if (curr_prim->indices->component_type == cgltf_component_type_r_32u)
 		{
@@ -299,6 +298,8 @@ void Scene::AddMesh(const cgltf_data* gltf, const cgltf_mesh* mesh)
 			mVertexData.append_range(index_data);
 		}
 
+		std::vector<VertexData> vertices_data;
+		std::vector<glm::vec4> tangents;
 		std::vector<glm::vec3> normals;
 		std::vector<glm::vec2> uvs;
 
@@ -329,6 +330,15 @@ void Scene::AddMesh(const cgltf_data* gltf, const cgltf_mesh* mesh)
 					curr_attr->data->buffer_view->size
 				);
 			}
+			else if (std::string(curr_attr->name) == std::string("TANGENT"))
+			{
+				tangents.resize(curr_attr->data->count);
+				std::memcpy(
+					tangents.data(),
+					reinterpret_cast<uint8_t*>(curr_attr->data->buffer_view->buffer->data) + curr_attr->data->buffer_view->offset + curr_attr->data->offset,
+					curr_attr->data->buffer_view->size
+				);
+			}
 			else if (std::string(curr_attr->name) == std::string("TEXCOORD_0"))
 			{
 				uvs.resize(curr_attr->data->count);
@@ -340,10 +350,16 @@ void Scene::AddMesh(const cgltf_data* gltf, const cgltf_mesh* mesh)
 			}
 		}
 
+		if (tangents.size() == 0)
+		{
+			std::println("Please re export scene with vertex tangents");
+			continue;
+		}
+
 		for (size_t v = 0; v < vertex_count; ++v)
 		{
 			vertices_data.push_back(
-				VertexData{ .normal = normals[v], .uv = uvs[v] }
+				VertexData{ .tangent = tangents[v], .normal = normals[v], .uv = uvs[v] }
 			);
 		}
 

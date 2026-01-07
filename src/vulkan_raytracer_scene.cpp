@@ -647,106 +647,7 @@ VulkanRaytracerScene::VulkanRaytracerScene(const Scene& scene, const VulkanScene
 	Utils_SetObjectName(mDevice, VK_OBJECT_TYPE_DESCRIPTOR_POOL, reinterpret_cast<uint64_t>(mDescriptorPool), "vulkan raytracer scene descriptor pool");
 #endif // _DEBUG
 
-	const std::vector<VkDescriptorSetLayout>& desc_set_layouts = mPipelineData->GetDescriptorSetLayouts();
-
-	const VkDescriptorSetAllocateInfo cam_ds_ai = {
-		.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO,
-		.descriptorPool = mDescriptorPool,
-		.descriptorSetCount = 1,
-		.pSetLayouts = desc_set_layouts.data(),
-	};
-
-	VK_CHECK("allocate desc set", vkAllocateDescriptorSets(mDevice, &cam_ds_ai, &mCameraDescSet));
-
-#ifdef _DEBUG
-	Utils_SetObjectName(mDevice, VK_OBJECT_TYPE_DESCRIPTOR_SET, reinterpret_cast<uint64_t>(mCameraDescSet), "vulkan raytracer cam descriptor set");
-#endif // _DEBUG
-
-	const uint32_t tex_desc_counts[] = {
-		static_cast<uint32_t>(std::max(static_cast<size_t>(1), scene.GetImages().size()))
-	};
-
-	const VkDescriptorSetVariableDescriptorCountAllocateInfoEXT tex_ds_vdcai = {
-		.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_VARIABLE_DESCRIPTOR_COUNT_ALLOCATE_INFO_EXT,
-		.descriptorSetCount = std::size(tex_desc_counts),
-		.pDescriptorCounts = tex_desc_counts,
-	};
-
-	const VkDescriptorSetAllocateInfo ds_ai = {
-		.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO,
-		.pNext = &tex_ds_vdcai,
-		.descriptorPool = mDescriptorPool,
-		.descriptorSetCount = 1,
-		.pSetLayouts = desc_set_layouts.data() + 1,
-	};
-
-	VK_CHECK("allocate desc set", vkAllocateDescriptorSets(mDevice, &ds_ai, &mSceneDescSet));
-
-#ifdef _DEBUG
-	Utils_SetObjectName(mDevice, VK_OBJECT_TYPE_DESCRIPTOR_SET, reinterpret_cast<uint64_t>(mSceneDescSet), "vulkan raytracer scene descriptor set");
-#endif // _DEBUG
-
-	mCameraDescBuffer = {
-		.buffer = vulkan_scene->GetUniformData()->GetVkBuffer(),
-		.range = sizeof(glm::mat4) * 2,
-	};
-
-	const VkDescriptorBufferInfo mat_desc_buff = {
-		.buffer = vulkan_scene->GetMaterialsData()->GetVkBuffer(),
-		.range = VK_WHOLE_SIZE,
-	};
-
-	std::vector<VkDescriptorImageInfo> image_descs;
-	image_descs.reserve(vulkan_scene->GetImages().size());
-
-	for (const auto& image : vulkan_scene->GetImages())
-	{
-		image_descs.push_back(image.GetImageResource()->GetDescriptorInfo());
-	}
-
-	VkAccelerationStructureKHR tlas = mTLAS->GetAS();
-	const VkWriteDescriptorSetAccelerationStructureKHR tlas_desc_info = {
-		.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET_ACCELERATION_STRUCTURE_KHR,
-		.accelerationStructureCount = 1,
-		.pAccelerationStructures = &tlas,
-	};
-
-	const VkWriteDescriptorSet ds_writes[] = {
-		{
-			.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
-			.dstSet = mCameraDescSet,
-			.dstBinding = 0,
-			.descriptorCount = 1,
-			.descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC,
-			.pBufferInfo = &mCameraDescBuffer,
-		},
-		{
-			.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
-			.pNext = &tlas_desc_info,
-			.dstSet = mSceneDescSet,
-			.dstBinding = 3,
-			.descriptorCount = 1,
-			.descriptorType = VK_DESCRIPTOR_TYPE_ACCELERATION_STRUCTURE_KHR,
-		},
-		{
-			.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
-			.dstSet = mSceneDescSet,
-			.dstBinding = 4,
-			.descriptorCount = 1,
-			.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,
-			.pBufferInfo = &mat_desc_buff,
-		},
-		{
-			.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
-			.dstSet = mSceneDescSet,
-			.dstBinding = 5,
-			.descriptorCount = static_cast<uint32_t>(image_descs.size()),
-			.descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
-			.pImageInfo = image_descs.data(),
-		},
-	};
-
-	vkUpdateDescriptorSets(mDevice, std::size(ds_writes), ds_writes, 0, nullptr);
+	CreateDescriptorSets();
 
 	compute_helpers->RecordBatch();
 	compute_helpers->CopyBufferToBuffer(staging_rg_sbt->GetVkBuffer(), mRGSbt->GetVkBuffer(), staging_rg_sbt->GetAllocationInfo2().allocationInfo.size);
@@ -860,6 +761,13 @@ void VulkanRaytracerScene::Render(const VkCommandBuffer cmd_buff, const DeviceBu
 	vkCmdTraceRaysKHR(cmd_buff, &rg_sbt, &ms_sbt, &ch_sbt, &cl_sbt, width, height, 1);
 }
 
+void VulkanRaytracerScene::ReloadShaders()
+{
+	mPipelineData.reset();
+	mPipelineData = std::make_unique<VulkanRaytracerScenePipelineData>(mDevice, mScene->GetImages().size(), "vulkan raytracer scene");
+	CreateDescriptorSets();
+}
+
 VkAccelerationStructureKHR VulkanRaytracerScene::GetTLAS() const
 {
 	return mTLAS->GetAS();
@@ -868,4 +776,108 @@ VkAccelerationStructureKHR VulkanRaytracerScene::GetTLAS() const
 VulkanRaytracerScenePipelineData* VulkanRaytracerScene::GetPipelineData() const
 {
 	return mPipelineData.get();
+}
+
+void VulkanRaytracerScene::CreateDescriptorSets()
+{
+	const std::vector<VkDescriptorSetLayout>& desc_set_layouts = mPipelineData->GetDescriptorSetLayouts();
+
+	const VkDescriptorSetAllocateInfo cam_ds_ai = {
+		.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO,
+		.descriptorPool = mDescriptorPool,
+		.descriptorSetCount = 1,
+		.pSetLayouts = desc_set_layouts.data(),
+	};
+
+	VK_CHECK("allocate desc set", vkAllocateDescriptorSets(mDevice, &cam_ds_ai, &mCameraDescSet));
+
+#ifdef _DEBUG
+	Utils_SetObjectName(mDevice, VK_OBJECT_TYPE_DESCRIPTOR_SET, reinterpret_cast<uint64_t>(mCameraDescSet), "vulkan raytracer cam descriptor set");
+#endif // _DEBUG
+
+	const uint32_t tex_desc_counts[] = {
+		static_cast<uint32_t>(std::max(static_cast<size_t>(1), mScene->GetImages().size()))
+	};
+
+	const VkDescriptorSetVariableDescriptorCountAllocateInfoEXT tex_ds_vdcai = {
+		.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_VARIABLE_DESCRIPTOR_COUNT_ALLOCATE_INFO_EXT,
+		.descriptorSetCount = std::size(tex_desc_counts),
+		.pDescriptorCounts = tex_desc_counts,
+	};
+
+	const VkDescriptorSetAllocateInfo ds_ai = {
+		.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO,
+		.pNext = &tex_ds_vdcai,
+		.descriptorPool = mDescriptorPool,
+		.descriptorSetCount = 1,
+		.pSetLayouts = desc_set_layouts.data() + 1,
+	};
+
+	VK_CHECK("allocate desc set", vkAllocateDescriptorSets(mDevice, &ds_ai, &mSceneDescSet));
+
+#ifdef _DEBUG
+	Utils_SetObjectName(mDevice, VK_OBJECT_TYPE_DESCRIPTOR_SET, reinterpret_cast<uint64_t>(mSceneDescSet), "vulkan raytracer scene descriptor set");
+#endif // _DEBUG
+
+	mCameraDescBuffer = {
+		.buffer = mScene->GetUniformData()->GetVkBuffer(),
+		.range = sizeof(glm::mat4) * 2,
+	};
+
+	const VkDescriptorBufferInfo mat_desc_buff = {
+		.buffer = mScene->GetMaterialsData()->GetVkBuffer(),
+		.range = VK_WHOLE_SIZE,
+	};
+
+	std::vector<VkDescriptorImageInfo> image_descs;
+	image_descs.reserve(mScene->GetImages().size());
+
+	for (const auto& image : mScene->GetImages())
+	{
+		image_descs.push_back(image.GetImageResource()->GetDescriptorInfo());
+	}
+
+	VkAccelerationStructureKHR tlas = mTLAS->GetAS();
+	const VkWriteDescriptorSetAccelerationStructureKHR tlas_desc_info = {
+		.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET_ACCELERATION_STRUCTURE_KHR,
+		.accelerationStructureCount = 1,
+		.pAccelerationStructures = &tlas,
+	};
+
+	const VkWriteDescriptorSet ds_writes[] = {
+		{
+			.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
+			.dstSet = mCameraDescSet,
+			.dstBinding = 0,
+			.descriptorCount = 1,
+			.descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC,
+			.pBufferInfo = &mCameraDescBuffer,
+		},
+		{
+			.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
+			.pNext = &tlas_desc_info,
+			.dstSet = mSceneDescSet,
+			.dstBinding = 3,
+			.descriptorCount = 1,
+			.descriptorType = VK_DESCRIPTOR_TYPE_ACCELERATION_STRUCTURE_KHR,
+		},
+		{
+			.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
+			.dstSet = mSceneDescSet,
+			.dstBinding = 4,
+			.descriptorCount = 1,
+			.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,
+			.pBufferInfo = &mat_desc_buff,
+		},
+		{
+			.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
+			.dstSet = mSceneDescSet,
+			.dstBinding = 5,
+			.descriptorCount = static_cast<uint32_t>(image_descs.size()),
+			.descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
+			.pImageInfo = image_descs.data(),
+		},
+	};
+
+	vkUpdateDescriptorSets(mDevice, std::size(ds_writes), ds_writes, 0, nullptr);
 }

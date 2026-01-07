@@ -25,11 +25,14 @@ public:
 	~VulkanRaytracerScene() noexcept;
 
 	void Render(const VkCommandBuffer cmd_buff, const DeviceBufferResource* rand_states, const ImageResource* accum_target, const ImageResource* final_render_target, const uint32_t current_sample, const uint32_t width, const uint32_t height, const uint32_t cam_index, const bool is_cpu_shading) const;
+	void ReloadShaders();
 
 	VkAccelerationStructureKHR GetTLAS() const;
 	VulkanRaytracerScenePipelineData* GetPipelineData() const;
 
 private:
+	void CreateDescriptorSets();
+
 	std::unique_ptr<Pool> mScratchBufferPool = nullptr;
 	std::unique_ptr<Pool> mSBTBufferPool = nullptr;
 

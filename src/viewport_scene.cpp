@@ -219,7 +219,7 @@ ViewportScenePipelineData::ViewportScenePipelineData(const VkDevice device, cons
 		},
 		{
 			.binding = 1,
-			.stride = sizeof(glm::vec3) + sizeof(glm::vec2),
+			.stride = sizeof(glm::vec4) + sizeof(glm::vec3) + sizeof(glm::vec2),
 			.inputRate = VK_VERTEX_INPUT_RATE_VERTEX,
 		},
 	};
@@ -234,12 +234,13 @@ ViewportScenePipelineData::ViewportScenePipelineData(const VkDevice device, cons
 			.location = 1,
 			.binding = 1,
 			.format = VK_FORMAT_R32G32B32_SFLOAT,
+			.offset = sizeof(glm::vec4),
 		},
 		{
 			.location = 2,
 			.binding = 1,
 			.format = VK_FORMAT_R32G32_SFLOAT,
-			.offset = sizeof(glm::vec3),
+			.offset = sizeof(glm::vec4) + sizeof(glm::vec3),
 		},
 	};
 
@@ -729,6 +730,12 @@ void ViewportWorldScene::Render(const VkCommandBuffer cmd_buff, const uint32_t c
 			}
 		}
 	}
+}
+
+void ViewportWorldScene::ReloadShaders()
+{
+	mPipelineData.reset();
+	mPipelineData = std::make_unique<ViewportScenePipelineData>(mDevice, std::max(static_cast<size_t>(1), mScene->GetImages().size()), "Scene");
 }
 
 ViewportWorldScene::~ViewportWorldScene() noexcept
