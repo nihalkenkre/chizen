@@ -626,6 +626,11 @@ size_t Scene::Mesh::Primitive::GetMaterialIndex() const
 	return mMaterialIndex;
 }
 
+glm::vec4 Scene::Material::GetBaseColorFactor() const
+{
+	return mBaseColorFactor;
+}
+
 glm::ivec4 Scene::Material::GetBaseNormalImageIndex() const
 {
 	return mBaseNormalImageIndex;

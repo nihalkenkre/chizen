@@ -158,7 +158,6 @@ void closesthit(inout Payload p, in Attributes attribs)
     if (pc.is_cpu_shading == 0)
     {
         if (materials[ch_sbt.material_index].base_normal_color_index.x >= 0)
-        if (materials[ch_sbt.material_index].base_normal_color_index.x >= 0)
         {
             base_color *= textures[NonUniformResourceIndex(materials[ch_sbt.material_index].base_normal_color_index.x)].SampleLevel(uv, 0);
             base_color *= textures[NonUniformResourceIndex(materials[ch_sbt.material_index].base_normal_color_index.x)].SampleLevel(uv, 0);

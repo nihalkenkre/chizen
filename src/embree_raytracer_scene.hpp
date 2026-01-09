@@ -14,59 +14,42 @@ public:
 
 	~EmbreeRaytracerScene() noexcept;
 
-	class MeshInstance
-	{
-	public:
-		MeshInstance(unsigned int geom_id);
-
-		unsigned int GetGeomId() const;
-
-	private:
-		unsigned int mGeomId = 0;
-	};
-
-	class Mesh
-	{
-	public:
-		class Primitive
-		{
-		public:
-			Primitive(unsigned int geom_id);
-
-			unsigned int GetGeomId() const;
-
-		private:
-			unsigned int mGeomId = 0;
-		};
-
-		Mesh(std::vector<EmbreeRaytracerScene::Mesh::Primitive> primitives);
-
-		const std::vector<Primitive>& GetPrimitives() const;
-
-	private:
-		std::vector<Primitive> mPrimitives;
-	};
-
-	class CameraInstance
-	{
-	public:
-	};
-
-	class Camera
-	{
-
-	};
+	void Render(const uint32_t x, const uint32_t y, const uint32_t width, const uint32_t height, const uint32_t cam_index, float* pixels) const;
 
 	RTCTraversable GetTraversable() const;
-	RTCScene GetScene() const;
 	RTCDevice GetDevice() const;
 
 private:
-	RTCTraversable mTraversable = nullptr;
-	RTCDevice mDevice = nullptr;
-	RTCScene mScene = nullptr;
+	struct CameraMatrices
+	{
+		glm::mat4 mViewInverse;
+		glm::mat4 mProjInverse;
+	};
+	
+	struct Image
+	{
+		std::vector<uint8_t> mData;
+	};
 
-	std::vector<MeshInstance> mMeshInstances;
-	std::vector<Mesh> mMeshes;
+	struct MaterialInfo
+	{
+		glm::vec4 mBaseColorFactor;
+		int32_t mBaseColorTexture;
+		int32_t mNormalTexture;
+	};
+
+	struct PrimGeom
+	{
+		unsigned int mId;
+		MaterialInfo mMaterialInfo;
+	};
+
+	RTCTraversable mTraversable = nullptr;
+	RTCScene mScene = nullptr;
+	RTCDevice mDevice = nullptr;
+
+	std::vector<PrimGeom> mPrimGeoms;
+	std::vector<CameraMatrices> mCameraMatrices;
+	std::vector<Image> mImages;
 };
 
