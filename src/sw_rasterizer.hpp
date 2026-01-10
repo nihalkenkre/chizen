@@ -205,6 +205,20 @@ public:
 				);
 		}
 
+		static bool IsBackFacing(const glm::vec3 normal0, const glm::vec3 normal1, const glm::vec3 normal2, const glm::mat4 model_matrix, const glm::mat4 cam_matrix)
+		{
+			// using world space normal since normals do not change orientation after projection, they are squished. 
+			// Perfectly fine for back facing test.
+
+			auto n0 = glm::vec3(model_matrix * glm::vec4(normal0, 0));
+			auto n1 = glm::vec3(model_matrix * glm::vec4(normal1, 0));
+			auto n2 = glm::vec3(model_matrix * glm::vec4(normal2, 0));
+
+			auto cam_dir = glm::normalize(glm::vec3(cam_matrix[2]));
+
+			return (glm::dot(n0, cam_dir) <= 0 || glm::dot(n1, cam_dir) <= 0 || glm::dot(n2, cam_dir) <= 0);
+		}
+
 		Point mVertices[3];
 		float mTotalArea = 0.f;
 

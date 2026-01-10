@@ -39,11 +39,7 @@ VSOutput vertex_main(VSInput in)
     return out;
 }
 
-struct Material
-{
-    float4 base_color_factor;
-    int4 base_normal_color_index;
-};
+import "common.slang";
 
 struct PushConstants
 {
@@ -71,9 +67,9 @@ FSOutput fragment_main(VSOutput in)
 
     if (pc.is_cpu_shading == 0)
     {
-        if (materials[pc.material_index].base_normal_color_index.x >= 0)
+        if (materials[pc.material_index].base_normal_metalrough_index.x >= 0)
         {
-            base_color *= textures[NonUniformResourceIndex(materials[pc.material_index].base_normal_color_index.x)].Sample(in.uv);
+            base_color *= textures[NonUniformResourceIndex(materials[pc.material_index].base_normal_metalrough_index.x)].Sample(in.uv);
         }
     }
 

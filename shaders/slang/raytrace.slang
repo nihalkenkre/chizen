@@ -1,14 +1,10 @@
+import "common.slang";
+
 struct CamInfo
 {
     float4x4 view_inverse;
     float4x4 proj_inverse;
 }
-
-struct Material
-{
-    float4 base_color_factor;
-    int4 base_normal_color_index;
-};
 
 struct PushConstants
 {
@@ -157,20 +153,22 @@ void closesthit(inout Payload p, in Attributes attribs)
 
     if (pc.is_cpu_shading == 0)
     {
-        if (materials[ch_sbt.material_index].base_normal_color_index.x >= 0)
+        if (materials[ch_sbt.material_index].base_normal_metalrough_index.x >= 0)
         {
-            base_color *= textures[NonUniformResourceIndex(materials[ch_sbt.material_index].base_normal_color_index.x)].SampleLevel(uv, 0);
-            base_color *= textures[NonUniformResourceIndex(materials[ch_sbt.material_index].base_normal_color_index.x)].SampleLevel(uv, 0);
+            base_color *= textures[NonUniformResourceIndex(materials[ch_sbt.material_index].base_normal_metalrough_index.x)].SampleLevel(uv, 0);
         }
 
-        if (materials[ch_sbt.material_index].base_normal_color_index.y >= 0)
+        if (materials[ch_sbt.material_index].base_normal_metalrough_index.y >= 0)
         {
             n = mul(
                 tbn,
-                textures[NonUniformResourceIndex(materials[ch_sbt.material_index].base_normal_color_index.y)].SampleLevel(uv, 0).xyz * 2 - 1);
+                textures[NonUniformResourceIndex(materials[ch_sbt.material_index].base_normal_metalrough_index.y)].SampleLevel(uv, 0).xyz * 2 - 1);
         }
 
-        base_color.xyz *= dot(n, l);
+        if (materials[ch_sbt.material_index].base_normal_metalrough_index.z >= 0)
+        {
+            base_color = textures[NonUniformResourceIndex(materials[ch_sbt.material_index].base_normal_metalrough_index.z)].SampleLevel(uv, 0);
+        }
     }
 
     p.hit_value = base_color;

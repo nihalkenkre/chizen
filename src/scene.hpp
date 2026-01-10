@@ -112,14 +112,26 @@ public:
 	{
 	public:
 		Material() {}
-		Material(const int32_t base_index, const int32_t normal_index, const glm::vec4 base_color_factor) : mBaseNormalImageIndex(base_index, normal_index, -1, -1), mBaseColorFactor(base_color_factor) {}
+		Material(
+			const int32_t base_index, 
+			const int32_t normal_index, 
+			const int32_t metalrough_index, 
+			const glm::vec4 base_color_factor, 
+			const float metal_factor, 
+			const float rough_factor
+		) : 
+			mBaseNormalMetalroughIndex(base_index, normal_index, metalrough_index, -1), 
+			mBaseColorFactor(base_color_factor),
+			mMetalRoughFactor(metal_factor, rough_factor, -1, -1)
+		{}
 
 		glm::vec4 GetBaseColorFactor() const;
-		glm::ivec4 GetBaseNormalImageIndex() const;
+		glm::ivec4 GetBaseNormalMetalroughIndex() const;
 
 	private:
-		glm::vec4 mBaseColorFactor = glm::vec4(-1.f);
-		glm::ivec4 mBaseNormalImageIndex = glm::ivec4(-1, -1, -1, -1);
+		glm::vec4 mBaseColorFactor = glm::vec4(1.f);
+		glm::ivec4 mBaseNormalMetalroughIndex = glm::ivec4(-1, -1, -1, -1);
+		glm::vec4 mMetalRoughFactor = glm::vec4(1.f);
 	};
 
 	class Image

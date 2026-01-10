@@ -19,6 +19,13 @@ struct cgltf_node;
 	std::printf("%s %d\n", action, result);		\
 }
 
+struct VertexData
+{
+	glm::vec4 tangent;
+	glm::vec3 normal;
+	glm::vec2 uv;
+};
+
 uint32_t Utils_GetMemoryTypeId(const VkPhysicalDeviceMemoryProperties2 mem_props, const VkMemoryPropertyFlags mem_prop_flags);
 
 inline static VkDeviceSize ALIGNED_SIZE(VkDeviceSize size, VkDeviceSize alignment)

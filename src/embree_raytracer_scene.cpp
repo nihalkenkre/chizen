@@ -42,8 +42,8 @@ EmbreeRaytracerScene::EmbreeRaytracerScene(const Scene& scene)
 
 			auto mat_info = MaterialInfo{
 				.mBaseColorFactor = material.GetBaseColorFactor(),
-				.mBaseColorTexture = material.GetBaseNormalImageIndex().x,
-				.mNormalTexture = material.GetBaseNormalImageIndex().y,
+				.mBaseColorTexture = material.GetBaseNormalMetalroughIndex().x,
+				.mNormalTexture = material.GetBaseNormalMetalroughIndex().y,
 			};
 
 			auto prim_geom = PrimGeom{

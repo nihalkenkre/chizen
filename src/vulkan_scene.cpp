@@ -92,7 +92,7 @@ VulkanScene::VulkanScene(const Scene& scene, const VulkanInterface* vulkan_inter
 
 		for (const auto& material : mMaterials)
 		{
-			auto base_normal_index = material.GetBaseNormalImageIndex();
+			auto base_normal_index = material.GetBaseNormalMetalroughIndex();
 
 			if (base_normal_index.x >= 0)
 				mImages[base_normal_index.x] = VulkanScene::Image(
@@ -102,6 +102,11 @@ VulkanScene::VulkanScene(const Scene& scene, const VulkanInterface* vulkan_inter
 			if (base_normal_index.y >= 0)
 				mImages[base_normal_index.y] = VulkanScene::Image(
 					scene.GetImages()[base_normal_index.y], scene.GetImagesData(), vulkan_interface, VK_FORMAT_R8G8B8A8_UNORM
+				);
+
+			if (base_normal_index.z > 0)
+				mImages[base_normal_index.z] = VulkanScene::Image(
+					scene.GetImages()[base_normal_index.z], scene.GetImagesData(), vulkan_interface, VK_FORMAT_R8G8B8A8_UNORM
 				);
 		}
 	}

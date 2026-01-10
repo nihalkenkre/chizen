@@ -1,6 +1,7 @@
 #include "sw_rasterizer.hpp"
 #include "sw_rasterizer_scene.hpp"
 #include "events.hpp"
+#include "utils.hpp"
 
 void SWRasterizer::Start(const SWRasterizerScene* scene, const uint32_t width, const uint32_t height, const uint32_t max_samples, const uint32_t cam_index, float* color)
 {
@@ -8,6 +9,7 @@ void SWRasterizer::Start(const SWRasterizerScene* scene, const uint32_t width, c
 	mMeshInstanceTriangles.resize(scene->GetMeshInstances().size());
 
 	glm::mat4 view_proj_matrix = glm::make_mat4(reinterpret_cast<const float*>(scene->GetUniformData().data() + scene->GetCameraInstances()[cam_index].GetViewProjMatrixOffset()));
+	glm::mat4 cam_xform_matrix = glm::inverse(glm::make_mat4(reinterpret_cast<const float*>(scene->GetUniformData().data() + scene->GetCameraInstances()[cam_index].GetViewInverseMatrixOffset())));
 
 	float z_near = scene->GetCameras()[scene->GetCameraInstances()[cam_index].GetCameraIndex()].GetZNear();
 	float z_far = scene->GetCameras()[scene->GetCameraInstances()[cam_index].GetCameraIndex()].GetZFar();
@@ -17,13 +19,14 @@ void SWRasterizer::Start(const SWRasterizerScene* scene, const uint32_t width, c
 
 	srand(static_cast<unsigned int>(time(NULL)));
 	tbb::blocked_range<size_t> mesh_instance_range(0, scene->GetMeshInstances().size());
-	tbb::parallel_for(mesh_instance_range, [this, scene, view_proj_matrix, width, height, z_near, z_far](const tbb::blocked_range<size_t>& mi)
+	tbb::parallel_for(mesh_instance_range, [&](const tbb::blocked_range<size_t>& mi)
 		{
 			for (size_t m = mi.begin(); m < mi.end(); ++m)
 			{
 				auto mesh_instance = scene->GetMeshInstances()[m];
 
 				glm::mat4 model_matrix = glm::make_mat4(reinterpret_cast<const float*>(scene->GetUniformData().data() + mesh_instance.GetModelMatrixOffset()));
+
 				auto mesh = scene->GetMeshes()[mesh_instance.GetMeshIndex()];
 				for (const auto& prim : mesh.GetPrimitives())
 				{
@@ -34,42 +37,17 @@ void SWRasterizer::Start(const SWRasterizerScene* scene, const uint32_t width, c
 					{
 						if (mStopRendering) tbb::task::current_context()->cancel_group_execution();
 
-						size_t index0 = 0;
-						if (prim.GetIndexType() == VK_INDEX_TYPE_UINT16)
-						{
-							index0 = static_cast<size_t>(reinterpret_cast<const uint16_t*>(scene->GetVertexData().data() + prim.GetIndicesOffset())[index_idx]);
-						}
-						else if (prim.GetIndexType() == VK_INDEX_TYPE_UINT32)
-						{
-							index0 = static_cast<size_t>(reinterpret_cast<const uint32_t*>(scene->GetVertexData().data() + prim.GetIndicesOffset())[index_idx]);
-						}
+						const uint32_t* indices = reinterpret_cast<const uint32_t*>(scene->GetVertexData().data() + prim.GetIndicesOffset());
 
+						size_t index0 = static_cast<size_t>(indices[index_idx]);
 						glm::vec4 pos0 = view_proj_matrix * model_matrix * glm::vec4(positions[index0], 1);
 
 						++index_idx;
-						size_t index1 = 0;
-						if (prim.GetIndexType() == VK_INDEX_TYPE_UINT16)
-						{
-							index1 = static_cast<size_t>(reinterpret_cast<const uint16_t*>(scene->GetVertexData().data() + prim.GetIndicesOffset())[index_idx]);
-						}
-						else if (prim.GetIndexType() == VK_INDEX_TYPE_UINT32)
-						{
-							index1 = static_cast<size_t>(reinterpret_cast<const uint32_t*>(scene->GetVertexData().data() + prim.GetIndicesOffset())[index_idx]);
-						}
-
+						size_t index1 = static_cast<size_t>(indices[index_idx]);
 						glm::vec4 pos1 = view_proj_matrix * model_matrix * glm::vec4(positions[index1], 1);
 
 						++index_idx;
-						size_t index2 = 0;
-						if (prim.GetIndexType() == VK_INDEX_TYPE_UINT16)
-						{
-							index2 = static_cast<size_t>(reinterpret_cast<const uint16_t*>(scene->GetVertexData().data() + prim.GetIndicesOffset())[index_idx]);
-						}
-						else if (prim.GetIndexType() == VK_INDEX_TYPE_UINT32)
-						{
-							index2 = static_cast<size_t>(reinterpret_cast<const uint32_t*>(scene->GetVertexData().data() + prim.GetIndicesOffset())[index_idx]);
-						}
-
+						size_t index2 = static_cast<size_t>(indices[index_idx]);
 						glm::vec4 pos2 = view_proj_matrix * model_matrix * glm::vec4(positions[index2], 1);
 
 						if (!ArePointsToBeClipped(pos0, pos1, pos2))
@@ -90,18 +68,35 @@ void SWRasterizer::Start(const SWRasterizerScene* scene, const uint32_t width, c
 							p2.y = (p2.y + 1) * 0.5f * (height - 1);
 							p2.z = (pos2.w - z_near) / (z_far - z_near);
 
-							if (Triangle::SignedArea(p0, p1, p2) < 1.f)
-								continue;
+							//std::vector<VertexData>vertex_data(prim.GetVerticesDataSize() / sizeof(VertexData));
+							//std::memcpy(
+							//	vertex_data.data(), 
+							//	scene->GetVertexData().data() + prim.GetVerticesDataOffset(), 
+							//	prim.GetVerticesDataSize()
+							//);
 
-							mMeshInstanceTriangles[m].push_back(
-								Triangle(
-									Point(glm::vec3(p0), glm::vec3(1, 0, 0)),
-									Point(glm::vec3(p1), glm::vec3(0, 1, 0)),
-									Point(glm::vec3(p2), glm::vec3(0, 0, 1)),
-									width,
-									height
-								)
-							);
+							const VertexData* vertex_data = reinterpret_cast<const VertexData*>(
+								scene->GetVertexData().data() + prim.GetVerticesDataOffset()
+								);
+
+							//if (!Triangle::IsBackFacing(
+							//	vertex_data[index0].normal,
+							//	vertex_data[index1].normal,
+							//	vertex_data[index2].normal,
+							//	model_matrix,
+							//	cam_xform_matrix
+							//))
+							//{
+								mMeshInstanceTriangles[m].push_back(
+									Triangle(
+										Point(glm::vec3(p0), glm::vec3(1, 0, 0)),
+										Point(glm::vec3(p1), glm::vec3(0, 1, 0)),
+										Point(glm::vec3(p2), glm::vec3(0, 0, 1)),
+										width,
+										height
+									)
+								);
+							//}
 						}
 					}
 				}

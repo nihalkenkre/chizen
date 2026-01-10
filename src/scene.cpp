@@ -23,7 +23,7 @@ Scene::Scene(const std::string& path, const VkDeviceSize uniform_buffer_alignmen
 	}
 
 	// Default material
-	mMaterials.push_back(Scene::Material(-1, -1, glm::vec4(1, 0, 0, 1)));
+	mMaterials.push_back(Scene::Material(-1, -1, -1, glm::vec4(1, 0, 0, 1), 1.f, 1.f));
 
 	for (size_t n = 0; n < gltf->nodes_count; ++n)
 	{
@@ -237,13 +237,6 @@ void Scene::AddMesh(const cgltf_data* gltf, const cgltf_mesh* mesh)
 	std::vector<Scene::Mesh::Primitive> primitives;
 	primitives.reserve(mesh->primitives_count);
 
-	struct VertexData
-	{
-		glm::vec4 tangent;
-		glm::vec3 normal;
-		glm::vec2 uv;
-	};
-
 	for (size_t p = 0; p < mesh->primitives_count; ++p)
 	{
 		cgltf_primitive* curr_prim = mesh->primitives + p;
@@ -350,9 +343,14 @@ void Scene::AddMesh(const cgltf_data* gltf, const cgltf_mesh* mesh)
 			}
 		}
 
+		if (uvs.size() == 0)
+		{
+			uvs.resize(vertex_count, glm::vec2(0.f));
+		}
+
 		if (tangents.size() == 0)
 		{
-			std::println("Please re export scene with vertex tangents");
+			std::println("tangents for {} not found...", mesh->name);
 			continue;
 		}
 
@@ -418,7 +416,10 @@ void Scene::AddMaterial(const cgltf_data* gltf, const cgltf_material* material)
 {
 	int32_t base_color_index = -1;
 	int32_t normal_color_index = -1;
+	int32_t metalrough_index = -1;
 	glm::vec4 base_color_factor = glm::vec4(1.f);
+	float metal_factor = 1.f;
+	float rough_factor = 1.f;
 
 	if (material->has_pbr_metallic_roughness)
 	{
@@ -432,9 +433,17 @@ void Scene::AddMaterial(const cgltf_data* gltf, const cgltf_material* material)
 		{
 			normal_color_index = static_cast<int32_t>(cgltf_image_index(gltf, material->normal_texture.texture->image));
 		}
+
+		if (material->pbr_metallic_roughness.metallic_roughness_texture.texture != nullptr)
+		{
+			metalrough_index =  static_cast<int32_t>(cgltf_image_index(gltf, material->pbr_metallic_roughness.metallic_roughness_texture.texture->image));
+		}
+
+		metal_factor = material->pbr_metallic_roughness.metallic_factor;
+		rough_factor = material->pbr_metallic_roughness.roughness_factor;
 	}
 
-	mMaterials.push_back(Scene::Material(base_color_index, normal_color_index, base_color_factor));
+	mMaterials.push_back(Scene::Material(base_color_index, normal_color_index, metalrough_index, base_color_factor, metal_factor, rough_factor));
 }
 
 void Scene::AddImage(const cgltf_image* image, const std::string& path)
@@ -631,7 +640,7 @@ glm::vec4 Scene::Material::GetBaseColorFactor() const
 	return mBaseColorFactor;
 }
 
-glm::ivec4 Scene::Material::GetBaseNormalImageIndex() const
+glm::ivec4 Scene::Material::GetBaseNormalMetalroughIndex() const
 {
-	return mBaseNormalImageIndex;
+	return mBaseNormalMetalroughIndex;
 }

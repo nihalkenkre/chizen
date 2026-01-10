@@ -117,15 +117,22 @@ void App::ProcessEvent(SDL_Event* event)
 			mVulkanInterface->GetPhysicalDeviceData()->Properties.properties.limits.minUniformBufferOffsetAlignment
 		);
 
-		mImGUIState->SetCameraNames(scene.GetCameraNames());
+		if (scene.GetMeshes().size() == 0)
+		{
+			std::println("No mesh data imported from file.");
+		}
+		else
+		{
+			mImGUIState->SetCameraNames(scene.GetCameraNames());
 
-		mVulkanScene = std::make_unique<VulkanScene>(scene, mVulkanInterface.get(), mImGUIState->GetCPUShading());
-		mViewportScene = std::make_unique<ViewportWorldScene>(mVulkanScene.get(), mVulkanInterface.get());
-		mVulkanRaytracerScene = std::make_unique<VulkanRaytracerScene>(scene, mVulkanScene.get(), mVulkanInterface.get());
-		mEmbreeRaytacerScene = std::make_unique<EmbreeRaytracerScene>(scene);
-		mSWRasterizerScene = std::make_unique<SWRasterizerScene>(scene);
+			mVulkanScene = std::make_unique<VulkanScene>(scene, mVulkanInterface.get(), mImGUIState->GetCPUShading());
+			mViewportScene = std::make_unique<ViewportWorldScene>(mVulkanScene.get(), mVulkanInterface.get());
+			mVulkanRaytracerScene = std::make_unique<VulkanRaytracerScene>(scene, mVulkanScene.get(), mVulkanInterface.get());
+			mEmbreeRaytacerScene = std::make_unique<EmbreeRaytracerScene>(scene);
+			mSWRasterizerScene = std::make_unique<SWRasterizerScene>(scene);
 
-		mDisplayRender = false;
+			mDisplayRender = false;
+		}
 	}
 	else if (event->type == events.StartRender.type)
 	{
