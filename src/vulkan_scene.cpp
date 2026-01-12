@@ -116,6 +116,12 @@ VulkanScene::VulkanScene(const Scene& scene, const VulkanInterface* vulkan_inter
 		mImages.push_back(VulkanScene::Image(std::string(SDL_GetBasePath()).append("/images/one_pix.jpg").c_str(), vulkan_interface, VK_FORMAT_R8G8B8A8_SRGB));
 	}
 
+	mImageDescs.reserve(mImages.size());
+	for (const auto& image : mImages)
+	{
+		mImageDescs.push_back(image.GetImageResource()->GetDescriptorInfo());
+	}
+
 	mMeshes.reserve(scene.GetMeshes().size());
 	for (const auto& mesh : scene.GetMeshes())
 	{
@@ -150,6 +156,11 @@ const std::vector<VulkanScene::Camera>& VulkanScene::GetCameras() const
 const std::vector<VulkanScene::Material>& VulkanScene::GetMaterials() const
 {
 	return mMaterials;
+}
+
+const std::vector<VkDescriptorImageInfo>& VulkanScene::GetImageDescs() const
+{
+	return mImageDescs;
 }
 
 const std::vector<VulkanScene::Image>& VulkanScene::GetImages() const

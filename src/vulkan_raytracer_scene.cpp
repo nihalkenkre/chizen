@@ -464,7 +464,8 @@ const std::vector<VkRayTracingShaderGroupCreateInfoKHR>& VulkanRaytracerScenePip
 }
 
 VulkanRaytracerScene::VulkanRaytracerScene(const Scene& scene, const VulkanScene* vulkan_scene, const VulkanInterface* vulkan_interface)
-	: mDevice(vulkan_interface->GetVkDevice()), mRaytracingProperties(vulkan_interface->GetPhysicalDeviceData()->RayTracingProperties), mScene(vulkan_scene)
+	: mDevice(vulkan_interface->GetVkDevice()), mRaytracingProperties(vulkan_interface->GetPhysicalDeviceData()->RayTracingProperties), mScene(vulkan_scene),
+	mImageDescs(vulkan_scene->GetImageDescs())
 {
 	VmaAllocator allocator = vulkan_interface->GetVmaAllocator();
 	uint32_t mem_type_id = Utils_GetMemoryTypeId(vulkan_interface->GetPhysicalDeviceData()->MemoryProperties, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT);
@@ -829,14 +830,6 @@ void VulkanRaytracerScene::CreateDescriptorSets()
 		.range = VK_WHOLE_SIZE,
 	};
 
-	std::vector<VkDescriptorImageInfo> image_descs;
-	image_descs.reserve(mScene->GetImages().size());
-
-	for (const auto& image : mScene->GetImages())
-	{
-		image_descs.push_back(image.GetImageResource()->GetDescriptorInfo());
-	}
-
 	VkAccelerationStructureKHR tlas = mTLAS->GetAS();
 	const VkWriteDescriptorSetAccelerationStructureKHR tlas_desc_info = {
 		.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET_ACCELERATION_STRUCTURE_KHR,
@@ -873,9 +866,9 @@ void VulkanRaytracerScene::CreateDescriptorSets()
 			.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
 			.dstSet = mSceneDescSet,
 			.dstBinding = 5,
-			.descriptorCount = static_cast<uint32_t>(image_descs.size()),
+			.descriptorCount = static_cast<uint32_t>(mImageDescs.size()),
 			.descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
-			.pImageInfo = image_descs.data(),
+			.pImageInfo = mImageDescs.data(),
 		},
 	};
 

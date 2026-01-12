@@ -39,6 +39,8 @@ private:
 	std::unique_ptr<TLAccelerationStructure> mTLAS;
 	std::vector<std::unique_ptr<BLAccelerationStructure>> mBLASes;
 	std::unique_ptr<VulkanRaytracerScenePipelineData> mPipelineData = nullptr;
+
+	const std::vector<VkDescriptorImageInfo>& mImageDescs;
 	
 	VkPhysicalDeviceRayTracingPipelinePropertiesKHR mRaytracingProperties = {};
 	std::unique_ptr<DeviceBufferResource> mRGSbt = nullptr;

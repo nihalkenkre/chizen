@@ -77,6 +77,7 @@ public:
 	const std::vector<VulkanScene::Camera>& GetCameras() const;
 	const std::vector<VulkanScene::Image>& GetImages() const;
 	const std::vector<VulkanScene::Material>& GetMaterials() const;
+	const std::vector<VkDescriptorImageInfo>& GetImageDescs() const;
 
 	const DeviceBufferResource* GetVertexData() const;
 	const DeviceBufferResource* GetUniformData() const;
@@ -89,6 +90,7 @@ private:
 	std::vector<VulkanScene::Camera> mCameras;
 	std::vector<VulkanScene::Image> mImages;
 	std::vector<VulkanScene::Material> mMaterials;
+	std::vector<VkDescriptorImageInfo> mImageDescs;
 
 	std::unique_ptr<DeviceBufferResource> mVertexData;
 	std::unique_ptr<DeviceBufferResource> mUniformData;

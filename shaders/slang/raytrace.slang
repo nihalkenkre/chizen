@@ -149,7 +149,7 @@ void closesthit(inout Payload p, in Attributes attribs)
 
     float4 base_color = materials[ch_sbt.material_index].base_color_factor;
 
-    float3 l = float3(-1, 1, 1);
+    float3 l = float3(-1, 0.5, 1);
 
     if (pc.is_cpu_shading == 0)
     {
@@ -165,9 +165,10 @@ void closesthit(inout Payload p, in Attributes attribs)
                 textures[NonUniformResourceIndex(materials[ch_sbt.material_index].base_normal_metalrough_index.y)].SampleLevel(uv, 0).xyz * 2 - 1);
         }
 
+        base_color.xyz *= dot(n, l);
         if (materials[ch_sbt.material_index].base_normal_metalrough_index.z >= 0)
         {
-            base_color = textures[NonUniformResourceIndex(materials[ch_sbt.material_index].base_normal_metalrough_index.z)].SampleLevel(uv, 0);
+            // base_color *= textures[NonUniformResourceIndex(materials[ch_sbt.material_index].base_normal_metalrough_index.z)].SampleLevel(uv, 0);
         }
     }
 

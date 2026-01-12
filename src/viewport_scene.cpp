@@ -607,14 +607,6 @@ ViewportWorldScene::ViewportWorldScene(const VulkanScene* vulkan_scene, const Vu
 		.range = VK_WHOLE_SIZE,
 	};
 
-	std::vector<VkDescriptorImageInfo> image_descs;
-	image_descs.reserve(vulkan_scene->GetImages().size());
-
-	for (const auto& image : vulkan_scene->GetImages())
-	{
-		image_descs.push_back(image.GetImageResource()->GetDescriptorInfo());
-	}
-
 	const VkWriteDescriptorSet write_descs[] = {
 		{
 			.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
@@ -628,9 +620,9 @@ ViewportWorldScene::ViewportWorldScene(const VulkanScene* vulkan_scene, const Vu
 			.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
 			.dstSet = mMTexturesDescSet,
 			.dstBinding = 1,
-			.descriptorCount = static_cast<uint32_t>(image_descs.size()),
+			.descriptorCount = static_cast<uint32_t>(vulkan_scene->GetImageDescs().size()),
 			.descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
-			.pImageInfo = image_descs.data(),
+			.pImageInfo = vulkan_scene->GetImageDescs().data(),
 		},
 	};
 
