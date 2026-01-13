@@ -104,10 +104,10 @@ PhysicalDeviceData Instance::GetPhysicalDeviceData(const VkSurfaceKHR& surface) 
 		if (pdd.Properties.properties.deviceType == VK_PHYSICAL_DEVICE_TYPE_DISCRETE_GPU)
 		{
 			uint32_t q_fly_cnt = 0;
-			vkGetPhysicalDeviceQueueFamilyProperties(PhysicalDevice, &q_fly_cnt, nullptr);
+			vkGetPhysicalDeviceQueueFamilyProperties2(PhysicalDevice, &q_fly_cnt, nullptr);
 
-			std::vector<VkQueueFamilyProperties> q_fly_props(q_fly_cnt);
-			vkGetPhysicalDeviceQueueFamilyProperties(PhysicalDevice, &q_fly_cnt, q_fly_props.data());
+			std::vector<VkQueueFamilyProperties2KHR> q_fly_props(q_fly_cnt, { .sType = VK_STRUCTURE_TYPE_QUEUE_FAMILY_PROPERTIES_2 });
+			vkGetPhysicalDeviceQueueFamilyProperties2(PhysicalDevice, &q_fly_cnt, q_fly_props.data());
 
 			// find graphics queue
 			for (uint32_t q = 0; q < q_fly_cnt; ++q)
@@ -117,7 +117,7 @@ PhysicalDeviceData Instance::GetPhysicalDeviceData(const VkSurfaceKHR& surface) 
 
 				if (is_supported &&
 					SDL_Vulkan_GetPresentationSupport(mInstance, PhysicalDevice, q) &&
-					q_fly_props[q].queueFlags & VK_QUEUE_GRAPHICS_BIT)
+					q_fly_props[q].queueFamilyProperties.queueFlags & VK_QUEUE_GRAPHICS_BIT)
 				{
 					pdd.PhysicalDevice = PhysicalDevice;
 					pdd.GraphicsQueueFamilyIndex = q;
@@ -129,42 +129,47 @@ PhysicalDeviceData Instance::GetPhysicalDeviceData(const VkSurfaceKHR& surface) 
 			}
 
 			// Find transfer queue
-			for (int32_t q = q_fly_cnt - 1; q >= 0; --q)
+			for (uint32_t q = 0; q < q_fly_cnt; ++q)
 			{
-				if ((q_fly_props[q].queueFlags & VK_QUEUE_TRANSFER_BIT) && !(q_fly_props[q].queueFlags & VK_QUEUE_GRAPHICS_BIT) && !(q_fly_props[q].queueFlags & VK_QUEUE_COMPUTE_BIT))
-				{
-					pdd.TransferQueueFamilyIndex = q;
-					break;
-				}
-				else if ((q_fly_props[q].queueFlags & VK_QUEUE_TRANSFER_BIT) && !(q_fly_props[q].queueFlags & VK_QUEUE_GRAPHICS_BIT))
-				{
-					pdd.TransferQueueFamilyIndex = q;
-					break;
-				}
-				else if (q_fly_props[q].queueFlags & VK_QUEUE_TRANSFER_BIT)
+				if ((q_fly_props[q].queueFamilyProperties.queueFlags & VK_QUEUE_TRANSFER_BIT) && !(q_fly_props[q].queueFamilyProperties.queueFlags & VK_QUEUE_GRAPHICS_BIT) && !(q_fly_props[q].queueFamilyProperties.queueFlags & VK_QUEUE_COMPUTE_BIT))
 				{
 					pdd.TransferQueueFamilyIndex = q;
 					break;
 				}
 			}
 
-			// Find compute queue
-			for (int32_t q = q_fly_cnt - 1; q >= 0; --q)
+
+			if (pdd.TransferQueueFamilyIndex == pdd.GraphicsQueueFamilyIndex)
 			{
-				if ((q_fly_props[q].queueFlags & VK_QUEUE_COMPUTE_BIT) && !(q_fly_props[q].queueFlags & VK_QUEUE_GRAPHICS_BIT) && !(q_fly_props[q].queueFlags & VK_QUEUE_TRANSFER_BIT))
+				for (uint32_t q = 0; q < q_fly_cnt; ++q)
+				{
+					if (q_fly_props[q].queueFamilyProperties.queueFlags & VK_QUEUE_TRANSFER_BIT)
+					{
+						pdd.TransferQueueFamilyIndex = q;
+						break;
+					}
+				}
+			}
+
+			// Find compute queue
+			for (uint32_t q = 0; q < q_fly_cnt; ++q)
+			{
+				if ((q_fly_props[q].queueFamilyProperties.queueFlags & VK_QUEUE_COMPUTE_BIT) && !(q_fly_props[q].queueFamilyProperties.queueFlags & VK_QUEUE_GRAPHICS_BIT))
 				{
 					pdd.ComputeQueueFamilyIndex = q;
 					break;
 				}
-				else if ((q_fly_props[q].queueFlags & VK_QUEUE_COMPUTE_BIT) && !(q_fly_props[q].queueFlags & VK_QUEUE_GRAPHICS_BIT))
+			}
+
+			if (pdd.ComputeQueueFamilyIndex == pdd.GraphicsQueueFamilyIndex)
+			{
+				for (uint32_t q = 0; q < q_fly_cnt; ++q)
 				{
-					pdd.ComputeQueueFamilyIndex = q;
-					break;
-				}
-				else if (q_fly_props[q].queueFlags & VK_QUEUE_COMPUTE_BIT)
-				{
-					pdd.ComputeQueueFamilyIndex = q;
-					break;
+					if (q_fly_props[q].queueFamilyProperties.queueFlags & VK_QUEUE_COMPUTE_BIT)
+					{
+						pdd.ComputeQueueFamilyIndex = q;
+						break;
+					}
 				}
 			}
 		}

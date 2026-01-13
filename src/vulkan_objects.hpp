@@ -7,8 +7,8 @@ class DeviceBufferResource;
 struct PhysicalDeviceData
 {
 	VkPhysicalDevice PhysicalDevice = VK_NULL_HANDLE;
-	VkPhysicalDeviceProperties2 Properties = {};
-	VkPhysicalDeviceMemoryProperties2 MemoryProperties = {};
+	VkPhysicalDeviceProperties2KHR Properties = {};
+	VkPhysicalDeviceMemoryProperties2KHR MemoryProperties = {};
 	VkPhysicalDeviceRayTracingPipelinePropertiesKHR RayTracingProperties = {};
 	VkPhysicalDeviceAccelerationStructurePropertiesKHR AccelerationStructureProperties = {};
 	uint32_t GraphicsQueueFamilyIndex = 0;

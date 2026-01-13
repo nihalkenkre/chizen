@@ -31,6 +31,7 @@ public:
 	VulkanRaytracerScenePipelineData* GetPipelineData() const;
 
 private:
+	void CreateDescriptorPool();
 	void CreateDescriptorSets();
 
 	std::unique_ptr<Pool> mScratchBufferPool = nullptr;

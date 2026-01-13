@@ -490,143 +490,14 @@ ViewportWorldScene::ViewportWorldScene(const VulkanScene* vulkan_scene, const Vu
 
 	VmaAllocator allocator = vulkan_interface->GetVmaAllocator();
 
-	const VkDescriptorPoolSize view_proj_desc_size = {
-		.type = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC,
-		.descriptorCount = 1,
-	};
-
-	const VkDescriptorPoolSize model_mat_desc_size = {
-		.type = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC,
-		.descriptorCount = 1,
-	};
-
-	const VkDescriptorPoolSize imgs_desc_pool_size = {
-		.type = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER,
-		.descriptorCount = static_cast<uint32_t>(std::max(static_cast<size_t>(1), vulkan_scene->GetImages().size())),
-	};
-
-	const VkDescriptorPoolSize pool_sizes[] = {
-		view_proj_desc_size,
-		model_mat_desc_size,
-		imgs_desc_pool_size,
-	};
-
-	const VkDescriptorPoolCreateInfo dsp_ci = {
-		.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO,
-		.maxSets = view_proj_desc_size.descriptorCount + model_mat_desc_size.descriptorCount + 1, //1 for the textures desc set
-		.poolSizeCount = std::size(pool_sizes),
-		.pPoolSizes = pool_sizes,
-	};
-
-	VK_CHECK("create descriptor pool", vkCreateDescriptorPool(mDevice, &dsp_ci, nullptr, &mDescriptorPool));
-
-#ifdef _DEBUG
-	Utils_SetObjectName(mDevice, VK_OBJECT_TYPE_DESCRIPTOR_POOL, reinterpret_cast<uint64_t>(mDescriptorPool), "scene descriptor pool");
-#endif // _DEBUG
-
-	const std::vector<VkDescriptorSetLayout>& desc_set_layouts = mPipelineData->GetDescriptorSetLayouts();
-
 	mCameraDescBuffer = {
 		.buffer = vulkan_scene->GetUniformData()->GetVkBuffer(),
 		.offset = 0,
 		.range = sizeof(glm::mat4),
 	};
 
-	const VkDescriptorSetAllocateInfo cam_ds_ai = {
-		.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO,
-		.descriptorPool = mDescriptorPool,
-		.descriptorSetCount = 1,
-		.pSetLayouts = desc_set_layouts.data(),
-	};
-	VK_CHECK("allocate cam matrix desc set", vkAllocateDescriptorSets(mDevice, &cam_ds_ai, &mCameraMatrixDescSet));
-
-#ifdef _DEBUG
-	Utils_SetObjectName(mDevice, VK_OBJECT_TYPE_DESCRIPTOR_SET, reinterpret_cast<uint64_t>(mCameraMatrixDescSet), "viewport scene cam desc set");
-#endif
-
-	const VkWriteDescriptorSet cam_ds_write = {
-		.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
-		.dstSet = mCameraMatrixDescSet,
-		.dstBinding = 0,
-		.descriptorCount = 1,
-		.descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC,
-		.pBufferInfo = &mCameraDescBuffer,
-	};
-
-	vkUpdateDescriptorSets(mDevice, 1, &cam_ds_write, 0, nullptr);
-
-	const VkDescriptorSetAllocateInfo model_ds_ai = {
-		.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO,
-		.descriptorPool = mDescriptorPool,
-		.descriptorSetCount = 1,
-		.pSetLayouts = desc_set_layouts.data() + 1,
-	};
-	VK_CHECK("allocate model matrix desc set", vkAllocateDescriptorSets(mDevice, &model_ds_ai, &mModelMatrixDescSet));
-
-#ifdef _DEBUG
-	Utils_SetObjectName(mDevice, VK_OBJECT_TYPE_DESCRIPTOR_SET, reinterpret_cast<uint64_t>(mModelMatrixDescSet), "viewport scene model matrix desc set");
-#endif
-
-	const VkWriteDescriptorSet model_ds_write = {
-		.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
-		.dstSet = mModelMatrixDescSet,
-		.dstBinding = 0,
-		.descriptorCount = 1,
-		.descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC,
-		.pBufferInfo = &mCameraDescBuffer,
-	};
-
-	vkUpdateDescriptorSets(mDevice, 1, &model_ds_write, 0, nullptr);
-
-	const uint32_t tex_desc_counts[] = {
-		static_cast<uint32_t>(std::max(static_cast<size_t>(1), vulkan_scene->GetImages().size()))
-	};
-
-	const VkDescriptorSetVariableDescriptorCountAllocateInfoEXT tex_ds_vdcai = {
-		.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_VARIABLE_DESCRIPTOR_COUNT_ALLOCATE_INFO_EXT,
-		.descriptorSetCount = std::size(tex_desc_counts),
-		.pDescriptorCounts = tex_desc_counts,
-	};
-
-	const VkDescriptorSetAllocateInfo tex_ds_ai = {
-		.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO,
-		.pNext = &tex_ds_vdcai,
-		.descriptorPool = mDescriptorPool,
-		.descriptorSetCount = 1,
-		.pSetLayouts = desc_set_layouts.data() + 2,
-	};
-
-	VK_CHECK("create mat tex desc set", vkAllocateDescriptorSets(mDevice, &tex_ds_ai, &mMTexturesDescSet));
-
-#ifdef _DEBUG
-	Utils_SetObjectName(mDevice, VK_OBJECT_TYPE_DESCRIPTOR_SET, reinterpret_cast<uint64_t>(mMTexturesDescSet), "textures desc set");
-#endif // _DEBUG
-
-	const VkDescriptorBufferInfo mat_desc_buff = {
-		.buffer = vulkan_scene->GetMaterialsData()->GetVkBuffer(),
-		.range = VK_WHOLE_SIZE,
-	};
-
-	const VkWriteDescriptorSet write_descs[] = {
-		{
-			.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
-			.dstSet = mMTexturesDescSet,
-			.dstBinding = 0,
-			.descriptorCount = 1,
-			.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,
-			.pBufferInfo = &mat_desc_buff,
-		},
-		{
-			.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
-			.dstSet = mMTexturesDescSet,
-			.dstBinding = 1,
-			.descriptorCount = static_cast<uint32_t>(vulkan_scene->GetImageDescs().size()),
-			.descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
-			.pImageInfo = vulkan_scene->GetImageDescs().data(),
-		},
-	};
-
-	vkUpdateDescriptorSets(mDevice, std::size(write_descs), write_descs, 0, nullptr);
+	CreateDescriptorPool();
+	CreateDescriptorSets();
 }
 
 void ViewportWorldScene::Render(const VkCommandBuffer cmd_buff, const uint32_t cam_index, const bool is_cpu_shading) const
@@ -728,6 +599,151 @@ void ViewportWorldScene::ReloadShaders()
 {
 	mPipelineData.reset();
 	mPipelineData = std::make_unique<ViewportScenePipelineData>(mDevice, std::max(static_cast<size_t>(1), mScene->GetImages().size()), "Scene");
+
+	if (mDescriptorPool != VK_NULL_HANDLE)
+		vkDestroyDescriptorPool(mDevice, mDescriptorPool, nullptr);
+
+	CreateDescriptorPool();
+	CreateDescriptorSets();
+}
+
+void ViewportWorldScene::CreateDescriptorPool()
+{
+	const VkDescriptorPoolSize view_proj_desc_size = {
+		.type = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC,
+		.descriptorCount = 1,
+	};
+
+	const VkDescriptorPoolSize model_mat_desc_size = {
+		.type = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC,
+		.descriptorCount = 1,
+	};
+
+	const VkDescriptorPoolSize imgs_desc_pool_size = {
+		.type = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER,
+		.descriptorCount = static_cast<uint32_t>(std::max(static_cast<size_t>(1), mScene->GetImages().size())),
+	};
+
+	const VkDescriptorPoolSize pool_sizes[] = {
+		view_proj_desc_size,
+		model_mat_desc_size,
+		imgs_desc_pool_size,
+	};
+
+	const VkDescriptorPoolCreateInfo dsp_ci = {
+		.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO,
+		.maxSets = view_proj_desc_size.descriptorCount + model_mat_desc_size.descriptorCount + 1, //1 for the textures desc set
+		.poolSizeCount = std::size(pool_sizes),
+		.pPoolSizes = pool_sizes,
+	};
+
+	VK_CHECK("create descriptor pool", vkCreateDescriptorPool(mDevice, &dsp_ci, nullptr, &mDescriptorPool));
+
+#ifdef _DEBUG
+	Utils_SetObjectName(mDevice, VK_OBJECT_TYPE_DESCRIPTOR_POOL, reinterpret_cast<uint64_t>(mDescriptorPool), "scene descriptor pool");
+#endif // _DEBUG
+
+}
+
+void ViewportWorldScene::CreateDescriptorSets()
+{
+	const std::vector<VkDescriptorSetLayout>& desc_set_layouts = mPipelineData->GetDescriptorSetLayouts();
+
+	const VkDescriptorSetAllocateInfo cam_ds_ai = {
+		.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO,
+		.descriptorPool = mDescriptorPool,
+		.descriptorSetCount = 1,
+		.pSetLayouts = desc_set_layouts.data(),
+	};
+	VK_CHECK("allocate cam matrix desc set", vkAllocateDescriptorSets(mDevice, &cam_ds_ai, &mCameraMatrixDescSet));
+
+#ifdef _DEBUG
+	Utils_SetObjectName(mDevice, VK_OBJECT_TYPE_DESCRIPTOR_SET, reinterpret_cast<uint64_t>(mCameraMatrixDescSet), "viewport scene cam desc set");
+#endif
+
+	const VkWriteDescriptorSet cam_ds_write = {
+		.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
+		.dstSet = mCameraMatrixDescSet,
+		.dstBinding = 0,
+		.descriptorCount = 1,
+		.descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC,
+		.pBufferInfo = &mCameraDescBuffer,
+	};
+
+	vkUpdateDescriptorSets(mDevice, 1, &cam_ds_write, 0, nullptr);
+
+	const VkDescriptorSetAllocateInfo model_ds_ai = {
+		.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO,
+		.descriptorPool = mDescriptorPool,
+		.descriptorSetCount = 1,
+		.pSetLayouts = desc_set_layouts.data() + 1,
+	};
+	VK_CHECK("allocate model matrix desc set", vkAllocateDescriptorSets(mDevice, &model_ds_ai, &mModelMatrixDescSet));
+
+#ifdef _DEBUG
+	Utils_SetObjectName(mDevice, VK_OBJECT_TYPE_DESCRIPTOR_SET, reinterpret_cast<uint64_t>(mModelMatrixDescSet), "viewport scene model matrix desc set");
+#endif
+
+	const VkWriteDescriptorSet model_ds_write = {
+		.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
+		.dstSet = mModelMatrixDescSet,
+		.dstBinding = 0,
+		.descriptorCount = 1,
+		.descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC,
+		.pBufferInfo = &mCameraDescBuffer,
+	};
+
+	vkUpdateDescriptorSets(mDevice, 1, &model_ds_write, 0, nullptr);
+
+	const uint32_t tex_desc_counts[] = {
+		static_cast<uint32_t>(std::max(static_cast<size_t>(1), mScene->GetImages().size()))
+	};
+
+	const VkDescriptorSetVariableDescriptorCountAllocateInfoEXT tex_ds_vdcai = {
+		.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_VARIABLE_DESCRIPTOR_COUNT_ALLOCATE_INFO_EXT,
+		.descriptorSetCount = std::size(tex_desc_counts),
+		.pDescriptorCounts = tex_desc_counts,
+	};
+
+	const VkDescriptorSetAllocateInfo tex_ds_ai = {
+		.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO,
+		.pNext = &tex_ds_vdcai,
+		.descriptorPool = mDescriptorPool,
+		.descriptorSetCount = 1,
+		.pSetLayouts = desc_set_layouts.data() + 2,
+	};
+
+	VK_CHECK("create mat tex desc set", vkAllocateDescriptorSets(mDevice, &tex_ds_ai, &mMTexturesDescSet));
+
+#ifdef _DEBUG
+	Utils_SetObjectName(mDevice, VK_OBJECT_TYPE_DESCRIPTOR_SET, reinterpret_cast<uint64_t>(mMTexturesDescSet), "textures desc set");
+#endif // _DEBUG
+
+	const VkDescriptorBufferInfo mat_desc_buff = {
+		.buffer = mScene->GetMaterialsData()->GetVkBuffer(),
+		.range = VK_WHOLE_SIZE,
+	};
+
+	const VkWriteDescriptorSet write_descs[] = {
+		{
+			.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
+			.dstSet = mMTexturesDescSet,
+			.dstBinding = 0,
+			.descriptorCount = 1,
+			.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,
+			.pBufferInfo = &mat_desc_buff,
+		},
+		{
+			.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
+			.dstSet = mMTexturesDescSet,
+			.dstBinding = 1,
+			.descriptorCount = static_cast<uint32_t>(mScene->GetImageDescs().size()),
+			.descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
+			.pImageInfo = mScene->GetImageDescs().data(),
+		},
+	};
+
+	vkUpdateDescriptorSets(mDevice, std::size(write_descs), write_descs, 0, nullptr);
 }
 
 ViewportWorldScene::~ViewportWorldScene() noexcept

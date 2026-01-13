@@ -33,6 +33,9 @@ public:
 	~ViewportWorldScene() noexcept override;
 
 private:
+	void CreateDescriptorPool();
+	void CreateDescriptorSets();
+
 	std::unique_ptr<ViewportScenePipelineData> mPipelineData = nullptr;
 
 	VkDescriptorPool mDescriptorPool = VK_NULL_HANDLE;

@@ -281,7 +281,7 @@ VulkanRaytracerScenePipelineData::VulkanRaytracerScenePipelineData(const VkDevic
 			.binding = 2,
 			.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,
 			.descriptorCount = 1,
-			.stageFlags = VK_SHADER_STAGE_RAYGEN_BIT_KHR | VK_SHADER_STAGE_MISS_BIT_KHR,
+			.stageFlags = VK_SHADER_STAGE_RAYGEN_BIT_KHR | VK_SHADER_STAGE_MISS_BIT_KHR | VK_SHADER_STAGE_CLOSEST_HIT_BIT_KHR,
 		},
 		{
 			.binding = 3,
@@ -599,55 +599,7 @@ VulkanRaytracerScene::VulkanRaytracerScene(const Scene& scene, const VulkanScene
 		mDevice, allocator, instances, mScratchBufferPool->GetPool(), scratch_buffer_alignment, compute_helpers, "TLAS"
 	);
 
-	const VkDescriptorPoolSize pool_sizes[] = {
-		// Camera info
-		{
-			.type = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC,
-			.descriptorCount = 1,
-		},
-		// accum target and final target
-		{
-			.type = VK_DESCRIPTOR_TYPE_STORAGE_IMAGE,
-			.descriptorCount = 2,
-		},
-		// rand states
-		{
-			.type = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,
-			.descriptorCount = 1,
-		},
-		// TLAS
-		{
-			.type = VK_DESCRIPTOR_TYPE_ACCELERATION_STRUCTURE_KHR,
-			.descriptorCount = 1,
-		},
-		// Materials Info
-		{
-			.type = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,
-			.descriptorCount = 1,
-		},
-		// Textures
-		{
-			.type = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER,
-			.descriptorCount = static_cast<uint32_t>(std::max(static_cast<size_t>(1), scene.GetImages().size())),
-		},
-	};
-
-	uint32_t max_sets = 0;
-	std::for_each(std::begin(pool_sizes), std::end(pool_sizes), [&max_sets](const VkDescriptorPoolSize ps) { max_sets += ps.descriptorCount; });
-
-	const VkDescriptorPoolCreateInfo dsp_ci = {
-		.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO,
-		.maxSets = max_sets,
-		.poolSizeCount = std::size(pool_sizes),
-		.pPoolSizes = pool_sizes,
-	};
-
-	VK_CHECK("create descriptor pool", vkCreateDescriptorPool(mDevice, &dsp_ci, nullptr, &mDescriptorPool));
-
-#ifdef _DEBUG
-	Utils_SetObjectName(mDevice, VK_OBJECT_TYPE_DESCRIPTOR_POOL, reinterpret_cast<uint64_t>(mDescriptorPool), "vulkan raytracer scene descriptor pool");
-#endif // _DEBUG
-
+	CreateDescriptorPool();
 	CreateDescriptorSets();
 
 	compute_helpers->RecordBatch();
@@ -766,6 +718,11 @@ void VulkanRaytracerScene::ReloadShaders()
 {
 	mPipelineData.reset();
 	mPipelineData = std::make_unique<VulkanRaytracerScenePipelineData>(mDevice, mScene->GetImages().size(), "vulkan raytracer scene");
+
+	if (mDevice != VK_NULL_HANDLE)
+		vkDestroyDescriptorPool(mDevice, mDescriptorPool, nullptr);
+
+	CreateDescriptorPool();
 	CreateDescriptorSets();
 }
 
@@ -777,6 +734,59 @@ VkAccelerationStructureKHR VulkanRaytracerScene::GetTLAS() const
 VulkanRaytracerScenePipelineData* VulkanRaytracerScene::GetPipelineData() const
 {
 	return mPipelineData.get();
+}
+
+void VulkanRaytracerScene::CreateDescriptorPool()
+{
+	const VkDescriptorPoolSize pool_sizes[] = {
+		// Camera info
+		{
+			.type = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC,
+			.descriptorCount = 1,
+		},
+		// accum target and final target
+		{
+			.type = VK_DESCRIPTOR_TYPE_STORAGE_IMAGE,
+			.descriptorCount = 2,
+		},
+		// rand states
+		{
+			.type = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,
+			.descriptorCount = 1,
+		},
+		// TLAS
+		{
+			.type = VK_DESCRIPTOR_TYPE_ACCELERATION_STRUCTURE_KHR,
+			.descriptorCount = 1,
+		},
+		// Materials Info
+		{
+			.type = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,
+			.descriptorCount = 1,
+		},
+		// Textures
+		{
+			.type = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER,
+			.descriptorCount = static_cast<uint32_t>(std::max(static_cast<size_t>(1), mScene->GetImageDescs().size())),
+		},
+	};
+
+	uint32_t max_sets = 0;
+	std::for_each(std::begin(pool_sizes), std::end(pool_sizes), [&max_sets](const VkDescriptorPoolSize ps) { max_sets += ps.descriptorCount; });
+
+	const VkDescriptorPoolCreateInfo dsp_ci = {
+		.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO,
+		.maxSets = max_sets,
+		.poolSizeCount = std::size(pool_sizes),
+		.pPoolSizes = pool_sizes,
+	};
+
+	VK_CHECK("create descriptor pool", vkCreateDescriptorPool(mDevice, &dsp_ci, nullptr, &mDescriptorPool));
+
+#ifdef _DEBUG
+	Utils_SetObjectName(mDevice, VK_OBJECT_TYPE_DESCRIPTOR_POOL, reinterpret_cast<uint64_t>(mDescriptorPool), "vulkan raytracer scene descriptor pool");
+#endif // _DEBUG
+
 }
 
 void VulkanRaytracerScene::CreateDescriptorSets()
