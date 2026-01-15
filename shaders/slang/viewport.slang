@@ -1,6 +1,7 @@
 struct VSInput
 {
     float3 pos;
+    float4 tngt;
     float3 nrm;
     float2 uv;
 }
@@ -8,7 +9,9 @@ struct VSInput
 struct VSOutput
 {
     float4 pos : SV_Position;
-    float3 nrm;
+    float3 t;
+    float3 b;
+    float3 n;
     float2 uv;
 }
 
@@ -28,21 +31,34 @@ ConstantBuffer<ViewProj> view_proj;
 ConstantBuffer<Model> model;
 
 [shader("vertex")]
-VSOutput vertex_main(VSInput in)
+VSOutput vertex(VSInput in)
 {
+    float3 t = (in.tngt * in.tngt.w).xyz;
+    float3 n = in.nrm;
+    t = normalize(t - dot(t, n) * n);
+    float3 b = cross(n, t);
+
+    t = normalize(mul(model.model, float4(t, 0)).xyz);
+    b = normalize(mul(model.model, float4(b, 0)).xyz);
+    n = normalize(mul(model.model, float4(n, 0)).xyz);
+
     VSOutput out = {
         mul(view_proj.view_proj, mul(model.model, float4(in.pos, 1))),
-        in.nrm,
+        t,
+        b,
+        n,
         in.uv,
     };
 
     return out;
 }
 
-import "common.slang";
+import "utils.slang";
 
 struct PushConstants
 {
+    Light *lights;
+    uint lights_count;
     uint material_index;
     uint is_cpu_shading;
 }
@@ -61,8 +77,9 @@ struct FSOutput
 }
 
 [shader("fragment")]
-FSOutput fragment_main(VSOutput in)
+FSOutput fragment(VSOutput in)
 {
+    float4 final_color = float4(0, 0, 0, 1.f);
     float4 base_color = materials[pc.material_index].base_color_factor;
 
     if (pc.is_cpu_shading == 0)
@@ -73,6 +90,11 @@ FSOutput fragment_main(VSOutput in)
         }
     }
 
-    FSOutput fs_output = { base_color };
+    for (uint l = 0; l < pc.lights_count; ++l)
+    {
+        final_color.xyz += (base_color.xyz * (dot(-pc.lights[l].direction, in.n)));
+    }
+
+    FSOutput fs_output = { final_color };
     return fs_output;
 }

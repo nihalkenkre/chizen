@@ -99,7 +99,7 @@ void VulkanRaytracer::Start(const VulkanRaytracerScene* scene, const ImageResour
 			.pValues = &frame_sem_value,
 		};
 
-		VK_CHECK("wait acq img", vkWaitSemaphoresKHR(device, &wait_info, UINT64_MAX));
+		VK_CHECK("wait acq img", vkWaitSemaphores(device, &wait_info, UINT64_MAX));
 
 		// waiting for last submitted buffer to complete before exiting. resources in use.
 		if (mStopRendering) break;
@@ -147,7 +147,7 @@ void VulkanRaytracer::Start(const VulkanRaytracerScene* scene, const ImageResour
 			},
 		};
 
-		VK_CHECK("submit rt commamds", vkQueueSubmit2KHR(mComputeQueue, std::size(rt_submit_infos), rt_submit_infos, VK_NULL_HANDLE));
+		VK_CHECK("submit rt commamds", vkQueueSubmit2(mComputeQueue, std::size(rt_submit_infos), rt_submit_infos, VK_NULL_HANDLE));
 
 		mFrameObjects->NextFrame();
 	} while (++s <= max_samples);

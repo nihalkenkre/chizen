@@ -10,7 +10,7 @@ def copy_slang(src, dst):
     if not dst.exists():
         os.mkdir(dst)
 
-    for src_slang in src.glob("*.slang"):
+    for src_slang in src.glob("*.spv"):
         shutil.copy(src_slang, dst)
 
 

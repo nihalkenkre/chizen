@@ -9,29 +9,29 @@ class DeviceBufferResource;
 class VulkanScene
 {
 public:
-   VulkanScene() = delete;
+	VulkanScene() = delete;
 	VulkanScene(const Scene& scene, const VulkanInterface* vulkan_interface, const bool IsCPUShading);
 
-   VulkanScene(const VulkanScene& scene) = delete;
-   VulkanScene& operator=(const VulkanScene& scene) = delete;
+	VulkanScene(const VulkanScene& scene) = delete;
+	VulkanScene& operator=(const VulkanScene& scene) = delete;
 
-   ~VulkanScene() noexcept;
+	~VulkanScene() noexcept;
 
-   class MeshInstance : public Scene::MeshInstance
-   {
-   public:
-      MeshInstance(const Scene::MeshInstance& mesh_instance) : Scene::MeshInstance(mesh_instance) {};
-   };
-
-   class Material : public Scene::Material
-   {
+	class MeshInstance : public Scene::MeshInstance
+	{
 	public:
-      Material() {}
-      Material(const Scene::Material& material) : Scene::Material(material) {};
-   };
+		MeshInstance(const Scene::MeshInstance& mesh_instance) : Scene::MeshInstance(mesh_instance) {};
+	};
 
-   class Image : public Scene::Image
-   {
+	class Material : public Scene::Material
+	{
+	public:
+		Material() {}
+		Material(const Scene::Material& material) : Scene::Material(material) {};
+	};
+
+	class Image : public Scene::Image
+	{
 	public:
 		Image(const char* image_path, const VulkanInterface* vulkan_interface, const VkFormat format);
 		Image(const Scene::Image& image, const std::vector<uint8_t>& images_data, const VulkanInterface* vulkan_interface, const VkFormat format);
@@ -39,8 +39,8 @@ public:
 		const ImageResource* GetImageResource() const;
 
 	private:
-      std::unique_ptr<ImageResource> mImageResource;
-   };
+		std::unique_ptr<ImageResource> mImageResource;
+	};
 
 	class Mesh : public Scene::Mesh
 	{
@@ -71,17 +71,26 @@ public:
 		Camera(const Scene::Camera& camera) : Scene::Camera(camera) {};
 	};
 
+	class Light : public Scene::Light
+	{
+	public:
+		Light() {}
+		Light(const Scene::Light& light) : Scene::Light(light) {}
+	};
+
 	const std::vector<VulkanScene::MeshInstance>& GetMeshInstances() const;
 	const std::vector<VulkanScene::Mesh>& GetMeshes() const;
 	const std::vector<VulkanScene::CameraInstance>& GetCameraInstances() const;
 	const std::vector<VulkanScene::Camera>& GetCameras() const;
 	const std::vector<VulkanScene::Image>& GetImages() const;
 	const std::vector<VulkanScene::Material>& GetMaterials() const;
+	const std::vector<VulkanScene::Light>& GetLights() const;
 	const std::vector<VkDescriptorImageInfo>& GetImageDescs() const;
 
 	const DeviceBufferResource* GetVertexData() const;
 	const DeviceBufferResource* GetUniformData() const;
 	const DeviceBufferResource* GetMaterialsData() const;
+	const DeviceBufferResource* GetLightsData() const;
 
 private:
 	std::vector<VulkanScene::MeshInstance> mMeshInstances;
@@ -90,11 +99,13 @@ private:
 	std::vector<VulkanScene::Camera> mCameras;
 	std::vector<VulkanScene::Image> mImages;
 	std::vector<VulkanScene::Material> mMaterials;
+	std::vector<VulkanScene::Light> mLights;
 	std::vector<VkDescriptorImageInfo> mImageDescs;
 
 	std::unique_ptr<DeviceBufferResource> mVertexData;
 	std::unique_ptr<DeviceBufferResource> mUniformData;
 	std::unique_ptr<DeviceBufferResource> mMaterialsData;
+	std::unique_ptr<DeviceBufferResource> mLightsData;
 
 	VkDevice mDevice;
 };

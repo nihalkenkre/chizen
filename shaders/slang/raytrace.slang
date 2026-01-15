@@ -1,4 +1,6 @@
-import "common.slang";
+import "utils.slang";
+
+#define MAX_BOUNCES 4
 
 struct CamInfo
 {
@@ -8,6 +10,8 @@ struct CamInfo
 
 struct PushConstants
 {
+    Light *lights;
+    uint lights_count;
     uint current_sample;
     uint is_cpu_shading;
 };
@@ -42,7 +46,8 @@ PushConstants pc;
 
 struct Payload
 {
-    float4 hit_value;
+    float4 throughput;
+    bool is_hit;
 };
 
 struct CH_SBT_Record
@@ -66,12 +71,15 @@ uint LCGStep(inout uint z, uint A, uint C)
     return z = (A * z + C);
 }
 
-float HybridTaus(inout uint4 z)
+float HybridTaus(inout uint4 z, uint flat_index)
 {
-    return 2.3283064365387e-10 * (TausStep(z.x, 13, 19, 12, 4294967294) ^
-                                  TausStep(z.y, 2, 25, 4, 4294967288) ^
-                                  TausStep(z.z, 3, 11, 17, 4294967280) ^
-                                  LCGStep(z.w, 1664525, 1013904223));
+    float rand = 2.3283064365387e-10 * (TausStep(z.x, 13, 19, 12, 4294967294) ^
+                                        TausStep(z.y, 2, 25, 4, 4294967288) ^
+                                        TausStep(z.z, 3, 11, 17, 4294967280) ^
+                                        LCGStep(z.w, 1664525, 1013904223));
+
+    rand_states[flat_index] = z;
+    return rand;
 }
 
 [shader("raygeneration")]
@@ -82,6 +90,7 @@ void raygen()
 
     const float2 pixel_center = float2(launch_id.xy) + float2(0.5, 0.5);
     const float2 in_uv = pixel_center / float2(launch_size.xy);
+
     float2 d = in_uv * 2.0 - 1.0;
     float4 target = mul(cam_info.proj_inverse, float4(d.x, d.y, 1, 1));
 
@@ -95,7 +104,7 @@ void raygen()
 
     TraceRay(tlas, RAY_FLAG_FORCE_OPAQUE, 0xFF, 0, 0, 0, ray_desc, payload);
 
-    accum_target[launch_id.xy] += payload.hit_value;
+    accum_target[launch_id.xy] += payload.throughput;
     final_target[launch_id.xy] = accum_target[launch_id.xy] / pc.current_sample;
 }
 
@@ -108,8 +117,7 @@ void miss(inout Payload p)
     uint flat_index = launch_id.y * launch_size.x + launch_id.x;
     uint4 z = rand_states[flat_index];
 
-    p.hit_value = float4(HybridTaus(z), HybridTaus(z), HybridTaus(z), 1);
-    rand_states[flat_index] = z;
+    p.throughput = float4(HybridTaus(z, flat_index), HybridTaus(z, flat_index), HybridTaus(z, flat_index), 1);
 }
 
 struct Attributes
@@ -120,6 +128,11 @@ struct Attributes
 [shader("closesthit")]
 void closesthit(inout Payload p, in Attributes attribs)
 {
+    uint3 launch_id = DispatchRaysIndex();
+    uint3 launch_size = DispatchRaysDimensions();
+
+    uint flat_index = launch_id.y * launch_size.x + launch_id.x;
+    uint4 z = rand_states[flat_index];
     const float3 bary_coords = float3(attribs.bary.x, attribs.bary.y, 1.0f - attribs.bary.x - attribs.bary.y);
 
     uint3 index_triplet = *(ch_sbt.indices + PrimitiveIndex());
@@ -147,9 +160,10 @@ void closesthit(inout Payload p, in Attributes attribs)
 
     float3x3 tbn = transpose(float3x3(t, b, n));
 
+    float4 final_color = float4(0, 0, 0, 1);
     float4 base_color = materials[ch_sbt.material_index].base_color_factor;
 
-    float3 l = float3(-1, 0.5, 1);
+    float3 l = float3(0, 0, 1);
 
     if (pc.is_cpu_shading == 0)
     {
@@ -165,12 +179,22 @@ void closesthit(inout Payload p, in Attributes attribs)
                 textures[NonUniformResourceIndex(materials[ch_sbt.material_index].base_normal_metalrough_index.y)].SampleLevel(uv, 0).xyz * 2 - 1);
         }
 
-        base_color.xyz *= dot(n, l);
-        if (materials[ch_sbt.material_index].base_normal_metalrough_index.z >= 0)
+        float u = HybridTaus(z, flat_index);
+        float v = HybridTaus(z, flat_index);
+
+        float theta = asin(sqrt(u));
+        float phi = 2 * 3.14 * v;
+
+        float3 r = mul(tbn, float3(
+                                sin(theta) * cos(phi),
+                                sin(theta) * sin(phi),
+                                cos(theta)));
+
+        for (uint l = 0; l < pc.lights_count; ++l)
         {
-            // base_color *= textures[NonUniformResourceIndex(materials[ch_sbt.material_index].base_normal_metalrough_index.z)].SampleLevel(uv, 0);
+            final_color.xyz += (base_color.xyz * (dot(-pc.lights[l].direction, n)));
         }
     }
 
-    p.hit_value = base_color;
+    p.throughput = final_color;
 }

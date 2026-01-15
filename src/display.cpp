@@ -41,176 +41,155 @@ DisplayPipelineData::DisplayPipelineData(const VkDevice device, const std::strin
 {
 	mDescriptorSetLayouts.resize(1);
 
-	Slang::ComPtr<slang::IGlobalSession> slang_global_session;
-	SLANG_CHECK("create global session", slang::createGlobalSession(slang_global_session.writeRef()));
+	// Kept this just in case.
+//	Slang::ComPtr<slang::IGlobalSession> slang_global_session;
+//	SLANG_CHECK("create global session", slang::createGlobalSession(slang_global_session.writeRef()));
+//
+//	const slang::TargetDesc target_descs[] = {
+//		{
+//			.format = SLANG_SPIRV,
+//			.profile = slang_global_session->findProfile("spirv_1_5"),
+//		}
+//	};
+//
+//	slang::CompilerOptionEntry compiler_options[] = {
+//		{
+//			.name = slang::CompilerOptionName::MatrixLayoutColumn,
+//			.value = {
+//				.kind = slang::CompilerOptionValueKind::Int,
+//				.intValue0 = 1,
+//			},
+//		},
+//		{
+//			.name = slang::CompilerOptionName::DisableWarnings,
+//			.value = {
+//				.kind = slang::CompilerOptionValueKind::String,
+//				.stringValue0 = "41012"
+//			},
+//		},
+//#ifdef _DEBUG
+//		{
+//			.name = slang::CompilerOptionName::DebugInformation,
+//			.value = {
+//				.kind = slang::CompilerOptionValueKind::Int,
+//				.intValue0 = SLANG_DEBUG_INFO_LEVEL_MAXIMAL,
+//			}
+//		},
+//#else	// _DEBUG
+//		{
+//			.name = slang::CompilerOptionName::Optimization,
+//			.value = {
+//				.kind = slang::CompilerOptionValueKind::Int,
+//				.intValue0 = SLANG_OPTIMIZATION_LEVEL_MAXIMAL
+//			},
+//		},
+//#endif // _DEBUG
+//	};
+//
+//	slang::SessionDesc session_desc = {
+//		.targets = target_descs,
+//		.targetCount = std::size(target_descs),
+//		.compilerOptionEntries = compiler_options,
+//		.compilerOptionEntryCount = std::size(compiler_options),
+//	};
+//
+//	Slang::ComPtr<slang::ISession> compile_session;
+//	SLANG_CHECK("create compile session", slang_global_session->createSession(session_desc, compile_session.writeRef()));
+//
+//	const std::string slang_shader_path = std::string(SDL_GetBasePath()).append("/shaders/slang/display.slang");
+//
+//	Slang::ComPtr<slang::IBlob> diagnostic_blob;
+//	slang::IModule* slang_module = compile_session->loadModule(slang_shader_path.c_str(), diagnostic_blob.writeRef());
+//
+//	if (diagnostic_blob != nullptr)
+//	{
+//		std::println("{}", reinterpret_cast<const char*>(diagnostic_blob->getBufferPointer()));
+//	}
+//
+//	Slang::ComPtr<slang::IEntryPoint> vert_entry_point;
+//	slang_module->findEntryPointByName("vertex_main", vert_entry_point.writeRef());
+//
+//	std::array<slang::IComponentType*, 2> vert_component_types = { slang_module, vert_entry_point };
+//	Slang::ComPtr<slang::IComponentType> vert_composed_program;
+//	diagnostic_blob.setNull();
+//	SLANG_CHECK("create program", compile_session->createCompositeComponentType(vert_component_types.data(), vert_component_types.size(), vert_composed_program.writeRef(), diagnostic_blob.writeRef()));
+//
+//	Slang::ComPtr<slang::IComponentType> vert_linked_program;
+//	diagnostic_blob.setNull();
+//	SLANG_CHECK("link program", vert_composed_program->link(vert_linked_program.writeRef(), diagnostic_blob.writeRef()));
+//
+//	Slang::ComPtr<slang::IBlob> vert_spirv_code;
+//	diagnostic_blob.setNull();
+//	SLANG_CHECK("get spirv code", vert_composed_program->getEntryPointCode(0, 0, vert_spirv_code.writeRef(), diagnostic_blob.writeRef()));
+//
+//	const VkShaderModuleCreateInfo vert_mod_ci = {
+//		.sType = VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO,
+//		.codeSize = vert_spirv_code->getBufferSize(),
+//		.pCode = reinterpret_cast<const uint32_t*>(vert_spirv_code->getBufferPointer()),
+//	};
+//
+//	VkShaderModule vert_mod = VK_NULL_HANDLE;
+//	VK_CHECK("create vert shader module", vkCreateShaderModule(mDevice, &vert_mod_ci, nullptr, &vert_mod));
+//
+//	Slang::ComPtr<slang::IEntryPoint> frag_entry_point;
+//	slang_module->findEntryPointByName("fragment_main", frag_entry_point.writeRef());
+//
+//	std::array<slang::IComponentType*, 2> frag_component_types = { slang_module, frag_entry_point };
+//	Slang::ComPtr<slang::IComponentType> frag_composed_program;
+//	diagnostic_blob.setNull();
+//	SLANG_CHECK("create program", compile_session->createCompositeComponentType(frag_component_types.data(), frag_component_types.size(), frag_composed_program.writeRef(), diagnostic_blob.writeRef()));
+//
+//	Slang::ComPtr<slang::IComponentType> frag_linked_program;
+//	diagnostic_blob.setNull();
+//	SLANG_CHECK("link program", frag_composed_program->link(frag_linked_program.writeRef(), diagnostic_blob.writeRef()));
+//
+//	Slang::ComPtr<slang::IBlob> frag_spirv_code;
+//	diagnostic_blob.setNull();
+//	SLANG_CHECK("get spirv code", frag_composed_program->getEntryPointCode(0, 0, frag_spirv_code.writeRef(), diagnostic_blob.writeRef()));
+//
+//	const VkShaderModuleCreateInfo frag_mod_ci = {
+//		.sType = VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO,
+//		.codeSize = frag_spirv_code->getBufferSize(),
+//		.pCode = reinterpret_cast<const uint32_t*>(frag_spirv_code->getBufferPointer()),
+//	};
+//
+//	VkShaderModule frag_mod = VK_NULL_HANDLE;
+//	VK_CHECK("create frag shader module", vkCreateShaderModule(mDevice, &frag_mod_ci, nullptr, &frag_mod));
 
-	const slang::TargetDesc target_descs[] = {
-		{
-			.format = SLANG_SPIRV,
-			.profile = slang_global_session->findProfile("spirv_1_5"),
-		}
-	};
-
-	slang::CompilerOptionEntry compiler_options[] = {
-		{
-			.name = slang::CompilerOptionName::MatrixLayoutColumn,
-			.value = {
-				.kind = slang::CompilerOptionValueKind::Int,
-				.intValue0 = 1,
-			},
-		},
-		{
-			.name = slang::CompilerOptionName::DisableWarnings,
-			.value = {
-				.kind = slang::CompilerOptionValueKind::String,
-				.stringValue0 = "41012"
-			},
-		},
-#ifdef _DEBUG
-		{
-			.name = slang::CompilerOptionName::DebugInformation,
-			.value = {
-				.kind = slang::CompilerOptionValueKind::Int,
-				.intValue0 = SLANG_DEBUG_INFO_LEVEL_MAXIMAL,
-			}
-		},
-#else	// _DEBUG
-		{
-			.name = slang::CompilerOptionName::Optimization,
-			.value = {
-				.kind = slang::CompilerOptionValueKind::Int,
-				.intValue0 = SLANG_OPTIMIZATION_LEVEL_MAXIMAL
-			},
-		},
-#endif // _DEBUG
-	};
-
-	slang::SessionDesc session_desc = {
-		.targets = target_descs,
-		.targetCount = std::size(target_descs),
-		.compilerOptionEntries = compiler_options,
-		.compilerOptionEntryCount = std::size(compiler_options),
-	};
-
-	Slang::ComPtr<slang::ISession> compile_session;
-	SLANG_CHECK("create compile session", slang_global_session->createSession(session_desc, compile_session.writeRef()));
-
-	const std::string slang_shader_path = std::string(SDL_GetBasePath()).append("/shaders/slang/display.slang");
-
-	Slang::ComPtr<slang::IBlob> diagnostic_blob;
-	slang::IModule* slang_module = compile_session->loadModule(slang_shader_path.c_str(), diagnostic_blob.writeRef());
-
-	if (diagnostic_blob != nullptr)
+	std::filesystem::path spv_path = std::string(SDL_GetBasePath()).append("shaders\\slang\\display.slang.spv");
+	VkShaderModule mod = VK_NULL_HANDLE;
+	if (std::filesystem::exists(spv_path))
 	{
-		std::println("{}", reinterpret_cast<const char*>(diagnostic_blob->getBufferPointer()));
-	}
+		std::uintmax_t spv_size = std::filesystem::file_size(spv_path);
+		std::ifstream spv_file(spv_path.c_str(), std::ios::binary);
 
-	Slang::ComPtr<slang::IEntryPoint> vert_entry_point;
-	slang_module->findEntryPointByName("vertex_main", vert_entry_point.writeRef());
-
-	std::array<slang::IComponentType*, 2> vert_component_types = { slang_module, vert_entry_point };
-	Slang::ComPtr<slang::IComponentType> vert_composed_program;
-	diagnostic_blob.setNull();
-	SLANG_CHECK("create program", compile_session->createCompositeComponentType(vert_component_types.data(), vert_component_types.size(), vert_composed_program.writeRef(), diagnostic_blob.writeRef()));
-
-	Slang::ComPtr<slang::IComponentType> vert_linked_program;
-	diagnostic_blob.setNull();
-	SLANG_CHECK("link program", vert_composed_program->link(vert_linked_program.writeRef(), diagnostic_blob.writeRef()));
-
-	Slang::ComPtr<slang::IBlob> vert_spirv_code;
-	diagnostic_blob.setNull();
-	SLANG_CHECK("get spirv code", vert_composed_program->getEntryPointCode(0, 0, vert_spirv_code.writeRef(), diagnostic_blob.writeRef()));
-
-	const VkShaderModuleCreateInfo vert_mod_ci = {
-		.sType = VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO,
-		.codeSize = vert_spirv_code->getBufferSize(),
-		.pCode = reinterpret_cast<const uint32_t*>(vert_spirv_code->getBufferPointer()),
-	};
-
-	VkShaderModule vert_mod = VK_NULL_HANDLE;
-	VK_CHECK("create vert shader module", vkCreateShaderModule(mDevice, &vert_mod_ci, nullptr, &vert_mod));
-
-	Slang::ComPtr<slang::IEntryPoint> frag_entry_point;
-	slang_module->findEntryPointByName("fragment_main", frag_entry_point.writeRef());
-
-	std::array<slang::IComponentType*, 2> frag_component_types = { slang_module, frag_entry_point };
-	Slang::ComPtr<slang::IComponentType> frag_composed_program;
-	diagnostic_blob.setNull();
-	SLANG_CHECK("create program", compile_session->createCompositeComponentType(frag_component_types.data(), frag_component_types.size(), frag_composed_program.writeRef(), diagnostic_blob.writeRef()));
-
-	Slang::ComPtr<slang::IComponentType> frag_linked_program;
-	diagnostic_blob.setNull();
-	SLANG_CHECK("link program", frag_composed_program->link(frag_linked_program.writeRef(), diagnostic_blob.writeRef()));
-
-	Slang::ComPtr<slang::IBlob> frag_spirv_code;
-	diagnostic_blob.setNull();
-	SLANG_CHECK("get spirv code", frag_composed_program->getEntryPointCode(0, 0, frag_spirv_code.writeRef(), diagnostic_blob.writeRef()));
-
-	const VkShaderModuleCreateInfo frag_mod_ci = {
-		.sType = VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO,
-		.codeSize = frag_spirv_code->getBufferSize(),
-		.pCode = reinterpret_cast<const uint32_t*>(frag_spirv_code->getBufferPointer()),
-	};
-
-	VkShaderModule frag_mod = VK_NULL_HANDLE;
-	VK_CHECK("create frag shader module", vkCreateShaderModule(mDevice, &frag_mod_ci, nullptr, &frag_mod));
-
-	/*std::filesystem::path vert_path = std::string(current_path).append("/shaders/glsl/display.vert.glsl.spv");
-	VkShaderModule vert_mod = VK_NULL_HANDLE;
-	if (std::filesystem::exists(vert_path))
-	{
-		std::uintmax_t file_size = std::filesystem::file_size(vert_path);
-		std::ifstream vert_file(vert_path.c_str(), std::ios::binary);
-
-		std::vector<char> vert_code(file_size, 0);
-		vert_file.read(vert_code.data(), file_size);
+		std::vector<char> spv_code(spv_size, 0);
+		spv_file.read(spv_code.data(), spv_size);
 
 		const VkShaderModuleCreateInfo ci = {
 			.sType = VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO,
-			.codeSize = file_size,
-			.pCode = reinterpret_cast<uint32_t*>(vert_code.data()),
+			.codeSize = spv_size,
+			.pCode = reinterpret_cast<uint32_t*>(spv_code.data()),
 		};
-		VK_CHECK("create rgen module", vkCreateShaderModule(mDevice, &ci, nullptr, &vert_mod));
+		VK_CHECK("create rgen module", vkCreateShaderModule(mDevice, &ci, nullptr, &mod));
 	}
 	else
 	{
-		std::println("Could not find {}", vert_path.string());
+		std::println("Could not find {}", spv_path.string());
 	}
-
-	std::filesystem::path frag_path = std::string(current_path).append("/shaders/glsl/display.frag.glsl.spv");
-	VkShaderModule frag_mod = VK_NULL_HANDLE;
-	if (std::filesystem::exists(frag_path))
-	{
-		std::uintmax_t file_size = std::filesystem::file_size(frag_path);
-		std::ifstream frag_file(frag_path.c_str(), std::ios::binary);
-
-		std::vector<char> frag_code(file_size, 0);
-		frag_file.read(frag_code.data(), file_size);
-
-		const VkShaderModuleCreateInfo ci = {
-			.sType = VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO,
-			.codeSize = file_size,
-			.pCode = reinterpret_cast<uint32_t*>(frag_code.data()),
-		};
-		VK_CHECK("create frag module", vkCreateShaderModule(mDevice, &ci, nullptr, &frag_mod));
-	}
-	else
-	{
-		std::println("Could not find {}", frag_path.string());
-	}*/
 
 	const VkPipelineShaderStageCreateInfo stages[] = {
 		{
 			.sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO,
 			.stage = VK_SHADER_STAGE_VERTEX_BIT,
-			.module = vert_mod,
-			.pName = "main",
+			.module = mod,
+			.pName = "vertex",
 		},
 		{
 			.sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO,
 			.stage = VK_SHADER_STAGE_FRAGMENT_BIT,
-			.module = frag_mod,
-			.pName = "main",
+			.module = mod,
+			.pName = "fragment",
 		},
 	};
 
@@ -370,8 +349,7 @@ DisplayPipelineData::DisplayPipelineData(const VkDevice device, const std::strin
 
 	VK_CHECK("create graphics pipeline", vkCreateGraphicsPipelines(mDevice, VK_NULL_HANDLE, std::size(cis), cis, nullptr, &mPipeline));
 
-	vkDestroyShaderModule(mDevice, vert_mod, nullptr);
-	vkDestroyShaderModule(mDevice, frag_mod, nullptr);
+	vkDestroyShaderModule(mDevice, mod, nullptr);
 
 #ifdef _DEBUG
 	Utils_SetObjectName(mDevice, VK_OBJECT_TYPE_PIPELINE, reinterpret_cast<uint64_t>(mPipeline), std::string(name).append(" pipeline").c_str());
@@ -487,26 +465,6 @@ Display::Display(const VulkanInterface* vulkan_interface, const ImageResource* f
 		VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_VERTEX_BUFFER_BIT, verts_size,
 		"geometry");
 
-	//auto wait_and_delete = [this](HostBufferResource* hbr) {
-	//	VkSemaphore sem = mTransferHelpers->GetSemaphore();
-	//	const uint64_t sem_value = mTransferHelpers->GetSemaphoreValueConst();
-
-	//	const VkSemaphoreWaitInfo wait_info = {
-	//		.sType = VK_STRUCTURE_TYPE_SEMAPHORE_WAIT_INFO,
-	//		.semaphoreCount = 1,
-	//		.pSemaphores = &sem,
-	//		.pValues = &sem_value,
-	//	};
-	//	VK_CHECK("wait for sem", vkWaitSemaphoresKHR(mDevice, &wait_info, UINT64_MAX));
-
-	//	hbr->~HostBufferResource();
-	//	};
-
-	//std::unique_ptr<HostBufferResource, decltype(wait_and_delete)> staging_buffer(new HostBufferResource(
-	//	vulkan_interface->GetVkDevice(), vulkan_interface->GetVmaAllocator(),
-	//	VK_BUFFER_USAGE_TRANSFER_SRC_BIT, VMA_ALLOCATION_CREATE_HOST_ACCESS_SEQUENTIAL_WRITE_BIT, verts_data,
-	//	"staging geometry"), wait_and_delete);
-
 	auto staging_buffer = std::make_unique<HostBufferResource>(
 		vulkan_interface->GetVkDevice(), vulkan_interface->GetVmaAllocator(),
 		VK_BUFFER_USAGE_TRANSFER_SRC_BIT, VMA_ALLOCATION_CREATE_HOST_ACCESS_SEQUENTIAL_WRITE_BIT, verts_data,
@@ -567,7 +525,7 @@ void Display::Render(
 		.pValues = &frame_sem_value,
 	};
 
-	VK_CHECK("wait acq img", vkWaitSemaphoresKHR(device, &wait_info, UINT64_MAX));
+	VK_CHECK("wait acq img", vkWaitSemaphores(device, &wait_info, UINT64_MAX));
 
 	const VkAcquireNextImageInfoKHR acq_info = {
 		.sType = VK_STRUCTURE_TYPE_ACQUIRE_NEXT_IMAGE_INFO_KHR,
@@ -625,7 +583,7 @@ void Display::Render(
 		.pColorAttachments = col_attachs,
 	};
 
-	vkCmdBeginRenderingKHR(cmd_buff, &rendering_info);
+	vkCmdBeginRendering(cmd_buff, &rendering_info);
 
 	vkCmdBindPipeline(cmd_buff, VK_PIPELINE_BIND_POINT_GRAPHICS, mPipelineData->GetPipeline());
 
@@ -637,7 +595,7 @@ void Display::Render(
 		.pDescriptorSets = &mDescriptorSet,
 	};
 
-	vkCmdBindDescriptorSets2KHR(cmd_buff, &bind_desc_sets_info);
+	vkCmdBindDescriptorSets2(cmd_buff, &bind_desc_sets_info);
 
 	const VkViewport viewports[] = {
 		{
@@ -664,7 +622,7 @@ void Display::Render(
 		0,
 	};
 
-	vkCmdBindVertexBuffers2EXT(cmd_buff, 0, std::size(vtx_buffs), vtx_buffs, vtx_buff_offs, nullptr, nullptr);
+	vkCmdBindVertexBuffers2(cmd_buff, 0, std::size(vtx_buffs), vtx_buffs, vtx_buff_offs, nullptr, nullptr);
 
 	const DisplayPipelineData::PushConstants gfx_pc = {
 		.PositionOffset = {
@@ -682,13 +640,13 @@ void Display::Render(
 		.pValues = &gfx_pc,
 	};
 
-	vkCmdPushConstants2KHR(cmd_buff, &gfx_pc_info);
+	vkCmdPushConstants2(cmd_buff, &gfx_pc_info);
 
 	vkCmdDraw(cmd_buff, 6, 1, 0, 0);
 
 	imgui_state->Render(cmd_buff);
 
-	vkCmdEndRenderingKHR(cmd_buff);
+	vkCmdEndRendering(cmd_buff);
 
 	Utils_ChangeImageLayout(cmd_buff,
 		VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT, VK_ACCESS_2_COLOR_ATTACHMENT_WRITE_BIT,
@@ -753,7 +711,7 @@ void Display::Render(
 		},
 	};
 
-	VK_CHECK("submit display render commands", vkQueueSubmit2KHR(mQueue, std::size(submit_infos), submit_infos, VK_NULL_HANDLE));
+	VK_CHECK("submit display render commands", vkQueueSubmit2(mQueue, std::size(submit_infos), submit_infos, VK_NULL_HANDLE));
 
 	VkSwapchainKHR sc = swapchain->GetSwapchain();
 	const VkPresentInfoKHR present_info = {

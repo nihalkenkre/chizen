@@ -24,8 +24,10 @@ public:
 
 	struct PushConstants
 	{
-		uint32_t MaterialIndex;
-		uint32_t IsCPUShading;
+		VkDeviceAddress Lights = 0;
+		uint32_t LightsCount = 0;
+		uint32_t MaterialIndex = 0;
+		uint32_t IsCPUShading = 0;
 	};
 
 private:
@@ -38,176 +40,40 @@ private:
 
 ViewportScenePipelineData::ViewportScenePipelineData(const VkDevice device, const size_t num_images, const std::string& name) : mDevice(device)
 {
-	Slang::ComPtr<slang::IGlobalSession> slang_global_session;
-	SLANG_CHECK("create global session", slang::createGlobalSession(slang_global_session.writeRef()));
-
-	const slang::TargetDesc target_descs[] = {
-		{
-			.format = SLANG_SPIRV,
-			.profile = slang_global_session->findProfile("spirv_1_5"),
-		}
-	};
-
-	slang::CompilerOptionEntry compiler_options[] = {
-		{
-			.name = slang::CompilerOptionName::MatrixLayoutColumn,
-			.value = {
-				.kind = slang::CompilerOptionValueKind::Int,
-				.intValue0 = 1,
-			},
-		},
-		{
-			.name = slang::CompilerOptionName::DisableWarnings,
-			.value = {
-				.kind = slang::CompilerOptionValueKind::String,
-				.stringValue0 = "41012"
-			},
-		},
- #ifdef _DEBUG
-		{
-			.name = slang::CompilerOptionName::DebugInformation,
-			.value = {
-				.kind = slang::CompilerOptionValueKind::Int,
-				.intValue0 = SLANG_DEBUG_INFO_LEVEL_MAXIMAL,
-			}
-		},
- #else	// _DEBUG
-		{
-			.name = slang::CompilerOptionName::Optimization,
-			.value = {
-				.kind = slang::CompilerOptionValueKind::Int,
-				.intValue0 = SLANG_OPTIMIZATION_LEVEL_MAXIMAL
-			},
-		},
- #endif // _DEBUG
-	};
-
-	slang::SessionDesc session_desc = {
-		.targets = target_descs,
-		.targetCount = std::size(target_descs),
-		.compilerOptionEntries = compiler_options,
-		.compilerOptionEntryCount = std::size(compiler_options),
-	};
-
-	Slang::ComPtr<slang::ISession> compile_session;
-	SLANG_CHECK("create compile session", slang_global_session->createSession(session_desc, compile_session.writeRef()));
-
-	const std::string slang_shader_path = std::string(SDL_GetBasePath()).append("/shaders/slang/viewport.slang");
-
-	Slang::ComPtr<slang::IBlob> diagnostic_blob;
-	slang::IModule* slang_module = compile_session->loadModule(slang_shader_path.c_str(), diagnostic_blob.writeRef());
-
-	if (diagnostic_blob != nullptr)
+	std::filesystem::path spv_path = std::string(SDL_GetBasePath()).append("shaders\\slang\\viewport.slang.spv");
+	VkShaderModule mod = VK_NULL_HANDLE;
+	if (std::filesystem::exists(spv_path))
 	{
-		std::println("{}", reinterpret_cast<const char*>(diagnostic_blob->getBufferPointer()));
-	}
+		std::uintmax_t spv_size = std::filesystem::file_size(spv_path);
+		std::ifstream spv_file(spv_path.c_str(), std::ios::binary);
 
-	Slang::ComPtr<slang::IEntryPoint> vert_entry_point;
-	slang_module->findEntryPointByName("vertex_main", vert_entry_point.writeRef());
-
-	std::array<slang::IComponentType*, 2> vert_component_types = { slang_module, vert_entry_point };
-	Slang::ComPtr<slang::IComponentType> vert_composed_program;
-	diagnostic_blob.setNull();
-	SLANG_CHECK("create program", compile_session->createCompositeComponentType(vert_component_types.data(), vert_component_types.size(), vert_composed_program.writeRef(), diagnostic_blob.writeRef()));
-
-	Slang::ComPtr<slang::IComponentType> vert_linked_program;
-	diagnostic_blob.setNull();
-	SLANG_CHECK("link program", vert_composed_program->link(vert_linked_program.writeRef(), diagnostic_blob.writeRef()));
-
-	Slang::ComPtr<slang::IBlob> vert_spirv_code;
-	diagnostic_blob.setNull();
-	SLANG_CHECK("get spirv code", vert_composed_program->getEntryPointCode(0, 0, vert_spirv_code.writeRef(), diagnostic_blob.writeRef()));
-
-	const VkShaderModuleCreateInfo vert_mod_ci = {
-		.sType = VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO,
-		.codeSize = vert_spirv_code->getBufferSize(),
-		.pCode = reinterpret_cast<const uint32_t*>(vert_spirv_code->getBufferPointer()),
-	};
-
-	VkShaderModule vert_mod = VK_NULL_HANDLE;
-	VK_CHECK("create vert shader module", vkCreateShaderModule(mDevice, &vert_mod_ci, nullptr, &vert_mod));
-
-	Slang::ComPtr<slang::IEntryPoint> frag_entry_point;
-	slang_module->findEntryPointByName("fragment_main", frag_entry_point.writeRef());
-
-	std::array<slang::IComponentType*, 2> frag_component_types = { slang_module, frag_entry_point };
-	Slang::ComPtr<slang::IComponentType> frag_composed_program;
-	diagnostic_blob.setNull();
-	SLANG_CHECK("create program", compile_session->createCompositeComponentType(frag_component_types.data(), frag_component_types.size(), frag_composed_program.writeRef(), diagnostic_blob.writeRef()));
-
-	Slang::ComPtr<slang::IComponentType> frag_linked_program;
-	diagnostic_blob.setNull();
-	SLANG_CHECK("link program", frag_composed_program->link(frag_linked_program.writeRef(), diagnostic_blob.writeRef()));
-
-	Slang::ComPtr<slang::IBlob> frag_spirv_code;
-	diagnostic_blob.setNull();
-	SLANG_CHECK("get spirv code", frag_composed_program->getEntryPointCode(0, 0, frag_spirv_code.writeRef(), diagnostic_blob.writeRef()));
-
-	const VkShaderModuleCreateInfo frag_mod_ci = {
-		.sType = VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO,
-		.codeSize = frag_spirv_code->getBufferSize(),
-		.pCode = reinterpret_cast<const uint32_t*>(frag_spirv_code->getBufferPointer()),
-	};
-
-	VkShaderModule frag_mod = VK_NULL_HANDLE;
-	VK_CHECK("create frag shader module", vkCreateShaderModule(mDevice, &frag_mod_ci, nullptr, &frag_mod));
-
-	/*std::filesystem::path vert_path = std::string(current_path).append("/shaders/glsl/viewport.vert.glsl.spv");
-	VkShaderModule vert_mod = VK_NULL_HANDLE;
-	if (std::filesystem::exists(vert_path))
-	{
-		std::uintmax_t file_size = std::filesystem::file_size(vert_path);
-		std::ifstream vert_file(vert_path.c_str(), std::ios::binary);
-
-		std::vector<char> vert_code(file_size, 0);
-		vert_file.read(vert_code.data(), file_size);
+		std::vector<char> spv_code(spv_size, 0);
+		spv_file.read(spv_code.data(), spv_size);
 
 		const VkShaderModuleCreateInfo ci = {
 			.sType = VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO,
-			.codeSize = file_size,
-			.pCode = reinterpret_cast<uint32_t*>(vert_code.data()),
+			.codeSize = spv_size,
+			.pCode = reinterpret_cast<uint32_t*>(spv_code.data()),
 		};
-		VK_CHECK("create rgen module", vkCreateShaderModule(mDevice, &ci, nullptr, &vert_mod));
+		VK_CHECK("create module", vkCreateShaderModule(mDevice, &ci, nullptr, &mod));
 	}
 	else
 	{
-		std::println("Could not find {}", vert_path.string());
+		std::println("Could not find {}", spv_path.string());
 	}
-
-	std::filesystem::path frag_path = std::string(current_path).append("/shaders/glsl/viewport.frag.glsl.spv");
-	VkShaderModule frag_mod = VK_NULL_HANDLE;
-	if (std::filesystem::exists(frag_path))
-	{
-		std::uintmax_t file_size = std::filesystem::file_size(frag_path);
-		std::ifstream frag_file(frag_path.c_str(), std::ios::binary);
-
-		std::vector<char> frag_code(file_size, 0);
-		frag_file.read(frag_code.data(), file_size);
-
-		const VkShaderModuleCreateInfo ci = {
-			.sType = VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO,
-			.codeSize = file_size,
-			.pCode = reinterpret_cast<uint32_t*>(frag_code.data()),
-		};
-		VK_CHECK("create frag module", vkCreateShaderModule(mDevice, &ci, nullptr, &frag_mod));
-	}
-	else
-	{
-		std::println("Could not find {}", frag_path.string());
-	}*/
 
 	const VkPipelineShaderStageCreateInfo stages[] = {
 		{
 			.sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO,
 			.stage = VK_SHADER_STAGE_VERTEX_BIT,
-			.module = vert_mod,
-			.pName = "main",
+			.module = mod,
+			.pName = "vertex",
 		},
 		{
 			.sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO,
 			.stage = VK_SHADER_STAGE_FRAGMENT_BIT,
-			.module = frag_mod,
-			.pName = "main",
+			.module = mod,
+			.pName = "fragment",
 		},
 	};
 
@@ -233,11 +99,16 @@ ViewportScenePipelineData::ViewportScenePipelineData(const VkDevice device, cons
 		{
 			.location = 1,
 			.binding = 1,
+			.format = VK_FORMAT_R32G32B32A32_SFLOAT,
+		},
+		{
+			.location = 2,
+			.binding = 1,
 			.format = VK_FORMAT_R32G32B32_SFLOAT,
 			.offset = sizeof(glm::vec4),
 		},
 		{
-			.location = 2,
+			.location = 3,
 			.binding = 1,
 			.format = VK_FORMAT_R32G32_SFLOAT,
 			.offset = sizeof(glm::vec4) + sizeof(glm::vec3),
@@ -442,8 +313,7 @@ ViewportScenePipelineData::ViewportScenePipelineData(const VkDevice device, cons
 
 	VK_CHECK("create graphics pipeline", vkCreateGraphicsPipelines(mDevice, VK_NULL_HANDLE, std::size(cis), cis, nullptr, &mPipeline));
 
-	vkDestroyShaderModule(mDevice, vert_mod, nullptr);
-	vkDestroyShaderModule(mDevice, frag_mod, nullptr);
+	vkDestroyShaderModule(mDevice, mod, nullptr);
 
 #ifdef _DEBUG
 	Utils_SetObjectName(mDevice, VK_OBJECT_TYPE_PIPELINE, reinterpret_cast<uint64_t>(mPipeline), std::string(name).append(" pipeline").c_str());
@@ -515,7 +385,7 @@ void ViewportWorldScene::Render(const VkCommandBuffer cmd_buff, const uint32_t c
 		.pDynamicOffsets = &offset,
 	};
 
-	vkCmdBindDescriptorSets2KHR(cmd_buff, &bind_ds_info);
+	vkCmdBindDescriptorSets2(cmd_buff, &bind_ds_info);
 
 	size_t instance_index = 0;
 	for (const auto& mesh_instance : mScene->GetMeshInstances())
@@ -532,7 +402,7 @@ void ViewportWorldScene::Render(const VkCommandBuffer cmd_buff, const uint32_t c
 			.pDynamicOffsets = &offset,
 		};
 
-		vkCmdBindDescriptorSets2KHR(cmd_buff, &bind_ds_info);
+		vkCmdBindDescriptorSets2(cmd_buff, &bind_ds_info);
 
 		const auto& curr_prims = mScene->GetMeshes()[mesh_instance.GetMeshIndex()].GetPrimitives();
 
@@ -548,9 +418,11 @@ void ViewportWorldScene::Render(const VkCommandBuffer cmd_buff, const uint32_t c
 				.pDescriptorSets = &tex_desc_set,
 			};
 
-			vkCmdBindDescriptorSets2KHR(cmd_buff, &bind_ds_info);
+			vkCmdBindDescriptorSets2(cmd_buff, &bind_ds_info);
 
 			const ViewportScenePipelineData::PushConstants pc = {
+				.Lights = mScene->GetLightsData()->GetDeviceAddress(),
+				.LightsCount = static_cast<uint32_t>(mScene->GetLights().size()),
 				.MaterialIndex = static_cast<uint32_t>(curr_prim.GetMaterialIndex()),
 				.IsCPUShading = is_cpu_shading,
 			};
@@ -562,7 +434,7 @@ void ViewportWorldScene::Render(const VkCommandBuffer cmd_buff, const uint32_t c
 				.size = sizeof(ViewportScenePipelineData::PushConstants),
 				.pValues = &pc
 			};
-			vkCmdPushConstants2KHR(cmd_buff, &pc_info);
+			vkCmdPushConstants2(cmd_buff, &pc_info);
 
 			const VkBuffer buffers[] = {
 				mScene->GetVertexData()->GetVkBuffer(),
@@ -574,11 +446,12 @@ void ViewportWorldScene::Render(const VkCommandBuffer cmd_buff, const uint32_t c
 				curr_prim.GetVerticesDataOffset(),
 			};
 
-			vkCmdBindVertexBuffers2EXT(cmd_buff, 0, std::size(buffers), buffers, offsets, nullptr, nullptr);
+			vkCmdBindVertexBuffers2(cmd_buff, 0, std::size(buffers), buffers, offsets, nullptr, nullptr);
 
 			if (curr_prim.GetIndexCount() != 0)
 			{
-				vkCmdBindIndexBuffer2KHR(cmd_buff,
+				vkCmdBindIndexBuffer2(
+					cmd_buff,
 					mScene->GetVertexData()->GetVkBuffer(),
 					curr_prim.GetIndicesOffset(),
 					curr_prim.GetIndicesSize(),
@@ -642,7 +515,6 @@ void ViewportWorldScene::CreateDescriptorPool()
 #ifdef _DEBUG
 	Utils_SetObjectName(mDevice, VK_OBJECT_TYPE_DESCRIPTOR_POOL, reinterpret_cast<uint64_t>(mDescriptorPool), "scene descriptor pool");
 #endif // _DEBUG
-
 }
 
 void ViewportWorldScene::CreateDescriptorSets()

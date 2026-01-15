@@ -49,7 +49,7 @@ void Utils_ChangeImageLayout(
 		.pImageMemoryBarriers = &img_mem_barr,
 	};
 
-	vkCmdPipelineBarrier2KHR(cmd_buff, &dep_info);
+	vkCmdPipelineBarrier2(cmd_buff, &dep_info);
 }
 
 void Utils_InsertMemoryBarrier(
@@ -72,7 +72,7 @@ void Utils_InsertMemoryBarrier(
 		.pMemoryBarriers = &mem_bar,
 	};
 
-	vkCmdPipelineBarrier2KHR(cmd_buff, &dep_info);
+	vkCmdPipelineBarrier2(cmd_buff, &dep_info);
 }
 
 #ifdef _DEBUG

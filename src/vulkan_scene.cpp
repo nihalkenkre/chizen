@@ -59,6 +59,12 @@ VulkanScene::VulkanScene(const Scene& scene, const VulkanInterface* vulkan_inter
 		mMaterials.push_back(VulkanScene::Material(material));
 	}
 
+	mLights.reserve(scene.GetLights().size());
+	for (const auto& light : scene.GetLights())
+	{
+		mLights.push_back(VulkanScene::Light(light));
+	}
+
 	std::vector<uint8_t> materials_data(mMaterials.size() * sizeof(Material));
 	std::memcpy(materials_data.data(), mMaterials.data(), materials_data.size());
 
@@ -74,12 +80,28 @@ VulkanScene::VulkanScene(const Scene& scene, const VulkanInterface* vulkan_inter
 		mMaterials.size() * sizeof(Material), "materials"
 	);
 
+	std::vector<uint8_t> lights_data(mLights.size() * sizeof(Light));
+	std::memcpy(lights_data.data(), mLights.data(), lights_data.size());
+
+	auto staging_lights_data = std::make_unique<HostBufferResource>(
+		mDevice, allocator,
+		VK_BUFFER_USAGE_TRANSFER_SRC_BIT, VMA_ALLOCATION_CREATE_HOST_ACCESS_SEQUENTIAL_WRITE_BIT,
+		lights_data, "staging lights"
+	);
+
+	mLightsData = std::make_unique<DeviceBufferResource>(
+		mDevice, allocator,
+		VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_STORAGE_BUFFER_BIT,
+		mLights.size() * sizeof(Light), "lights"
+	);
+
 	TransferHelpers* transfer_helpers = vulkan_interface->GetTransferHelpers();
 
 	transfer_helpers->RecordBatch();
 	transfer_helpers->CopyBufferToBuffer(staging_vertex_data->GetVkBuffer(), mVertexData->GetVkBuffer(), vertex_data.size());
 	transfer_helpers->CopyBufferToBuffer(staging_uniform_data->GetVkBuffer(), mUniformData->GetVkBuffer(), uniform_data.size());
 	transfer_helpers->CopyBufferToBuffer(staging_materials_data->GetVkBuffer(), mMaterialsData->GetVkBuffer(), mMaterials.size() * sizeof(Material));
+	transfer_helpers->CopyBufferToBuffer(staging_lights_data->GetVkBuffer(), mLightsData->GetVkBuffer(), mLights.size() * sizeof(Light));
 	transfer_helpers->SubmitBatch();
 
 	if (!IsCPUShading)
@@ -158,6 +180,11 @@ const std::vector<VulkanScene::Material>& VulkanScene::GetMaterials() const
 	return mMaterials;
 }
 
+const std::vector<VulkanScene::Light>& VulkanScene::GetLights() const
+{
+	return mLights;
+}
+
 const std::vector<VkDescriptorImageInfo>& VulkanScene::GetImageDescs() const
 {
 	return mImageDescs;
@@ -181,6 +208,11 @@ const DeviceBufferResource* VulkanScene::GetUniformData() const
 const DeviceBufferResource* VulkanScene::GetMaterialsData() const
 {
 	return mMaterialsData.get();
+}
+
+const DeviceBufferResource* VulkanScene::GetLightsData() const
+{
+	return mLightsData.get();
 }
 
 VulkanScene::Mesh::Mesh(const Scene::Mesh& mesh)

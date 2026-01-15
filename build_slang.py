@@ -12,17 +12,20 @@ def delete_spv(path):
         os.remove(spv)
 
 
-def build_glsl(shader_path, build_type):
+def build_slang(shader_path, build_type):
     print('Building GLSL...')
 
-    for glsl in shader_path.glob('*.glsl'):
-        if not glsl.match('utils.glsl'):
-            spv_name = str(glsl) + '.spv'
+    for slang in shader_path.glob('*.slang'):
+        if not slang.match('utils.slang'):
+            spv_name = str(slang) + '.spv'
 
-            cmd = 'glslang ' + str(glsl)
-            if (build_type == 'Debug'):
-                cmd += ' -gVS -Od '
-            cmd += ' --target-env vulkan1.2 -o ' + str(spv_name)
+            cmd = 'slangc ' + str(slang)
+            if(build_type == 'Debug'):
+                cmd += ' -g3 -O0'
+            elif (build_type == 'MinSizeRel'):
+                cmd += ' -g0 -O3'
+
+            cmd += ' -target spirv -profile spirv_1_5 -matrix-layout-column-major -o ' + str(spv_name)
 
             subprocess.call(cmd)
 
@@ -38,11 +41,11 @@ def copy_spv(src, dst):
 
 
 def main(args):
-    local_shader_path = Path('.').resolve().parent / 'shaders' / 'glsl'
+    local_shader_path = Path('.').resolve().parent / 'shaders' / 'slang'
     delete_spv(local_shader_path)
-    build_glsl(local_shader_path, args.build_type)
+    build_slang(local_shader_path, args.build_type)
 
-    remote_shader_path = Path(args.output_dir) / 'shaders' / 'glsl'
+    remote_shader_path = Path(args.output_dir) / 'shaders' / 'slang'
     delete_spv(remote_shader_path)
     copy_spv(local_shader_path, remote_shader_path)
 
@@ -55,3 +58,4 @@ if __name__ == '__main__':
     parser.add_argument('output_dir')
 
     main(parser.parse_args())
+

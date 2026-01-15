@@ -45,7 +45,7 @@ Instance::Instance(const char* const* extensions, const uint32_t extensions_coun
 		.applicationVersion = VK_MAKE_API_VERSION(0, 1, 0, 0),
 		.pEngineName = "Chizen",
 		.engineVersion = VK_MAKE_API_VERSION(0, 1, 0, 0),
-		.apiVersion = VK_MAKE_API_VERSION(0, 1, 2, 0),
+		.apiVersion = VK_MAKE_API_VERSION(0, 1, 4, 0),
 	};
 
 	const VkInstanceCreateInfo create_info = {
@@ -440,7 +440,7 @@ void TransferHelpers::RecordBatch()
 		.pSemaphores = &mSemaphore,
 		.pValues = &mSemaphoreValue,
 	};
-	VK_CHECK("wait xfer sem", vkWaitSemaphoresKHR(mDevice, &wait_info, UINT64_MAX));
+	VK_CHECK("wait xfer sem", vkWaitSemaphores(mDevice, &wait_info, UINT64_MAX));
 
 	const VkCommandBufferBeginInfo begin_info = {
 		.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO,
@@ -475,7 +475,7 @@ void TransferHelpers::ChangeImageLayout(const VkPipelineStageFlags2 src_stage_ma
 		.pImageMemoryBarriers = &img_mem_barr,
 	};
 
-	vkCmdPipelineBarrier2KHR(mCommandBuffer, &dep_info);
+	vkCmdPipelineBarrier2(mCommandBuffer, &dep_info);
 }
 
 void TransferHelpers::CopyBufferToBuffer(const VkBuffer src_buffer, const VkBuffer dst_buffer, const VkDeviceSize size) const
@@ -495,7 +495,7 @@ void TransferHelpers::CopyBufferToBuffer(const VkBuffer src_buffer, const VkBuff
 		.pRegions = regions,
 	};
 
-	vkCmdCopyBuffer2KHR(mCommandBuffer, &copy_buff_info);
+	vkCmdCopyBuffer2(mCommandBuffer, &copy_buff_info);
 }
 
 void TransferHelpers::CopyBufferToImage(const VkBuffer src_buffer, const VkImage dst_image, const VkExtent3D& extent) const
@@ -520,7 +520,7 @@ void TransferHelpers::CopyBufferToImage(const VkBuffer src_buffer, const VkImage
 		.pRegions = regions,
 	};
 
-	vkCmdCopyBufferToImage2KHR(mCommandBuffer, &copy_buff_info);
+	vkCmdCopyBufferToImage2(mCommandBuffer, &copy_buff_info);
 }
 
 void TransferHelpers::InsertMemoryBarrier(const VkPipelineStageFlags2 src_stage_mask, const VkAccessFlags2 src_access_mask, const VkPipelineStageFlags2 dst_stage_mask, const VkAccessFlags2 dst_access_mask) const
@@ -539,7 +539,7 @@ void TransferHelpers::InsertMemoryBarrier(const VkPipelineStageFlags2 src_stage_
 		.pMemoryBarriers = &mem_bar,
 	};
 
-	vkCmdPipelineBarrier2KHR(mCommandBuffer, &dep_info);
+	vkCmdPipelineBarrier2(mCommandBuffer, &dep_info);
 }
 
 void TransferHelpers::SubmitBatch(const VkSemaphore wait_semaphore, const uint64_t wait_semaphore_value, const VkPipelineStageFlags2 wait_stage_mask)
@@ -595,7 +595,7 @@ void TransferHelpers::SubmitBatch(const VkSemaphore wait_semaphore, const uint64
 		},
 	};
 
-	VK_CHECK("submit xfer batch", vkQueueSubmit2KHR(mQueue, std::size(submit_infos), submit_infos, VK_NULL_HANDLE));
+	VK_CHECK("submit xfer batch", vkQueueSubmit2(mQueue, std::size(submit_infos), submit_infos, VK_NULL_HANDLE));
 	VK_CHECK("xfer queue wait", vkQueueWaitIdle(mQueue)); // using this since we have to wait for the transfer to get done before destroying staging buffers
 	//auto host_wait_and_delete = [device, compute_helpers](HostBufferResource* hbr) {
 	//	VkSemaphore sem = compute_helpers->GetSemaphore();
@@ -809,23 +809,23 @@ Device::Device(const PhysicalDeviceData* physical_device_data)
 
 	VK_CHECK("create device", vkCreateDevice(physical_device_data->PhysicalDevice, &create_info, nullptr, &mDevice));
 
-	vk_CmdPipelineBarrier2KHR = reinterpret_cast<PFN_vkCmdPipelineBarrier2KHR>(vkGetDeviceProcAddr(mDevice, "vkCmdPipelineBarrier2KHR"));
-	vk_QueueSubmit2KHR = reinterpret_cast<PFN_vkQueueSubmit2KHR>(vkGetDeviceProcAddr(mDevice, "vkQueueSubmit2KHR"));
-	vk_SignalSemaphoreKHR = reinterpret_cast<PFN_vkSignalSemaphoreKHR>(vkGetDeviceProcAddr(mDevice, "vkSignalSemaphoreKHR"));
-	vk_CmdPipelineBarrier2KHR = reinterpret_cast<PFN_vkCmdPipelineBarrier2KHR>(vkGetDeviceProcAddr(mDevice, "vkCmdPipelineBarrier2KHR"));
-	vk_CmdCopyBuffer2KHR = reinterpret_cast<PFN_vkCmdCopyBuffer2KHR>(vkGetDeviceProcAddr(mDevice, "vkCmdCopyBuffer2KHR"));
-	vk_WaitSemaphoresKHR = reinterpret_cast<PFN_vkWaitSemaphoresKHR>(vkGetDeviceProcAddr(mDevice, "vkWaitSemaphoresKHR"));
-	vk_CmdBeginRenderingKHR = reinterpret_cast<PFN_vkCmdBeginRenderingKHR>(vkGetDeviceProcAddr(mDevice, "vkCmdBeginRenderingKHR"));
-	vk_CmdBindDescriptorSets2KHR = reinterpret_cast<PFN_vkCmdBindDescriptorSets2KHR>(vkGetDeviceProcAddr(mDevice, "vkCmdBindDescriptorSets2KHR"));
-	vk_CmdBindVertexBuffers2EXT = reinterpret_cast<PFN_vkCmdBindVertexBuffers2EXT>(vkGetDeviceProcAddr(mDevice, "vkCmdBindVertexBuffers2EXT"));
-	vk_CmdCopyBufferToImage2KHR = reinterpret_cast<PFN_vkCmdCopyBufferToImage2KHR>(vkGetDeviceProcAddr(mDevice, "vkCmdCopyBufferToImage2KHR"));
-	vk_CmdBindIndexBuffer2KHR = reinterpret_cast<PFN_vkCmdBindIndexBuffer2KHR>(vkGetDeviceProcAddr(mDevice, "vkCmdBindIndexBuffer2KHR"));
-	vk_CmdPushConstants2KHR = reinterpret_cast<PFN_vkCmdPushConstants2KHR>(vkGetDeviceProcAddr(mDevice, "vkCmdPushConstants2KHR"));
-	vk_CmdEndRenderingKHR = reinterpret_cast<PFN_vkCmdEndRenderingKHR>(vkGetDeviceProcAddr(mDevice, "vkCmdEndRenderingKHR"));
+	//vk_CmdPipelineBarrier2KHR = reinterpret_cast<PFN_vkCmdPipelineBarrier2KHR>(vkGetDeviceProcAddr(mDevice, "vkCmdPipelineBarrier2KHR"));
+	//vk_QueueSubmit2KHR = reinterpret_cast<PFN_vkQueueSubmit2KHR>(vkGetDeviceProcAddr(mDevice, "vkQueueSubmit2KHR"));
+	//vk_SignalSemaphoreKHR = reinterpret_cast<PFN_vkSignalSemaphoreKHR>(vkGetDeviceProcAddr(mDevice, "vkSignalSemaphoreKHR"));
+	//vk_CmdPipelineBarrier2KHR = reinterpret_cast<PFN_vkCmdPipelineBarrier2KHR>(vkGetDeviceProcAddr(mDevice, "vkCmdPipelineBarrier2KHR"));
+	//vk_CmdCopyBuffer2KHR = reinterpret_cast<PFN_vkCmdCopyBuffer2KHR>(vkGetDeviceProcAddr(mDevice, "vkCmdCopyBuffer2KHR"));
+	//vk_WaitSemaphoresKHR = reinterpret_cast<PFN_vkWaitSemaphoresKHR>(vkGetDeviceProcAddr(mDevice, "vkWaitSemaphoresKHR"));
+	//vk_CmdBeginRenderingKHR = reinterpret_cast<PFN_vkCmdBeginRenderingKHR>(vkGetDeviceProcAddr(mDevice, "vkCmdBeginRenderingKHR"));
+	//vk_CmdBindDescriptorSets2KHR = reinterpret_cast<PFN_vkCmdBindDescriptorSets2KHR>(vkGetDeviceProcAddr(mDevice, "vkCmdBindDescriptorSets2KHR"));
+	//vk_CmdBindVertexBuffers2EXT = reinterpret_cast<PFN_vkCmdBindVertexBuffers2EXT>(vkGetDeviceProcAddr(mDevice, "vkCmdBindVertexBuffers2EXT"));
+	//vk_CmdCopyBufferToImage2KHR = reinterpret_cast<PFN_vkCmdCopyBufferToImage2KHR>(vkGetDeviceProcAddr(mDevice, "vkCmdCopyBufferToImage2KHR"));
+	//vk_CmdBindIndexBuffer2KHR = reinterpret_cast<PFN_vkCmdBindIndexBuffer2KHR>(vkGetDeviceProcAddr(mDevice, "vkCmdBindIndexBuffer2KHR"));
+	//vk_CmdPushConstants2KHR = reinterpret_cast<PFN_vkCmdPushConstants2KHR>(vkGetDeviceProcAddr(mDevice, "vkCmdPushConstants2KHR"));
+	//vk_CmdEndRenderingKHR = reinterpret_cast<PFN_vkCmdEndRenderingKHR>(vkGetDeviceProcAddr(mDevice, "vkCmdEndRenderingKHR"));
+	//vk_GetBufferDeviceAddressKHR = reinterpret_cast<PFN_vkGetBufferDeviceAddressKHR>(vkGetDeviceProcAddr(mDevice, "vkGetBufferDeviceAddressKHR"));
 	vk_GetRayTracingShaderGroupHandlesKHR = reinterpret_cast<PFN_vkGetRayTracingShaderGroupHandlesKHR>(vkGetDeviceProcAddr(mDevice, "vkGetRayTracingShaderGroupHandlesKHR"));
 	vk_CreateRayTracingPipelinesKHR = reinterpret_cast<PFN_vkCreateRayTracingPipelinesKHR>(vkGetDeviceProcAddr(mDevice, "vkCreateRayTracingPipelinesKHR"));
 	vk_CmdTraceRaysKHR = reinterpret_cast<PFN_vkCmdTraceRaysKHR>(vkGetDeviceProcAddr(mDevice, "vkCmdTraceRaysKHR"));
-	vk_GetBufferDeviceAddressKHR = reinterpret_cast<PFN_vkGetBufferDeviceAddressKHR>(vkGetDeviceProcAddr(mDevice, "vkGetBufferDeviceAddressKHR"));
 	vk_CreateAccelerationStructureKHR = reinterpret_cast<PFN_vkCreateAccelerationStructureKHR>(vkGetDeviceProcAddr(mDevice, "vkCreateAccelerationStructureKHR"));
 	vk_DestroyAccelerationStructureKHR = reinterpret_cast<PFN_vkDestroyAccelerationStructureKHR>(vkGetDeviceProcAddr(mDevice, "vkDestroyAccelerationStructureKHR"));
 	vk_CmdBuildAccelerationStructuresKHR = reinterpret_cast<PFN_vkCmdBuildAccelerationStructuresKHR>(vkGetDeviceProcAddr(mDevice, "vkCmdBuildAccelerationStructuresKHR"));
@@ -952,7 +952,7 @@ void ComputeHelpers::RecordBatch()
 		.pSemaphores = &mSemaphore,
 		.pValues = &mSemaphoreValue,
 	};
-	VK_CHECK("wait cmpt sem", vkWaitSemaphoresKHR(mDevice, &wait_info, UINT64_MAX));
+	VK_CHECK("wait cmpt sem", vkWaitSemaphores(mDevice, &wait_info, UINT64_MAX));
 
 	const VkCommandBufferBeginInfo begin_info = {
 		.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO,
@@ -987,7 +987,7 @@ void ComputeHelpers::ChangeImageLayout(const VkPipelineStageFlags2 src_stage_mas
 		.pImageMemoryBarriers = &img_mem_barr,
 	};
 
-	vkCmdPipelineBarrier2KHR(mCommandBuffer, &dep_info);
+	vkCmdPipelineBarrier2(mCommandBuffer, &dep_info);
 }
 
 void ComputeHelpers::CopyBufferToBuffer(const VkBuffer src_buffer, const VkBuffer dst_buffer, const VkDeviceSize size, const VkDeviceSize src_offset, const VkDeviceSize dst_offset) const
@@ -1009,7 +1009,7 @@ void ComputeHelpers::CopyBufferToBuffer(const VkBuffer src_buffer, const VkBuffe
 		.pRegions = regions,
 	};
 
-	vkCmdCopyBuffer2KHR(mCommandBuffer, &copy_buff_info);
+	vkCmdCopyBuffer2(mCommandBuffer, &copy_buff_info);
 }
 
 void ComputeHelpers::CopyBufferToImage(const VkBuffer src_buffer, const VkImage dst_image, const VkExtent3D& extent) const
@@ -1034,7 +1034,7 @@ void ComputeHelpers::CopyBufferToImage(const VkBuffer src_buffer, const VkImage 
 		.pRegions = regions,
 	};
 
-	vkCmdCopyBufferToImage2KHR(mCommandBuffer, &copy_buff_info);
+	vkCmdCopyBufferToImage2(mCommandBuffer, &copy_buff_info);
 }
 
 void ComputeHelpers::InsertMemoryBarrier(const VkPipelineStageFlags2 src_stage_mask, const VkAccessFlags2 src_access_mask, const VkPipelineStageFlags2 dst_stage_mask, const VkAccessFlags2 dst_access_mask) const
@@ -1053,7 +1053,7 @@ void ComputeHelpers::InsertMemoryBarrier(const VkPipelineStageFlags2 src_stage_m
 		.pMemoryBarriers = &mem_bar,
 	};
 
-	vkCmdPipelineBarrier2KHR(mCommandBuffer, &dep_info);
+	vkCmdPipelineBarrier2(mCommandBuffer, &dep_info);
 }
 
 void ComputeHelpers::ClearImage(const VkImage image, const VkClearColorValue clear_color) const
@@ -1127,7 +1127,7 @@ void ComputeHelpers::SubmitBatch(const VkSemaphore wait_semaphore, const uint64_
 		},
 	};
 
-	VK_CHECK("submit cmpt batch", vkQueueSubmit2KHR(mQueue, std::size(submit_infos), submit_infos, VK_NULL_HANDLE));
+	VK_CHECK("submit cmpt batch", vkQueueSubmit2(mQueue, std::size(submit_infos), submit_infos, VK_NULL_HANDLE));
 	VK_CHECK("cmpt q wait idle", vkQueueWaitIdle(mQueue)); // using this since we have to wait for the transfer to get done before destroying staging buffers
 	//auto host_wait_and_delete = [device, compute_helpers](HostBufferResource* hbr) {
 	//	VkSemaphore sem = compute_helpers->GetSemaphore();

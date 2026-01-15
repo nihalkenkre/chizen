@@ -2,6 +2,7 @@
 
 class VulkanInterface;
 class BufferResource;
+struct LightData;
 
 class Scene
 {
@@ -113,17 +114,18 @@ public:
 	public:
 		Material() {}
 		Material(
-			const int32_t base_index, 
-			const int32_t normal_index, 
-			const int32_t metalrough_index, 
-			const glm::vec4 base_color_factor, 
-			const float metal_factor, 
+			const int32_t base_index,
+			const int32_t normal_index,
+			const int32_t metalrough_index,
+			const glm::vec4 base_color_factor,
+			const float metal_factor,
 			const float rough_factor
-		) : 
-			mBaseNormalMetalroughIndex(base_index, normal_index, metalrough_index, -1), 
+		) :
+			mBaseNormalMetalroughIndex(base_index, normal_index, metalrough_index, -1),
 			mBaseColorFactor(base_color_factor),
 			mMetalRoughFactor(metal_factor, rough_factor, -1, -1)
-		{}
+		{
+		}
 
 		glm::vec4 GetBaseColorFactor() const;
 		glm::ivec4 GetBaseNormalMetalroughIndex() const;
@@ -150,12 +152,40 @@ public:
 		std::string mName;
 	};
 
+	enum LightType
+	{
+		Direction,
+		Point,
+		Spot
+	};
+
+	class Light
+	{
+	public:
+		Light() {};
+
+		Light(const glm::vec3 position, const glm::vec3 direction, const glm::vec3 color, const float intensity, const LightType type = LightType::Direction, const float range = -1, const float outer_cone_angle = 0, const float inner_cone_angle = 0) :
+			mPosition(position), mDirection(direction), mColor(color), mIntensity(intensity), mType(type), mRange(range), mOuterConeAngle(outer_cone_angle), mInnerConeAngle(inner_cone_angle) {
+		}
+
+	private:
+		glm::vec3 mPosition = glm::vec3(0.f);
+		glm::vec3 mDirection = glm::vec3(0, 0, -1);
+		glm::vec3 mColor = glm::vec3(0.f);
+		float mIntensity = 1.f;
+		float mRange = 1.f;
+		float mOuterConeAngle = 1.f;
+		float mInnerConeAngle = 0.f;
+		LightType mType = LightType::Direction;
+	};
+
 	const std::vector<MeshInstance>& GetMeshInstances() const;
 	const std::vector<Scene::Mesh>& GetMeshes() const;
 	const std::vector<Scene::CameraInstance>& GetCameraInstances() const;
 	const std::vector<Scene::Camera>& GetCameras() const;
 	const std::vector<Image>& GetImages() const;
 	const std::vector<Material>& GetMaterials() const;
+	const std::vector<Light>& GetLights() const;
 
 	const std::vector<std::string>& GetCameraNames() const;
 
@@ -170,6 +200,7 @@ private:
 	void AddCamera(const cgltf_camera* camera, const VkDeviceSize uniform_buffer_alignment);
 	void AddMaterial(const cgltf_data* gltf, const cgltf_material* material);
 	void AddImage(const cgltf_image* image, const std::string& path);
+	void AddLight(const cgltf_data* gltf, const cgltf_node* node);
 
 	std::vector<MeshInstance> mMeshInstances;
 	std::vector<Mesh> mMeshes;
@@ -177,6 +208,7 @@ private:
 	std::vector<Camera> mCameras;
 	std::vector<Material> mMaterials;
 	std::vector<Image> mImages;
+	std::vector<Light> mLights;
 
 	std::vector<std::string> mCameraNames;
 

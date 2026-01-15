@@ -61,7 +61,7 @@ FrameObjects::FrameObjects(const VkDevice device, const uint32_t queue_family_in
 #endif // _DEBUG
 		sem_sig_info.semaphore = mSemaphores[fr];
 
-		VK_CHECK("signal frame semaphore", vkSignalSemaphoreKHR(mDevice, &sem_sig_info));
+		VK_CHECK("signal frame semaphore", vkSignalSemaphore(mDevice, &sem_sig_info));
 	}
 }
 

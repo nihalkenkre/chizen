@@ -20,6 +20,8 @@ public:
 
 	struct PushConstants
 	{
+		VkDeviceAddress Lights = 0;
+		uint32_t LightsCount = 0;
 		uint32_t CurrentSample = 1;
 		uint32_t IsCPUShading = 0;
 	};
@@ -41,219 +43,27 @@ private:
 VulkanRaytracerScenePipelineData::VulkanRaytracerScenePipelineData(const VkDevice device, const size_t num_images, const std::string& name)
 	: mDevice(device)
 {
-	Slang::ComPtr<slang::IGlobalSession> slang_global_session;
-	SLANG_CHECK("create global session", slang::createGlobalSession(slang_global_session.writeRef()));
-
-	const slang::TargetDesc target_descs[] = {
-		{
-			.format = SLANG_SPIRV,
-			.profile = slang_global_session->findProfile("spirv_1_5"),
-		}
-	};
-
-	slang::CompilerOptionEntry compiler_options[] = {
-		{
-			.name = slang::CompilerOptionName::MatrixLayoutColumn,
-			.value = {
-				.kind = slang::CompilerOptionValueKind::Int,
-				.intValue0 = 1,
-			},
-		},
-		{
-			.name = slang::CompilerOptionName::DisableWarnings,
-			.value = {
-				.kind = slang::CompilerOptionValueKind::String,
-				.stringValue0 = "41012"
-			},
-		},
- #ifdef _DEBUG
-		{
-			.name = slang::CompilerOptionName::DebugInformation,
-			.value = {
-				.kind = slang::CompilerOptionValueKind::Int,
-				.intValue0 = SLANG_DEBUG_INFO_LEVEL_MAXIMAL,
-			}
-		},
- #else	// _DEBUG
-		{
-			.name = slang::CompilerOptionName::Optimization,
-			.value = {
-				.kind = slang::CompilerOptionValueKind::Int,
-				.intValue0 = SLANG_OPTIMIZATION_LEVEL_MAXIMAL
-			},
-		},
- #endif // _DEBUG
-	};
-
-	slang::SessionDesc compile_session_desc = {
-		.targets = target_descs,
-		.targetCount = std::size(target_descs),
-		.compilerOptionEntries = compiler_options,
-		.compilerOptionEntryCount = std::size(compiler_options),
-	};
-
-	Slang::ComPtr<slang::ISession> compile_session;
-	SLANG_CHECK("create compile session", slang_global_session->createSession(compile_session_desc, compile_session.writeRef()));
-
-	const std::string slang_shader_path = std::string(SDL_GetBasePath()).append("/shaders/slang/raytrace.slang");
-
-	Slang::ComPtr<slang::IBlob> diagnostic_blob;
-	slang::IModule* slang_module = compile_session->loadModule(slang_shader_path.c_str(), diagnostic_blob.writeRef());
-
-	if (diagnostic_blob != nullptr)
+	std::filesystem::path spv_path = std::string(SDL_GetBasePath()).append("shaders\\slang\\raytrace.slang.spv");
+	VkShaderModule mod = VK_NULL_HANDLE;
+	if (std::filesystem::exists(spv_path))
 	{
-		std::println("{}", reinterpret_cast<const char*>(diagnostic_blob->getBufferPointer()));
+		std::uintmax_t spv_size = std::filesystem::file_size(spv_path);
+		std::ifstream spv_file(spv_path.c_str(), std::ios::binary);
+
+		std::vector<char> spv_code(spv_size, 0);
+		spv_file.read(spv_code.data(), spv_size);
+
+		const VkShaderModuleCreateInfo ci = {
+			.sType = VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO,
+			.codeSize = spv_size,
+			.pCode = reinterpret_cast<uint32_t*>(spv_code.data()),
+		};
+		VK_CHECK("create rgen module", vkCreateShaderModule(mDevice, &ci, nullptr, &mod));
 	}
-
-	Slang::ComPtr<slang::IEntryPoint> rg_entry_point;
-	slang_module->findEntryPointByName("raygen", rg_entry_point.writeRef());
-
-	std::array<slang::IComponentType*, 2> rg_component_types = {
-		slang_module, rg_entry_point
-	};
-
-	Slang::ComPtr<slang::IComponentType> rg_composed_program;
-	diagnostic_blob.setNull();
-	SLANG_CHECK("create program", compile_session->createCompositeComponentType(rg_component_types.data(), rg_component_types.size(), rg_composed_program.writeRef(), diagnostic_blob.writeRef()));
-
-	Slang::ComPtr<slang::IComponentType> rg_linked_program;
-	diagnostic_blob.setNull();
-	SLANG_CHECK("link program", rg_composed_program->link(rg_linked_program.writeRef(), diagnostic_blob.writeRef()));
-
-	Slang::ComPtr<slang::IBlob> rg_spirv_code;
-	diagnostic_blob.setNull();
-	SLANG_CHECK("get spirv code", rg_composed_program->getEntryPointCode(0, 0, rg_spirv_code.writeRef(), diagnostic_blob.writeRef()));
-
-	const VkShaderModuleCreateInfo rg_mod_ci = {
-		.sType = VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO,
-		.codeSize = rg_spirv_code->getBufferSize(),
-		.pCode = reinterpret_cast<const uint32_t*>(rg_spirv_code->getBufferPointer()),
-	};
-
-	VkShaderModule rg_mod = VK_NULL_HANDLE;
-	VK_CHECK("create shader module", vkCreateShaderModule(device, &rg_mod_ci, nullptr, &rg_mod));
-
-	Slang::ComPtr<slang::IEntryPoint> ms_entry_point;
-	slang_module->findEntryPointByName("miss", ms_entry_point.writeRef());
-
-	std::array<slang::IComponentType*, 2> ms_component_types = {
-		slang_module, ms_entry_point
-	};
-
-	Slang::ComPtr<slang::IComponentType> ms_composed_program;
-	diagnostic_blob.setNull();
-	SLANG_CHECK("create program", compile_session->createCompositeComponentType(ms_component_types.data(), ms_component_types.size(), ms_composed_program.writeRef(), diagnostic_blob.writeRef()));
-
-	Slang::ComPtr<slang::IComponentType> ms_linked_program;
-	diagnostic_blob.setNull();
-	SLANG_CHECK("link program", ms_composed_program->link(ms_linked_program.writeRef(), diagnostic_blob.writeRef()));
-
-	Slang::ComPtr<slang::IBlob> ms_spirv_code;
-	diagnostic_blob.setNull();
-	SLANG_CHECK("get spirv code", ms_composed_program->getEntryPointCode(0, 0, ms_spirv_code.writeRef(), diagnostic_blob.writeRef()));
-
-	const VkShaderModuleCreateInfo ms_mod_ci = {
-		.sType = VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO,
-		.codeSize = ms_spirv_code->getBufferSize(),
-		.pCode = reinterpret_cast<const uint32_t*>(ms_spirv_code->getBufferPointer()),
-	};
-
-	VkShaderModule ms_mod = VK_NULL_HANDLE;
-	VK_CHECK("create shader module", vkCreateShaderModule(device, &ms_mod_ci, nullptr, &ms_mod));
-
-	Slang::ComPtr<slang::IEntryPoint> ch_entry_point;
-	slang_module->findEntryPointByName("closesthit", ch_entry_point.writeRef());
-
-	std::array<slang::IComponentType*, 2> ch_component_types = {
-		slang_module, ch_entry_point
-	};
-
-	Slang::ComPtr<slang::IComponentType> ch_composed_program;
-	diagnostic_blob.setNull();
-	SLANG_CHECK("create program", compile_session->createCompositeComponentType(ch_component_types.data(), ch_component_types.size(), ch_composed_program.writeRef(), diagnostic_blob.writeRef()));
-
-	Slang::ComPtr<slang::IComponentType> ch_linked_program;
-	diagnostic_blob.setNull();
-	SLANG_CHECK("link program", ch_composed_program->link(ch_linked_program.writeRef(), diagnostic_blob.writeRef()));
-
-	Slang::ComPtr<slang::IBlob> ch_spirv_code;
-	diagnostic_blob.setNull();
-	SLANG_CHECK("get spirv code", ch_composed_program->getEntryPointCode(0, 0, ch_spirv_code.writeRef(), diagnostic_blob.writeRef()));
-
-	const VkShaderModuleCreateInfo ch_mod_ci = {
-		.sType = VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO,
-		.codeSize = ch_spirv_code->getBufferSize(),
-		.pCode = reinterpret_cast<const uint32_t*>(ch_spirv_code->getBufferPointer()),
-	};
-
-	VkShaderModule ch_mod = VK_NULL_HANDLE;
-	VK_CHECK("create shader module", vkCreateShaderModule(device, &ch_mod_ci, nullptr, &ch_mod));
-
-	//std::filesystem::path rg_path = std::string(current_path).append("/shaders/glsl/raytrace.rgen.glsl.spv");
-	//VkShaderModule rg_mod = VK_NULL_HANDLE;
-	//if (std::filesystem::exists(rg_path))
-	//{
-	//	std::uintmax_t file_size = std::filesystem::file_size(rg_path);
-	//	std::ifstream rgen_file(rg_path.c_str(), std::ios::binary);
-
-	//	std::vector<char> rg_code(file_size, 0);
-	//	rgen_file.read(rg_code.data(), file_size);
-
-	//	const VkShaderModuleCreateInfo ci = {
-	//		.sType = VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO,
-	//		.codeSize = file_size,
-	//		.pCode = reinterpret_cast<uint32_t*>(rg_code.data()),
-	//	};
-	//	VK_CHECK("create rgen module", vkCreateShaderModule(mDevice, &ci, nullptr, &rg_mod));
-	//}
-	//else
-	//{
-	//	std::println("Could not find {}", rg_path.string());
-	//}
-
-	//std::filesystem::path ms_path = std::string(current_path).append("/shaders/glsl/raytrace.rmiss.glsl.spv");
-	//VkShaderModule ms_mod = VK_NULL_HANDLE;
-	//if (std::filesystem::exists(ms_path))
-	//{
-	//	std::uintmax_t file_size = std::filesystem::file_size(ms_path);
-	//	std::ifstream ms_file(ms_path.c_str(), std::ios::binary);
-
-	//	std::vector<char> miss_code(file_size, 0);
-	//	ms_file.read(miss_code.data(), file_size);
-
-	//	const VkShaderModuleCreateInfo ci = {
-	//		.sType = VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO,
-	//		.codeSize = file_size,
-	//		.pCode = reinterpret_cast<uint32_t*>(miss_code.data()),
-	//	};
-	//	VK_CHECK("create rmiss module", vkCreateShaderModule(mDevice, &ci, nullptr, &ms_mod));
-	//}
-	//else
-	//{
-	//	std::println("Could not find {}", ms_path.string());
-	//}
-
-	//std::filesystem::path ch_path = std::string(current_path).append("/shaders/glsl/raytrace.rchit.glsl.spv");
-	//VkShaderModule ch_mod = VK_NULL_HANDLE;
-	//if (std::filesystem::exists(ch_path))
-	//{
-	//	std::uintmax_t file_size = std::filesystem::file_size(ch_path);
-	//	std::ifstream ch_file(ch_path.c_str(), std::ios::binary);
-
-	//	std::vector<char> ch_code(file_size, 0);
-	//	ch_file.read(ch_code.data(), file_size);
-
-	//	const VkShaderModuleCreateInfo ci = {
-	//		.sType = VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO,
-	//		.codeSize = file_size,
-	//		.pCode = reinterpret_cast<uint32_t*>(ch_code.data()),
-	//	};
-	//	VK_CHECK("create rchit module", vkCreateShaderModule(mDevice, &ci, nullptr, &ch_mod));
-	//}
-	//else
-	//{
-	//	std::println("Could not find {}", ch_path.string());
-	//}
+	else
+	{
+		std::println("Could not find {}", spv_path.string());
+	}
 
 	const VkDescriptorSetLayoutBinding dsl_0_bindings[] = {
 		{
@@ -358,20 +168,20 @@ VulkanRaytracerScenePipelineData::VulkanRaytracerScenePipelineData(const VkDevic
 		{
 			.sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO,
 			.stage = VK_SHADER_STAGE_RAYGEN_BIT_KHR,
-			.module = rg_mod,
-			.pName = "main",
+			.module = mod,
+			.pName = "raygen",
 		},
 		{
 			.sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO,
 			.stage = VK_SHADER_STAGE_MISS_BIT_KHR,
-			.module = ms_mod,
-			.pName = "main",
+			.module = mod,
+			.pName = "miss",
 		},
 		{
 			.sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO,
 			.stage = VK_SHADER_STAGE_CLOSEST_HIT_BIT_KHR,
-			.module = ch_mod,
-			.pName = "main",
+			.module = mod,
+			.pName = "closesthit",
 		},
 	};
 
@@ -416,9 +226,7 @@ VulkanRaytracerScenePipelineData::VulkanRaytracerScenePipelineData(const VkDevic
 
 	VK_CHECK("create rt pipeline", vkCreateRayTracingPipelinesKHR(device, VK_NULL_HANDLE, VK_NULL_HANDLE, std::size(create_infos), create_infos, nullptr, &mPipeline));
 
-	vkDestroyShaderModule(device, rg_mod, nullptr);
-	vkDestroyShaderModule(device, ch_mod, nullptr);
-	vkDestroyShaderModule(device, ms_mod, nullptr);
+	vkDestroyShaderModule(device, mod, nullptr);
 
 #ifdef _DEBUG
 	Utils_SetObjectName(device, VK_OBJECT_TYPE_PIPELINE, reinterpret_cast<uint64_t>(mPipeline), std::string(name).append(" pipeline").c_str());
@@ -663,7 +471,7 @@ void VulkanRaytracerScene::Render(const VkCommandBuffer cmd_buff, const DeviceBu
 		.pDynamicOffsets = &offset,
 	};
 
-	vkCmdBindDescriptorSets2KHR(cmd_buff, &cam_ds_bind_info);
+	vkCmdBindDescriptorSets2(cmd_buff, &cam_ds_bind_info);
 
 	const VkBindDescriptorSetsInfoKHR scene_ds_bind_info = {
 		.sType = VK_STRUCTURE_TYPE_BIND_DESCRIPTOR_SETS_INFO_KHR,
@@ -674,9 +482,11 @@ void VulkanRaytracerScene::Render(const VkCommandBuffer cmd_buff, const DeviceBu
 		.pDescriptorSets = &mSceneDescSet,
 	};
 
-	vkCmdBindDescriptorSets2KHR(cmd_buff, &scene_ds_bind_info);
+	vkCmdBindDescriptorSets2(cmd_buff, &scene_ds_bind_info);
 
 	const VulkanRaytracerScenePipelineData::PushConstants pc = {
+		.Lights = mScene->GetLightsData()->GetDeviceAddress(),
+		.LightsCount = static_cast<uint32_t>(mScene->GetLights().size()),
 		.CurrentSample = current_sample,
 		.IsCPUShading = is_cpu_shading,
 	};
@@ -689,7 +499,7 @@ void VulkanRaytracerScene::Render(const VkCommandBuffer cmd_buff, const DeviceBu
 		.pValues = &pc,
 	};
 
-	vkCmdPushConstants2KHR(cmd_buff, &pc_info);
+	vkCmdPushConstants2(cmd_buff, &pc_info);
 
 	const VkStridedDeviceAddressRegionKHR rg_sbt = {
 		.deviceAddress = mRGSbt->GetDeviceAddress(),

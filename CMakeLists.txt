@@ -27,6 +27,7 @@ set_property(TARGET ${PROJECT_NAME} PROPERTY CXX_STANDARD 23)
 target_precompile_headers(${PROJECT_NAME} PRIVATE 
                                        <vector>
                                        <print>
+                                       <filesystem>
                                        <SDL3/SDL.h>
 	                                    <SDL3/SDL_main.h>
                                        <SDL3/SDL_vulkan.h>
@@ -54,7 +55,6 @@ target_link_directories(${PROJECT_NAME} PRIVATE $<IF:$<CONFIG:Debug>,${CMAKE_SOU
 target_link_libraries(${PROJECT_NAME} PRIVATE SDL3-static Vulkan::Vulkan slang winmm setupapi version embree4 $<IF:$<CONFIG:Debug>,tbb12_debug,> $<IF:$<CONFIG:MinSizeRel>,tbb12,>)
 
 if (CMAKE_CXX_COMPILER_ID MATCHES "MSVC")
-   add_custom_command(TARGET ${PROJECT_NAME} POST_BUILD COMMAND python ${CMAKE_SOURCE_DIR}/build_glsl.py ${CMAKE_SOURCE_DIR} $<CONFIG> $<TARGET_FILE_DIR:${PROJECT_NAME}>)
-   add_custom_command(TARGET ${PROJECT_NAME} POST_BUILD COMMAND python ${CMAKE_SOURCE_DIR}/copy_slang.py ${CMAKE_SOURCE_DIR} $<CONFIG> $<TARGET_FILE_DIR:${PROJECT_NAME}>)
+   add_custom_command(TARGET ${PROJECT_NAME} POST_BUILD COMMAND python ${CMAKE_SOURCE_DIR}/build_slang.py ${CMAKE_SOURCE_DIR} $<CONFIG> $<TARGET_FILE_DIR:${PROJECT_NAME}>)
    add_custom_command(TARGET ${PROJECT_NAME} POST_BUILD COMMAND python ${CMAKE_SOURCE_DIR}/copy_images.py ${CMAKE_SOURCE_DIR} $<CONFIG> $<TARGET_FILE_DIR:${PROJECT_NAME}>)
 endif()

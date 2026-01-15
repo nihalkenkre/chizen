@@ -23,7 +23,7 @@ struct PushConstants
 PushConstants pc;
 
 [shader("vertex")]
-VSOutput vertex_main(VSInput in)
+VSOutput vertex(VSInput in)
 {
     VSOutput out;
     out.pos = float4((in.pos * pc.zoom_level) - pc.pos_offset, 0, 1);
@@ -36,7 +36,7 @@ VSOutput vertex_main(VSInput in)
 Sampler2D final_render;
 
 [shader("fragment")]
-float4 fragment_main(VSOutput in)
+float4 fragment(VSOutput in)
 {
     return final_render.Sample(in.uv);
 }

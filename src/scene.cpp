@@ -36,6 +36,10 @@ Scene::Scene(const std::string& path, const VkDeviceSize uniform_buffer_alignmen
 		{
 			AddCameraInstance(gltf, curr_node, uniform_buffer_alignment);
 		}
+		else if (curr_node->light != nullptr)
+		{
+			AddLight(gltf, curr_node);
+		}
 	}
 
 	mMeshes.reserve(gltf->meshes_count);
@@ -77,6 +81,21 @@ Scene::Scene(const std::string& path, const VkDeviceSize uniform_buffer_alignmen
 		mUniformData.append_range(proj_data);
 
 		mCameraNames.push_back("scene cam");
+	}
+
+	if (mLights.size() == 0)
+	{
+		mLights.reserve(mCameraInstances.size());
+
+		for (const auto& camera_instance : mCameraInstances)
+		{
+			auto cam_xform = (glm::make_mat4(reinterpret_cast<const float*>(mUniformData.data() + camera_instance.GetViewInverseMatrixOffset())));
+
+			glm::vec3 position = cam_xform[3];
+			glm::vec3 direction = glm::mat3(cam_xform) * glm::vec3(0, 0, -1);
+
+			mLights.push_back(Scene::Light(position, direction, glm::vec3(1.f), 1.f));
+		}
 	}
 
 	mImages.reserve(gltf->images_count);
@@ -121,6 +140,11 @@ const std::vector<Scene::Image>& Scene::GetImages() const
 const std::vector<Scene::Material>& Scene::GetMaterials() const
 {
 	return mMaterials;
+}
+
+const std::vector<Scene::Light>& Scene::GetLights() const
+{
+	return mLights;
 }
 
 const std::vector<std::string>& Scene::GetCameraNames() const
@@ -314,20 +338,20 @@ void Scene::AddMesh(const cgltf_data* gltf, const cgltf_mesh* mesh)
 				positions_size = curr_attr->data->buffer_view->size;
 				vertices_data.reserve(vertex_count);
 			}
-			else if (std::string(curr_attr->name) == std::string("NORMAL"))
-			{
-				normals.resize(curr_attr->data->count);
-				std::memcpy(
-					normals.data(),
-					reinterpret_cast<uint8_t*>(curr_attr->data->buffer_view->buffer->data) + curr_attr->data->buffer_view->offset + curr_attr->data->offset,
-					curr_attr->data->buffer_view->size
-				);
-			}
 			else if (std::string(curr_attr->name) == std::string("TANGENT"))
 			{
 				tangents.resize(curr_attr->data->count);
 				std::memcpy(
 					tangents.data(),
+					reinterpret_cast<uint8_t*>(curr_attr->data->buffer_view->buffer->data) + curr_attr->data->buffer_view->offset + curr_attr->data->offset,
+					curr_attr->data->buffer_view->size
+				);
+			}
+			else if (std::string(curr_attr->name) == std::string("NORMAL"))
+			{
+				normals.resize(curr_attr->data->count);
+				std::memcpy(
+					normals.data(),
 					reinterpret_cast<uint8_t*>(curr_attr->data->buffer_view->buffer->data) + curr_attr->data->buffer_view->offset + curr_attr->data->offset,
 					curr_attr->data->buffer_view->size
 				);
@@ -436,7 +460,7 @@ void Scene::AddMaterial(const cgltf_data* gltf, const cgltf_material* material)
 
 		if (material->pbr_metallic_roughness.metallic_roughness_texture.texture != nullptr)
 		{
-			metalrough_index =  static_cast<int32_t>(cgltf_image_index(gltf, material->pbr_metallic_roughness.metallic_roughness_texture.texture->image));
+			metalrough_index = static_cast<int32_t>(cgltf_image_index(gltf, material->pbr_metallic_roughness.metallic_roughness_texture.texture->image));
 		}
 
 		metal_factor = material->pbr_metallic_roughness.metallic_factor;
@@ -484,6 +508,34 @@ void Scene::AddImage(const cgltf_image* image, const std::string& path)
 			SDL_free(data);
 		}
 	}
+}
+
+void Scene::AddLight(const cgltf_data* gltf, const cgltf_node* node)
+{
+	glm::vec3 position = glm::vec3(0.f);
+	glm::vec3 direction = glm::vec3(0, 0, -1);
+
+	if (node->has_matrix)
+	{
+		auto xform = Utils_GetTransformForGLTFNode(node);
+		position = xform[3];
+		direction = glm::mat3(xform) * direction;
+	}
+	else
+	{
+		if (node->has_translation)
+		{
+			position = glm::make_vec3(node->translation);
+		}
+
+		if (node->has_rotation)
+		{
+			direction = glm::make_quat(node->rotation) * direction;
+		}
+	}
+
+	cgltf_light* curr_light = node->light;
+	mLights.push_back(Scene::Light(position, direction, glm::make_vec3(curr_light->color), curr_light->intensity, static_cast<LightType>(curr_light->type), curr_light->range, curr_light->spot_outer_cone_angle, curr_light->spot_inner_cone_angle));
 }
 
 Scene::MeshInstance::MeshInstance(const size_t mesh_index, const size_t model_matrix_offset)

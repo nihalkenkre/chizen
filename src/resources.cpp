@@ -163,7 +163,7 @@ HostBufferResource::HostBufferResource(const VkDevice device, const VmaAllocator
 		.buffer = mDescriptorInfo.buffer,
 	};
 
-	mDeviceAddress = vkGetBufferDeviceAddressKHR(mDevice, &addr_info);
+	mDeviceAddress = vkGetBufferDeviceAddress(mDevice, &addr_info);
 	mDeviceOrHostAddress.deviceAddress = mDeviceAddress;
 	mDeviceOrHostAddressConst.deviceAddress = mDeviceAddress;
 
@@ -204,7 +204,7 @@ HostBufferResource::HostBufferResource(const VkDevice device, const VmaAllocator
 		.buffer = mDescriptorInfo.buffer,
 	};
 
-	mDeviceAddress = vkGetBufferDeviceAddressKHR(mDevice, &addr_info);
+	mDeviceAddress = vkGetBufferDeviceAddress(mDevice, &addr_info);
 	mDeviceOrHostAddress.deviceAddress = mDeviceAddress;
 	mDeviceOrHostAddressConst.deviceAddress = mDeviceAddress;
 
@@ -246,7 +246,7 @@ DeviceBufferResource::DeviceBufferResource(const VkDevice device, const VmaAlloc
 		.buffer = mDescriptorInfo.buffer,
 	};
 
-	mDeviceAddress = vkGetBufferDeviceAddressKHR(mDevice, &addr_info);
+	mDeviceAddress = vkGetBufferDeviceAddress(mDevice, &addr_info);
 	mDeviceOrHostAddress.deviceAddress = mDeviceAddress;
 	mDeviceOrHostAddressConst.deviceAddress = mDeviceAddress;
 

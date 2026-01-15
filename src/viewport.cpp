@@ -79,7 +79,7 @@ void Viewport::Render(const ViewportScene* scene, const Swapchain* swapchain, co
 		.pValues = &frame_sem_value,
 	};
 
-	VK_CHECK("wait acq img", vkWaitSemaphoresKHR(device, &wait_info, UINT64_MAX));
+	VK_CHECK("wait acq img", vkWaitSemaphores(device, &wait_info, UINT64_MAX));
 
 	const VkAcquireNextImageInfoKHR acq_info = {
 		.sType = VK_STRUCTURE_TYPE_ACQUIRE_NEXT_IMAGE_INFO_KHR,
@@ -152,7 +152,7 @@ void Viewport::Render(const ViewportScene* scene, const Swapchain* swapchain, co
 		.pDepthAttachment = &depth_attachment_info,
 	};
 
-	vkCmdBeginRenderingKHR(cmd_buff, &rendering_info);
+	vkCmdBeginRendering(cmd_buff, &rendering_info);
 
 	const VkViewport viewports[] = {
 		{
@@ -175,7 +175,7 @@ void Viewport::Render(const ViewportScene* scene, const Swapchain* swapchain, co
 	scene->Render(cmd_buff, imgui_state->GetSelectedCameraIndex(), imgui_state->GetCPUShading());
 	imgui_state->Render(cmd_buff);
 
-	vkCmdEndRenderingKHR(cmd_buff);
+	vkCmdEndRendering(cmd_buff);
 
 	Utils_ChangeImageLayout(cmd_buff,
 		VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT, VK_ACCESS_2_COLOR_ATTACHMENT_WRITE_BIT,
@@ -235,7 +235,7 @@ void Viewport::Render(const ViewportScene* scene, const Swapchain* swapchain, co
 		},
 	};
 
-	VK_CHECK("submit viewport render commands", vkQueueSubmit2KHR(mQueue, std::size(submit_infos), submit_infos, VK_NULL_HANDLE));
+	VK_CHECK("submit viewport render commands", vkQueueSubmit2(mQueue, std::size(submit_infos), submit_infos, VK_NULL_HANDLE));
 
 	VkSwapchainKHR sc = swapchain->GetSwapchain();
 	const VkPresentInfoKHR present_info = {
