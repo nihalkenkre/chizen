@@ -88,7 +88,9 @@ public:
 	const std::vector<VkDescriptorImageInfo>& GetImageDescs() const;
 
 	const DeviceBufferResource* GetVertexData() const;
-	const DeviceBufferResource* GetUniformData() const;
+	const DeviceBufferResource* GetIndexData() const;
+	const DeviceBufferResource* GetCameraMatricesData() const;
+	const DeviceBufferResource* GetModelMatricesData() const;
 	const DeviceBufferResource* GetMaterialsData() const;
 	const DeviceBufferResource* GetLightsData() const;
 
@@ -103,7 +105,9 @@ private:
 	std::vector<VkDescriptorImageInfo> mImageDescs;
 
 	std::unique_ptr<DeviceBufferResource> mVertexData;
-	std::unique_ptr<DeviceBufferResource> mUniformData;
+	std::unique_ptr<DeviceBufferResource> mIndexData;
+	std::unique_ptr<DeviceBufferResource> mCameraMatricesData;
+	std::unique_ptr<DeviceBufferResource> mModelMatricesData;
 	std::unique_ptr<DeviceBufferResource> mMaterialsData;
 	std::unique_ptr<DeviceBufferResource> mLightsData;
 

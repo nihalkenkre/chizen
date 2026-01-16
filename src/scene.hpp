@@ -8,7 +8,7 @@ class Scene
 {
 public:
 	Scene() {};
-	Scene(const std::string& path, const VkDeviceSize uniform_buffer_alignment);
+	Scene(const std::string& path, const VkDeviceSize uniform_buffer_alignment, const VkDeviceSize storage_buffer_alignment);
 
 	class MeshInstance
 	{
@@ -190,7 +190,9 @@ public:
 	const std::vector<std::string>& GetCameraNames() const;
 
 	const std::vector<uint8_t>& GetVertexData() const;
-	const std::vector<uint8_t>& GetUniformData() const;
+	const std::vector<uint8_t>& GetIndexData() const;
+	const std::vector<uint8_t>& GetCameraMatricesData() const;
+	const std::vector<uint8_t>& GetModelMatricesData() const;
 	const std::vector<uint8_t>& GetImagesData() const;
 
 private:
@@ -213,6 +215,8 @@ private:
 	std::vector<std::string> mCameraNames;
 
 	std::vector<uint8_t> mVertexData;
-	std::vector<uint8_t> mUniformData;
+	std::vector<uint8_t> mIndexData;
+	std::vector<uint8_t> mCameraMatricesData;
+	std::vector<uint8_t> mModelMatricesData;
 	std::vector<uint8_t> mImagesData;
 };

@@ -1196,7 +1196,7 @@ uint32_t ComputeHelpers::GetQueueFamilyIndex() const
 	return mQueueFamilyIndex;
 }
 
-BLAccelerationStructure::BLAccelerationStructure(const VkDevice device, const VmaAllocator allocator, const Scene::Mesh::Primitive& primitive, const std::vector<uint8_t>& vertex_data, const VmaPool mem_pool, const size_t scratch_buffer_alignment, ComputeHelpers* compute_helpers, const std::string& name)
+BLAccelerationStructure::BLAccelerationStructure(const VkDevice device, const VmaAllocator allocator, const Scene::Mesh::Primitive& primitive, const std::vector<uint8_t>& vertex_data, const std::vector<uint8_t>& index_data, const VmaPool mem_pool, const size_t scratch_buffer_alignment, ComputeHelpers* compute_helpers, const std::string& name)
 	: mDevice(device)
 {
 	std::vector<uint8_t> positions_data(primitive.GetPositionsSize());
@@ -1215,7 +1215,7 @@ BLAccelerationStructure::BLAccelerationStructure(const VkDevice device, const Vm
 	);
 
 	std::vector<uint8_t> indices_data(primitive.GetIndicesSize());
-	std::memcpy(indices_data.data(), vertex_data.data() + primitive.GetIndicesOffset(), primitive.GetIndicesSize());
+	std::memcpy(indices_data.data(), index_data.data() + primitive.GetIndicesOffset(), primitive.GetIndicesSize());
 
 	auto staging_indices_data = std::make_unique<HostBufferResource>(
 		device, allocator,

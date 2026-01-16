@@ -58,7 +58,7 @@ VulkanRaytracerScenePipelineData::VulkanRaytracerScenePipelineData(const VkDevic
 			.codeSize = spv_size,
 			.pCode = reinterpret_cast<uint32_t*>(spv_code.data()),
 		};
-		VK_CHECK("create rgen module", vkCreateShaderModule(mDevice, &ci, nullptr, &mod));
+		VK_CHECK("create shader module", vkCreateShaderModule(mDevice, &ci, nullptr, &mod));
 	}
 	else
 	{
@@ -66,6 +66,7 @@ VulkanRaytracerScenePipelineData::VulkanRaytracerScenePipelineData(const VkDevic
 	}
 
 	const VkDescriptorSetLayoutBinding dsl_0_bindings[] = {
+	// Cam info
 		{
 			.binding = 0,
 			.descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC,
@@ -75,36 +76,42 @@ VulkanRaytracerScenePipelineData::VulkanRaytracerScenePipelineData(const VkDevic
 	};
 
 	const VkDescriptorSetLayoutBinding dsl_1_bindings[] = {
+		// Accum Target
 		{
 			.binding = 0,
 			.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_IMAGE,
 			.descriptorCount = 1,
 			.stageFlags = VK_SHADER_STAGE_RAYGEN_BIT_KHR,
 		},
+		// Final Target
 		{
 			.binding = 1,
 			.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_IMAGE,
 			.descriptorCount = 1,
 			.stageFlags = VK_SHADER_STAGE_RAYGEN_BIT_KHR,
 		},
+		// Rand States
 		{
 			.binding = 2,
 			.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,
 			.descriptorCount = 1,
 			.stageFlags = VK_SHADER_STAGE_RAYGEN_BIT_KHR | VK_SHADER_STAGE_MISS_BIT_KHR | VK_SHADER_STAGE_CLOSEST_HIT_BIT_KHR,
 		},
+		// TLAS
 		{
 			.binding = 3,
 			.descriptorType = VK_DESCRIPTOR_TYPE_ACCELERATION_STRUCTURE_KHR,
 			.descriptorCount = 1,
 			.stageFlags = VK_SHADER_STAGE_RAYGEN_BIT_KHR,
 		},
+		// Materials
 		{
 			.binding = 4,
 			.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,
 			.descriptorCount = 1,
 			.stageFlags = VK_SHADER_STAGE_CLOSEST_HIT_BIT_KHR
 		},
+		// Textures
 		{
 			.binding = 5,
 			.descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
@@ -338,7 +345,7 @@ VulkanRaytracerScene::VulkanRaytracerScene(const Scene& scene, const VulkanScene
 		{
 			const CHSbtRecordData ch_sbt_record = {
 				.vertices_data = vulkan_scene->GetVertexData()->GetDeviceOrHostAddressConstKHR().deviceAddress + prim.GetVerticesDataOffset(),
-				.indices = vulkan_scene->GetVertexData()->GetDeviceOrHostAddressConstKHR().deviceAddress + prim.GetIndicesOffset(),
+				.indices = vulkan_scene->GetIndexData()->GetDeviceOrHostAddressConstKHR().deviceAddress + prim.GetIndicesOffset(),
 				.MaterialIndex = static_cast<uint64_t>(prim.GetMaterialIndex()),
 			};
 
@@ -363,7 +370,7 @@ VulkanRaytracerScene::VulkanRaytracerScene(const Scene& scene, const VulkanScene
 		{
 			mBLASes.push_back(
 				std::make_unique<BLAccelerationStructure>(
-					mDevice, allocator, prim, scene.GetVertexData(), mScratchBufferPool->GetPool(), scratch_buffer_alignment, compute_helpers, "BLAS"
+					mDevice, allocator, prim, scene.GetVertexData(), scene.GetIndexData(), mScratchBufferPool->GetPool(), scratch_buffer_alignment, compute_helpers, "BLAS"
 				)
 			);
 
@@ -373,7 +380,7 @@ VulkanRaytracerScene::VulkanRaytracerScene(const Scene& scene, const VulkanScene
 			};
 
 			glm::mat4 xform = {};
-			std::memcpy(&xform, scene.GetUniformData().data() + mesh_instance.GetModelMatrixOffset(), sizeof(xform));
+			std::memcpy(&xform, scene.GetModelMatricesData().data() + mesh_instance.GetModelMatrixOffset(), sizeof(xform));
 
 			xform = glm::transpose(xform);
 			VkTransformMatrixKHR inst_xform;
@@ -641,7 +648,7 @@ void VulkanRaytracerScene::CreateDescriptorSets()
 #endif // _DEBUG
 
 	mCameraDescBuffer = {
-		.buffer = mScene->GetUniformData()->GetVkBuffer(),
+		.buffer = mScene->GetCameraMatricesData()->GetVkBuffer(),
 		.range = sizeof(glm::mat4) * 2,
 	};
 

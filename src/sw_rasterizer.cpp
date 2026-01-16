@@ -8,8 +8,8 @@ void SWRasterizer::Start(const SWRasterizerScene* scene, const uint32_t width, c
 	mMeshInstanceTriangles.clear();
 	mMeshInstanceTriangles.resize(scene->GetMeshInstances().size());
 
-	glm::mat4 view_proj_matrix = glm::make_mat4(reinterpret_cast<const float*>(scene->GetUniformData().data() + scene->GetCameraInstances()[cam_index].GetViewProjMatrixOffset()));
-	glm::mat4 cam_xform_matrix = glm::inverse(glm::make_mat4(reinterpret_cast<const float*>(scene->GetUniformData().data() + scene->GetCameraInstances()[cam_index].GetViewInverseMatrixOffset())));
+	glm::mat4 view_proj_matrix = glm::make_mat4(reinterpret_cast<const float*>(scene->GetCameraMatricesData().data() + scene->GetCameraInstances()[cam_index].GetViewProjMatrixOffset()));
+	glm::mat4 cam_xform_matrix = glm::inverse(glm::make_mat4(reinterpret_cast<const float*>(scene->GetCameraMatricesData().data() + scene->GetCameraInstances()[cam_index].GetViewInverseMatrixOffset())));
 
 	float z_near = scene->GetCameras()[scene->GetCameraInstances()[cam_index].GetCameraIndex()].GetZNear();
 	float z_far = scene->GetCameras()[scene->GetCameraInstances()[cam_index].GetCameraIndex()].GetZFar();
@@ -25,7 +25,7 @@ void SWRasterizer::Start(const SWRasterizerScene* scene, const uint32_t width, c
 			{
 				auto mesh_instance = scene->GetMeshInstances()[m];
 
-				glm::mat4 model_matrix = glm::make_mat4(reinterpret_cast<const float*>(scene->GetUniformData().data() + mesh_instance.GetModelMatrixOffset()));
+				glm::mat4 model_matrix = glm::make_mat4(reinterpret_cast<const float*>(scene->GetCameraMatricesData().data() + mesh_instance.GetModelMatrixOffset()));
 
 				auto mesh = scene->GetMeshes()[mesh_instance.GetMeshIndex()];
 				for (const auto& prim : mesh.GetPrimitives())

@@ -4,7 +4,7 @@
 #include "vulkan_objects.hpp"
 #include "utils.hpp"
 
-Scene::Scene(const std::string& path, const VkDeviceSize uniform_buffer_alignment)
+Scene::Scene(const std::string& path, const VkDeviceSize uniform_buffer_alignment, const VkDeviceSize storage_buffer_alignment)
 {
 	cgltf_options options = {};
 	cgltf_data* gltf = nullptr;
@@ -30,7 +30,7 @@ Scene::Scene(const std::string& path, const VkDeviceSize uniform_buffer_alignmen
 		cgltf_node* curr_node = gltf->nodes + n;
 		if (curr_node->mesh != nullptr)
 		{
-			AddMeshInstance(gltf, curr_node, uniform_buffer_alignment);
+			AddMeshInstance(gltf, curr_node, storage_buffer_alignment);
 		}
 		else if (curr_node->camera != nullptr)
 		{
@@ -56,17 +56,17 @@ Scene::Scene(const std::string& path, const VkDeviceSize uniform_buffer_alignmen
 
 	if (mCameraInstances.size() == 0)
 	{
-		size_t view_mat_offset = mUniformData.size();
+		size_t view_mat_offset = mCameraMatricesData.size();
 		auto view_matrix = glm::lookAt(glm::vec3(10, 10, 10), glm::vec3(0, 0, 0), glm::vec3(0, 1, 0));
 		auto proj_matrix = glm::perspective(glm::radians(35.f), 1.7777f, 0.001f, 1000.f);
 		proj_matrix[1][1] *= -1;
 		auto view_proj_matrix = proj_matrix * view_matrix;
 
-		mCameraInstances.push_back(CameraInstance(0, mUniformData.size()));
+		mCameraInstances.push_back(CameraInstance(0, mCameraMatricesData.size()));
 
 		std::vector<uint8_t> view_proj_data(ALIGNED_SIZE(sizeof(glm::mat4), uniform_buffer_alignment));
 		std::memcpy(view_proj_data.data(), &view_proj_matrix, sizeof(glm::mat4));
-		mUniformData.append_range(view_proj_data);
+		mCameraMatricesData.append_range(view_proj_data);
 
 		// for raygen shader
 		auto view_inverse = glm::inverse(view_matrix);
@@ -74,11 +74,11 @@ Scene::Scene(const std::string& path, const VkDeviceSize uniform_buffer_alignmen
 
 		std::vector<uint8_t> view_data(ALIGNED_SIZE(sizeof(glm::mat4), uniform_buffer_alignment));
 		std::memcpy(view_data.data(), &view_inverse, sizeof(glm::mat4));
-		mUniformData.append_range(view_data);
+		mCameraMatricesData.append_range(view_data);
 
 		std::vector<uint8_t> proj_data(ALIGNED_SIZE(sizeof(glm::mat4), uniform_buffer_alignment));
 		std::memcpy(proj_data.data(), &proj_inverse, sizeof(glm::mat4));
-		mUniformData.append_range(proj_data);
+		mCameraMatricesData.append_range(proj_data);
 
 		mCameraNames.push_back("scene cam");
 	}
@@ -89,7 +89,7 @@ Scene::Scene(const std::string& path, const VkDeviceSize uniform_buffer_alignmen
 
 		for (const auto& camera_instance : mCameraInstances)
 		{
-			auto cam_xform = (glm::make_mat4(reinterpret_cast<const float*>(mUniformData.data() + camera_instance.GetViewInverseMatrixOffset())));
+			auto cam_xform = (glm::make_mat4(reinterpret_cast<const float*>(mCameraMatricesData.data() + camera_instance.GetViewInverseMatrixOffset())));
 
 			glm::vec3 position = cam_xform[3];
 			glm::vec3 direction = glm::mat3(cam_xform) * glm::vec3(0, 0, -1);
@@ -157,9 +157,19 @@ const std::vector<uint8_t>& Scene::GetVertexData() const
 	return mVertexData;
 }
 
-const std::vector<uint8_t>& Scene::GetUniformData() const
+const std::vector<uint8_t>& Scene::GetIndexData() const
 {
-	return mUniformData;
+	return mIndexData;
+}
+
+const std::vector<uint8_t>& Scene::GetCameraMatricesData() const
+{
+	return mCameraMatricesData;
+}
+
+const std::vector<uint8_t>& Scene::GetModelMatricesData() const
+{
+	return mModelMatricesData;
 }
 
 const std::vector<uint8_t>& Scene::GetImagesData() const
@@ -187,17 +197,17 @@ const std::string& Scene::Image::GetName() const
 	return mName;
 }
 
-void Scene::AddMeshInstance(const cgltf_data* gltf, const cgltf_node* node, const VkDeviceSize uniform_buffer_alignment)
+void Scene::AddMeshInstance(const cgltf_data* gltf, const cgltf_node* node, const VkDeviceSize storage_buffer_aligment)
 {
 	glm::mat4 xform_matrix = Utils_GetTransformForGLTFNode(node);
 	size_t mesh_index = cgltf_mesh_index(gltf, node->mesh);
 
-	mMeshInstances.push_back(MeshInstance(mesh_index, mUniformData.size()));
+	mMeshInstances.push_back(MeshInstance(mesh_index, mModelMatricesData.size()));
 
-	std::vector<uint8_t> xform_data(ALIGNED_SIZE(sizeof(glm::mat4), uniform_buffer_alignment));
+	std::vector<uint8_t> xform_data(ALIGNED_SIZE(sizeof(glm::mat4), storage_buffer_aligment));
 	std::memcpy(xform_data.data(), &xform_matrix, sizeof(glm::mat4));
 
-	mUniformData.append_range(xform_data);
+	mModelMatricesData.append_range(xform_data);
 }
 
 void Scene::AddCameraInstance(const cgltf_data* gltf, const cgltf_node* node, const VkDeviceSize uniform_buffer_alignment)
@@ -235,11 +245,11 @@ void Scene::AddCameraInstance(const cgltf_data* gltf, const cgltf_node* node, co
 		view_proj_matrix = proj_matrix * view_matrix;
 	}
 
-	mCameraInstances.push_back(CameraInstance(camera_index, mUniformData.size(), node->name == nullptr ? "scene cam" : node->name));
+	mCameraInstances.push_back(CameraInstance(camera_index, mCameraMatricesData.size(), node->name == nullptr ? "scene cam" : node->name));
 
 	std::vector<uint8_t> view_proj_data(ALIGNED_SIZE(sizeof(glm::mat4), uniform_buffer_alignment));
 	std::memcpy(view_proj_data.data(), &view_proj_matrix, sizeof(glm::mat4));
-	mUniformData.append_range(view_proj_data);
+	mCameraMatricesData.append_range(view_proj_data);
 
 	// for raygen shader
 	auto view_inverse = glm::inverse(view_matrix);
@@ -247,11 +257,11 @@ void Scene::AddCameraInstance(const cgltf_data* gltf, const cgltf_node* node, co
 
 	std::vector<uint8_t> view_data(ALIGNED_SIZE(sizeof(glm::mat4), uniform_buffer_alignment));
 	std::memcpy(view_data.data(), &view_inverse, sizeof(glm::mat4));
-	mUniformData.append_range(view_data);
+	mCameraMatricesData.append_range(view_data);
 
 	std::vector<uint8_t> proj_data(ALIGNED_SIZE(sizeof(glm::mat4), uniform_buffer_alignment));
 	std::memcpy(proj_data.data(), &proj_inverse, sizeof(glm::mat4));
-	mUniformData.append_range(proj_data);
+	mCameraMatricesData.append_range(proj_data);
 
 	mCameraNames.push_back(node->name == nullptr ? "scene cam" : node->name);
 }
@@ -274,12 +284,11 @@ void Scene::AddMesh(const cgltf_data* gltf, const cgltf_mesh* mesh)
 		size_t material_index = mMaterials.size() - 1; // default material
 
 		VkIndexType index_type = VK_INDEX_TYPE_UINT32;
-		mVertexData.resize(ALIGNED_SIZE(mVertexData.size(), sizeof(uint32_t)));
 
 		if (curr_prim->indices->component_type == cgltf_component_type_r_32u)
 		{
 			indices_size = curr_prim->indices->buffer_view->size;
-			indices_offset = mVertexData.size();
+			indices_offset = mIndexData.size();
 			index_count = curr_prim->indices->count;
 
 			std::vector<uint8_t> index_data(indices_size);
@@ -288,7 +297,7 @@ void Scene::AddMesh(const cgltf_data* gltf, const cgltf_mesh* mesh)
 				reinterpret_cast<uint8_t*>(curr_prim->indices->buffer_view->buffer->data) + curr_prim->indices->buffer_view->offset + curr_prim->indices->offset,
 				curr_prim->indices->buffer_view->size
 			);
-			mVertexData.append_range(index_data);
+			mIndexData.append_range(index_data);
 		}
 		else if (curr_prim->indices->component_type == cgltf_component_type_r_16u)
 		{
@@ -303,7 +312,7 @@ void Scene::AddMesh(const cgltf_data* gltf, const cgltf_mesh* mesh)
 			std::copy(indices_16.begin(), indices_16.end(), indices_32.begin());
 
 			indices_size = indices_32.size() * sizeof(uint32_t);
-			indices_offset = mVertexData.size();
+			indices_offset = mIndexData.size();
 			index_count = curr_prim->indices->count;
 
 			std::vector<uint8_t> index_data(indices_size);
@@ -312,7 +321,7 @@ void Scene::AddMesh(const cgltf_data* gltf, const cgltf_mesh* mesh)
 				indices_32.data(),
 				indices_size
 			);
-			mVertexData.append_range(index_data);
+			mIndexData.append_range(index_data);
 		}
 
 		std::vector<VertexData> vertices_data;
@@ -433,7 +442,7 @@ void Scene::AddCamera(const cgltf_camera* camera, const VkDeviceSize uniform_buf
 		z_far = ortho_data.zfar;
 	}
 
-	mCameras.push_back(Camera(mUniformData.size(), z_near, z_far));
+	mCameras.push_back(Camera(mCameraMatricesData.size(), z_near, z_far));
 }
 
 void Scene::AddMaterial(const cgltf_data* gltf, const cgltf_material* material)

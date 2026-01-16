@@ -13,19 +13,19 @@ def delete_spv(path):
 
 
 def build_slang(shader_path, build_type):
-    print('Building GLSL...')
+    print('Building Slang...')
 
     for slang in shader_path.glob('*.slang'):
         if not slang.match('utils.slang'):
             spv_name = str(slang) + '.spv'
 
             cmd = 'slangc ' + str(slang)
-            if(build_type == 'Debug'):
+            if (build_type == 'Debug'):
                 cmd += ' -g3 -O0'
             elif (build_type == 'MinSizeRel'):
                 cmd += ' -g0 -O3'
 
-            cmd += ' -target spirv -profile spirv_1_5 -matrix-layout-column-major -o ' + str(spv_name)
+            cmd += ' -matrix-layout-column-major -o ' + str(spv_name)
 
             subprocess.call(cmd)
 
@@ -58,4 +58,3 @@ if __name__ == '__main__':
     parser.add_argument('output_dir')
 
     main(parser.parse_args())
-

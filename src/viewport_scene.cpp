@@ -26,6 +26,7 @@ public:
 	{
 		VkDeviceAddress Lights = 0;
 		uint32_t LightsCount = 0;
+		uint32_t ModelMatrixIndex = 0;
 		uint32_t MaterialIndex = 0;
 		uint32_t IsCPUShading = 0;
 	};
@@ -207,7 +208,7 @@ ViewportScenePipelineData::ViewportScenePipelineData(const VkDevice device, cons
 	const VkDescriptorSetLayoutBinding dsl_1_binds[] = {
 		{
 			.binding = 0,
-			.descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC,
+			.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,
 			.descriptorCount = 1,
 			.stageFlags = VK_SHADER_STAGE_VERTEX_BIT,
 		},
@@ -267,7 +268,7 @@ ViewportScenePipelineData::ViewportScenePipelineData(const VkDevice device, cons
 
 	const VkPushConstantRange pc_ranges[] = {
 		{
-			.stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT,
+			.stageFlags = VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT,
 			.size = sizeof(ViewportScenePipelineData::PushConstants),
 		}
 	};
@@ -361,11 +362,12 @@ ViewportWorldScene::ViewportWorldScene(const VulkanScene* vulkan_scene, const Vu
 	VmaAllocator allocator = vulkan_interface->GetVmaAllocator();
 
 	mCameraDescBuffer = {
-		.buffer = vulkan_scene->GetUniformData()->GetVkBuffer(),
+		.buffer = vulkan_scene->GetCameraMatricesData()->GetVkBuffer(),
 		.offset = 0,
 		.range = sizeof(glm::mat4),
 	};
 
+	CreateIndirectBuffer();
 	CreateDescriptorPool();
 	CreateDescriptorSets();
 }
@@ -374,55 +376,39 @@ void ViewportWorldScene::Render(const VkCommandBuffer cmd_buff, const uint32_t c
 {
 	vkCmdBindPipeline(cmd_buff, VK_PIPELINE_BIND_POINT_GRAPHICS, mPipelineData->GetPipeline());
 
-	const uint32_t offset = static_cast<uint32_t>(mScene->GetCameraInstances()[cam_index].GetViewProjMatrixOffset());
+	const uint32_t offsets[] = { static_cast<uint32_t>(mScene->GetCameraInstances()[cam_index].GetViewProjMatrixOffset()) };
+
+	const VkDescriptorSet desc_sets[] = {
+		mCameraMatrixDescSet,
+		mModelMatrixDescSet,
+		mMTexturesDescSet,
+	};
+
 	const VkBindDescriptorSetsInfoKHR bind_ds_info = {
 		.sType = VK_STRUCTURE_TYPE_BIND_DESCRIPTOR_SETS_INFO_KHR,
 		.stageFlags = VK_SHADER_STAGE_VERTEX_BIT,
 		.layout = mPipelineData->GetPipelineLayout(),
-		.descriptorSetCount = 1,
-		.pDescriptorSets = &mCameraMatrixDescSet,
-		.dynamicOffsetCount = 1,
-		.pDynamicOffsets = &offset,
+		.firstSet = 0,
+		.descriptorSetCount = _countof(desc_sets),
+		.pDescriptorSets = desc_sets,
+		.dynamicOffsetCount = _countof(offsets),
+		.pDynamicOffsets = offsets,
 	};
 
 	vkCmdBindDescriptorSets2(cmd_buff, &bind_ds_info);
 
-	size_t instance_index = 0;
+	uint32_t instance_index = 0;
+
 	for (const auto& mesh_instance : mScene->GetMeshInstances())
 	{
-		const uint32_t offset = static_cast<uint32_t>(mesh_instance.GetModelMatrixOffset());
-		const VkBindDescriptorSetsInfoKHR bind_ds_info = {
-			.sType = VK_STRUCTURE_TYPE_BIND_DESCRIPTOR_SETS_INFO_KHR,
-			.stageFlags = VK_SHADER_STAGE_VERTEX_BIT,
-			.layout = mPipelineData->GetPipelineLayout(),
-			.firstSet = 1,
-			.descriptorSetCount = 1,
-			.pDescriptorSets = &mModelMatrixDescSet,
-			.dynamicOffsetCount = 1,
-			.pDynamicOffsets = &offset,
-		};
-
-		vkCmdBindDescriptorSets2(cmd_buff, &bind_ds_info);
-
 		const auto& curr_prims = mScene->GetMeshes()[mesh_instance.GetMeshIndex()].GetPrimitives();
 
 		for (const auto& curr_prim : curr_prims)
 		{
-			const VkDescriptorSet tex_desc_set = mMTexturesDescSet;
-			const VkBindDescriptorSetsInfoKHR bind_ds_info = {
-				.sType = VK_STRUCTURE_TYPE_BIND_DESCRIPTOR_SETS_INFO_KHR,
-				.stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT,
-				.layout = mPipelineData->GetPipelineLayout(),
-				.firstSet = 2,
-				.descriptorSetCount = 1,
-				.pDescriptorSets = &tex_desc_set,
-			};
-
-			vkCmdBindDescriptorSets2(cmd_buff, &bind_ds_info);
-
-			const ViewportScenePipelineData::PushConstants pc = {
+			const ViewportScenePipelineData::PushConstants pcf = {
 				.Lights = mScene->GetLightsData()->GetDeviceAddress(),
 				.LightsCount = static_cast<uint32_t>(mScene->GetLights().size()),
+				.ModelMatrixIndex = instance_index,
 				.MaterialIndex = static_cast<uint32_t>(curr_prim.GetMaterialIndex()),
 				.IsCPUShading = is_cpu_shading,
 			};
@@ -430,9 +416,9 @@ void ViewportWorldScene::Render(const VkCommandBuffer cmd_buff, const uint32_t c
 			const VkPushConstantsInfoKHR pc_info = {
 				.sType = VK_STRUCTURE_TYPE_PUSH_CONSTANTS_INFO_KHR,
 				.layout = mPipelineData->GetPipelineLayout(),
-				.stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT,
+				.stageFlags = VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT,
 				.size = sizeof(ViewportScenePipelineData::PushConstants),
-				.pValues = &pc
+				.pValues = &pcf,
 			};
 			vkCmdPushConstants2(cmd_buff, &pc_info);
 
@@ -452,7 +438,7 @@ void ViewportWorldScene::Render(const VkCommandBuffer cmd_buff, const uint32_t c
 			{
 				vkCmdBindIndexBuffer2(
 					cmd_buff,
-					mScene->GetVertexData()->GetVkBuffer(),
+					mScene->GetIndexData()->GetVkBuffer(),
 					curr_prim.GetIndicesOffset(),
 					curr_prim.GetIndicesSize(),
 					curr_prim.GetIndexType()
@@ -465,6 +451,8 @@ void ViewportWorldScene::Render(const VkCommandBuffer cmd_buff, const uint32_t c
 				vkCmdDraw(cmd_buff, static_cast<uint32_t>(curr_prim.GetVertexCount()), 1, 0, 0);
 			}
 		}
+
+		++instance_index;
 	}
 }
 
@@ -480,6 +468,11 @@ void ViewportWorldScene::ReloadShaders()
 	CreateDescriptorSets();
 }
 
+void ViewportWorldScene::CreateIndirectBuffer()
+{
+	std::vector<VkDrawIndexedIndirectCommand> indirect_commands;
+}
+
 void ViewportWorldScene::CreateDescriptorPool()
 {
 	const VkDescriptorPoolSize view_proj_desc_size = {
@@ -488,7 +481,7 @@ void ViewportWorldScene::CreateDescriptorPool()
 	};
 
 	const VkDescriptorPoolSize model_mat_desc_size = {
-		.type = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC,
+		.type = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,
 		.descriptorCount = 1,
 	};
 
@@ -556,13 +549,14 @@ void ViewportWorldScene::CreateDescriptorSets()
 	Utils_SetObjectName(mDevice, VK_OBJECT_TYPE_DESCRIPTOR_SET, reinterpret_cast<uint64_t>(mModelMatrixDescSet), "viewport scene model matrix desc set");
 #endif
 
+	const VkDescriptorBufferInfo model_matrices_desc_info = mScene->GetModelMatricesData()->GetDescriptorInfo();
 	const VkWriteDescriptorSet model_ds_write = {
 		.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
 		.dstSet = mModelMatrixDescSet,
 		.dstBinding = 0,
 		.descriptorCount = 1,
-		.descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC,
-		.pBufferInfo = &mCameraDescBuffer,
+		.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,
+		.pBufferInfo = &model_matrices_desc_info,
 	};
 
 	vkUpdateDescriptorSets(mDevice, 1, &model_ds_write, 0, nullptr);

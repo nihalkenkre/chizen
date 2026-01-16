@@ -240,7 +240,7 @@ class BLAccelerationStructure
 {
 public:
 	BLAccelerationStructure() = delete;
-	BLAccelerationStructure(const VkDevice device, const VmaAllocator allocator, const Scene::Mesh::Primitive& primitive, const std::vector<uint8_t>& vertex_data, const VmaPool mem_pool, const size_t scratch_buffer_alignment, ComputeHelpers* compute_helpers, const std::string& name);
+	BLAccelerationStructure(const VkDevice device, const VmaAllocator allocator, const Scene::Mesh::Primitive& primitive, const std::vector<uint8_t>& vertex_data, const std::vector<uint8_t>& index_data, const VmaPool mem_pool, const size_t scratch_buffer_alignment, ComputeHelpers* compute_helpers, const std::string& name);
 
 	BLAccelerationStructure(const BLAccelerationStructure& other) = delete;
 	BLAccelerationStructure& operator=(const BLAccelerationStructure& other) = delete;

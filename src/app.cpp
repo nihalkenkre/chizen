@@ -114,7 +114,8 @@ void App::ProcessEvent(SDL_Event* event)
 	{
 		auto scene = Scene(
 			reinterpret_cast<const char*>(event->user.data1),
-			mVulkanInterface->GetPhysicalDeviceData()->Properties.properties.limits.minUniformBufferOffsetAlignment
+			mVulkanInterface->GetPhysicalDeviceData()->Properties.properties.limits.minUniformBufferOffsetAlignment,
+			mVulkanInterface->GetPhysicalDeviceData()->Properties.properties.limits.minStorageBufferOffsetAlignment
 		);
 
 		if (scene.GetMeshes().size() == 0)

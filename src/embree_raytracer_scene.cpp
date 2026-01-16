@@ -33,7 +33,7 @@ EmbreeRaytracerScene::EmbreeRaytracerScene(const Scene& scene)
 
 			for (size_t v = 0; v < prim.GetVertexCount(); ++v)
 			{
-				vertex_data[v] = glm::make_mat4(reinterpret_cast<const float*>(scene.GetUniformData().data() + mesh_instance.GetModelMatrixOffset())) * glm::vec4(vertex_data[v], 1);
+				vertex_data[v] = glm::make_mat4(reinterpret_cast<const float*>(scene.GetCameraMatricesData().data() + mesh_instance.GetModelMatrixOffset())) * glm::vec4(vertex_data[v], 1);
 			}
 
 			rtcCommitGeometry(geom); EMBREE_CHECK(mDevice);
@@ -63,8 +63,8 @@ EmbreeRaytracerScene::EmbreeRaytracerScene(const Scene& scene)
 	{
 		mCameraMatrices.push_back(
 			CameraMatrices{
-				.mViewInverse = glm::make_mat4(reinterpret_cast<const float*>(scene.GetUniformData().data() + camera_instance.GetViewInverseMatrixOffset())),
-				.mProjInverse = glm::make_mat4(reinterpret_cast<const float*>(scene.GetUniformData().data() + camera_instance.GetProjInverseMatrixOffset())),
+				.mViewInverse = glm::make_mat4(reinterpret_cast<const float*>(scene.GetCameraMatricesData().data() + camera_instance.GetViewInverseMatrixOffset())),
+				.mProjInverse = glm::make_mat4(reinterpret_cast<const float*>(scene.GetCameraMatricesData().data() + camera_instance.GetProjInverseMatrixOffset())),
 			}
 			);
 	}

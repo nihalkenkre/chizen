@@ -12,7 +12,7 @@ VulkanScene::VulkanScene(const Scene& scene, const VulkanInterface* vulkan_inter
 	auto vertex_data = scene.GetVertexData();
 	mVertexData = std::make_unique<DeviceBufferResource>(
 		mDevice, allocator,
-		VK_BUFFER_USAGE_VERTEX_BUFFER_BIT | VK_BUFFER_USAGE_INDEX_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT,
+		VK_BUFFER_USAGE_VERTEX_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT,
 		vertex_data.size(), "scene vertex data"
 	);
 
@@ -22,17 +22,43 @@ VulkanScene::VulkanScene(const Scene& scene, const VulkanInterface* vulkan_inter
 		vertex_data, "staging vertex data"
 	);
 
-	auto uniform_data = scene.GetUniformData();
-	mUniformData = std::make_unique<DeviceBufferResource>(
+	auto index_data = scene.GetIndexData();
+	mIndexData = std::make_unique<DeviceBufferResource>(
 		mDevice, allocator,
-		VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT,
-		uniform_data.size(), "scene uniform data"
+		VK_BUFFER_USAGE_INDEX_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT,
+		index_data.size(), "scene index data"
 	);
 
-	auto staging_uniform_data = std::make_unique<HostBufferResource>(
+	auto staging_index_data = std::make_unique<HostBufferResource>(
 		mDevice, allocator,
 		VK_BUFFER_USAGE_TRANSFER_SRC_BIT, VMA_ALLOCATION_CREATE_HOST_ACCESS_SEQUENTIAL_WRITE_BIT,
-		uniform_data, "staging uniform data"
+		index_data, "staging index data"
+	);
+
+	auto camera_matrices_data = scene.GetCameraMatricesData();
+	mCameraMatricesData = std::make_unique<DeviceBufferResource>(
+		mDevice, allocator,
+		VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT,
+		camera_matrices_data.size(), "scene cam matrices data"
+	);
+
+	auto staging_camera_matrices_data = std::make_unique<HostBufferResource>(
+		mDevice, allocator,
+		VK_BUFFER_USAGE_TRANSFER_SRC_BIT, VMA_ALLOCATION_CREATE_HOST_ACCESS_SEQUENTIAL_WRITE_BIT,
+		camera_matrices_data, "staging cam matrices data"
+	);
+
+	auto model_matrices_data = scene.GetModelMatricesData();
+	mModelMatricesData = std::make_unique<DeviceBufferResource>(
+		mDevice, allocator,
+		VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT,
+		model_matrices_data.size(), "scene model matrices data"
+	);
+
+	auto staging_model_matrices_data = std::make_unique<HostBufferResource>(
+		mDevice, allocator,
+		VK_BUFFER_USAGE_TRANSFER_SRC_BIT, VMA_ALLOCATION_CREATE_HOST_ACCESS_SEQUENTIAL_WRITE_BIT,
+		model_matrices_data, "staging model matrices data"
 	);
 
 	mCameraInstances.reserve(scene.GetCameraInstances().size());
@@ -99,7 +125,9 @@ VulkanScene::VulkanScene(const Scene& scene, const VulkanInterface* vulkan_inter
 
 	transfer_helpers->RecordBatch();
 	transfer_helpers->CopyBufferToBuffer(staging_vertex_data->GetVkBuffer(), mVertexData->GetVkBuffer(), vertex_data.size());
-	transfer_helpers->CopyBufferToBuffer(staging_uniform_data->GetVkBuffer(), mUniformData->GetVkBuffer(), uniform_data.size());
+	transfer_helpers->CopyBufferToBuffer(staging_index_data->GetVkBuffer(), mIndexData->GetVkBuffer(), index_data.size());
+	transfer_helpers->CopyBufferToBuffer(staging_camera_matrices_data->GetVkBuffer(), mCameraMatricesData->GetVkBuffer(), camera_matrices_data.size());
+	transfer_helpers->CopyBufferToBuffer(staging_model_matrices_data->GetVkBuffer(), mModelMatricesData->GetVkBuffer(), model_matrices_data.size());
 	transfer_helpers->CopyBufferToBuffer(staging_materials_data->GetVkBuffer(), mMaterialsData->GetVkBuffer(), mMaterials.size() * sizeof(Material));
 	transfer_helpers->CopyBufferToBuffer(staging_lights_data->GetVkBuffer(), mLightsData->GetVkBuffer(), mLights.size() * sizeof(Light));
 	transfer_helpers->SubmitBatch();
@@ -200,9 +228,19 @@ const DeviceBufferResource* VulkanScene::GetVertexData() const
 	return mVertexData.get();
 }
 
-const DeviceBufferResource* VulkanScene::GetUniformData() const
+const DeviceBufferResource* VulkanScene::GetIndexData() const
 {
-	return mUniformData.get();
+	return mIndexData.get();
+}
+
+const DeviceBufferResource* VulkanScene::GetCameraMatricesData() const
+{
+	return mCameraMatricesData.get();
+}
+
+const DeviceBufferResource* VulkanScene::GetModelMatricesData() const
+{
+	return mModelMatricesData.get();
 }
 
 const DeviceBufferResource* VulkanScene::GetMaterialsData() const

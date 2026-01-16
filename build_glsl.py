@@ -22,6 +22,8 @@ def build_glsl(shader_path, build_type):
             cmd = 'glslang ' + str(glsl)
             if (build_type == 'Debug'):
                 cmd += ' -gVS -Od '
+            elif (build_type == 'MinSizeRel'):
+                cmd += ' -g0 -Os '
             cmd += ' --target-env vulkan1.2 -o ' + str(spv_name)
 
             subprocess.call(cmd)

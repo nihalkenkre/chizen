@@ -33,16 +33,19 @@ public:
 	~ViewportWorldScene() noexcept override;
 
 private:
+	void CreateIndirectBuffer();
 	void CreateDescriptorPool();
 	void CreateDescriptorSets();
 
 	std::unique_ptr<ViewportScenePipelineData> mPipelineData = nullptr;
+	std::unique_ptr<DeviceBufferResource> mIndirectBuffer = nullptr;
 
 	VkDescriptorPool mDescriptorPool = VK_NULL_HANDLE;
 	VkDescriptorSet mMTexturesDescSet = VK_NULL_HANDLE;
 	VkDescriptorBufferInfo mCameraDescBuffer = {};
 	VkDescriptorSet mCameraMatrixDescSet = VK_NULL_HANDLE;
 	VkDescriptorSet mModelMatrixDescSet = VK_NULL_HANDLE;
+
 
 	const VulkanScene* mScene = nullptr;
 	VkDevice mDevice = VK_NULL_HANDLE;

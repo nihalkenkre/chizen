@@ -110,13 +110,6 @@ void VulkanRaytracer::Start(const VulkanRaytracerScene* scene, const ImageResour
 		};
 		VK_CHECK("begin rt cmd_buff", vkBeginCommandBuffer(cmd_buff, &rt_begin_info));
 
-		Utils_InsertMemoryBarrier(
-			cmd_buff,
-			VK_PIPELINE_STAGE_2_CLEAR_BIT, VK_ACCESS_2_TRANSFER_WRITE_BIT,
-			VK_PIPELINE_STAGE_2_RAY_TRACING_SHADER_BIT_KHR | VK_PIPELINE_STAGE_2_CLEAR_BIT,
-			VK_ACCESS_2_SHADER_STORAGE_WRITE_BIT | VK_ACCESS_2_TRANSFER_WRITE_BIT
-		);
-
 		scene->Render(cmd_buff, mRandomStates.get(), mAccumRenderTarget.get(), final_render_target, s, extent.width, extent.height, cam_index, is_cpu_shading);
 
 		VK_CHECK("end rt cmd buffer", vkEndCommandBuffer(cmd_buff));
