@@ -5,14 +5,27 @@
 #include <stb_image.h>
 
 VulkanScene::VulkanScene(const Scene& scene, const VulkanInterface* vulkan_interface, const bool IsCPUShading)
-	: mDevice(vulkan_interface->GetVkDevice())
+	: mDevice(vulkan_interface->GetVkDevice()), mIndicesSize(scene.GetIndexData().size())
 {
 	VmaAllocator allocator = vulkan_interface->GetVmaAllocator();
+
+	auto positions_data = scene.GetPositionsData();
+	mPositionsData = std::make_unique<DeviceBufferResource>(
+		mDevice, allocator,
+		VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_VERTEX_BUFFER_BIT | VK_BUFFER_USAGE_ACCELERATION_STRUCTURE_BUILD_INPUT_READ_ONLY_BIT_KHR,
+		positions_data.size(), "scene positions data"
+	);
+
+	auto staging_positions_data = std::make_unique<HostBufferResource>(
+		mDevice, allocator,
+		VK_BUFFER_USAGE_TRANSFER_SRC_BIT, VMA_ALLOCATION_CREATE_HOST_ACCESS_SEQUENTIAL_WRITE_BIT,
+		positions_data, "staging positions data"
+	);
 
 	auto vertex_data = scene.GetVertexData();
 	mVertexData = std::make_unique<DeviceBufferResource>(
 		mDevice, allocator,
-		VK_BUFFER_USAGE_VERTEX_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT,
+		VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_VERTEX_BUFFER_BIT,
 		vertex_data.size(), "scene vertex data"
 	);
 
@@ -25,7 +38,7 @@ VulkanScene::VulkanScene(const Scene& scene, const VulkanInterface* vulkan_inter
 	auto index_data = scene.GetIndexData();
 	mIndexData = std::make_unique<DeviceBufferResource>(
 		mDevice, allocator,
-		VK_BUFFER_USAGE_INDEX_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT,
+		VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_INDEX_BUFFER_BIT | VK_BUFFER_USAGE_ACCELERATION_STRUCTURE_BUILD_INPUT_READ_ONLY_BIT_KHR,
 		index_data.size(), "scene index data"
 	);
 
@@ -38,7 +51,7 @@ VulkanScene::VulkanScene(const Scene& scene, const VulkanInterface* vulkan_inter
 	auto camera_matrices_data = scene.GetCameraMatricesData();
 	mCameraMatricesData = std::make_unique<DeviceBufferResource>(
 		mDevice, allocator,
-		VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT,
+		VK_BUFFER_USAGE_TRANSFER_DST_BIT,
 		camera_matrices_data.size(), "scene cam matrices data"
 	);
 
@@ -51,7 +64,7 @@ VulkanScene::VulkanScene(const Scene& scene, const VulkanInterface* vulkan_inter
 	auto model_matrices_data = scene.GetModelMatricesData();
 	mModelMatricesData = std::make_unique<DeviceBufferResource>(
 		mDevice, allocator,
-		VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT,
+		VK_BUFFER_USAGE_TRANSFER_DST_BIT,
 		model_matrices_data.size(), "scene model matrices data"
 	);
 
@@ -124,6 +137,7 @@ VulkanScene::VulkanScene(const Scene& scene, const VulkanInterface* vulkan_inter
 	TransferHelpers* transfer_helpers = vulkan_interface->GetTransferHelpers();
 
 	transfer_helpers->RecordBatch();
+	transfer_helpers->CopyBufferToBuffer(staging_positions_data->GetVkBuffer(), mPositionsData->GetVkBuffer(), positions_data.size());
 	transfer_helpers->CopyBufferToBuffer(staging_vertex_data->GetVkBuffer(), mVertexData->GetVkBuffer(), vertex_data.size());
 	transfer_helpers->CopyBufferToBuffer(staging_index_data->GetVkBuffer(), mIndexData->GetVkBuffer(), index_data.size());
 	transfer_helpers->CopyBufferToBuffer(staging_camera_matrices_data->GetVkBuffer(), mCameraMatricesData->GetVkBuffer(), camera_matrices_data.size());
@@ -223,6 +237,11 @@ const std::vector<VulkanScene::Image>& VulkanScene::GetImages() const
 	return mImages;
 }
 
+const DeviceBufferResource* VulkanScene::GetPositionsData() const
+{
+	return mPositionsData.get();
+}
+
 const DeviceBufferResource* VulkanScene::GetVertexData() const
 {
 	return mVertexData.get();
@@ -251,6 +270,11 @@ const DeviceBufferResource* VulkanScene::GetMaterialsData() const
 const DeviceBufferResource* VulkanScene::GetLightsData() const
 {
 	return mLightsData.get();
+}
+
+size_t VulkanScene::GetIndicesSize() const
+{
+	return mIndicesSize;
 }
 
 VulkanScene::Mesh::Mesh(const Scene::Mesh& mesh)

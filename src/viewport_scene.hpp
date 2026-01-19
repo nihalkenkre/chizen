@@ -6,6 +6,7 @@ class DeviceBufferResource;
 class ImageResource;
 class ViewportScenePipelineData;
 class VulkanScene;
+class TransferHelpers;
 
 class ViewportScene
 {
@@ -33,20 +34,27 @@ public:
 	~ViewportWorldScene() noexcept override;
 
 private:
-	void CreateIndirectBuffer();
+	void CreateIndirectBufferAndDrawElementsBuffer(TransferHelpers* transfer_helpers);
 	void CreateDescriptorPool();
 	void CreateDescriptorSets();
 
 	std::unique_ptr<ViewportScenePipelineData> mPipelineData = nullptr;
-	std::unique_ptr<DeviceBufferResource> mIndirectBuffer = nullptr;
+	std::unique_ptr<DeviceBufferResource> mIndirectCommandsBuffer = nullptr;
+	std::unique_ptr<DeviceBufferResource> mDrawElements = nullptr;
 
 	VkDescriptorPool mDescriptorPool = VK_NULL_HANDLE;
 	VkDescriptorSet mMTexturesDescSet = VK_NULL_HANDLE;
-	VkDescriptorBufferInfo mCameraDescBuffer = {};
-	VkDescriptorSet mCameraMatrixDescSet = VK_NULL_HANDLE;
-	VkDescriptorSet mModelMatrixDescSet = VK_NULL_HANDLE;
+	//VkDescriptorBufferInfo mCameraDescBuffer = {};
+	//VkDescriptorSet mCameraMatrixDescSet = VK_NULL_HANDLE;
 
+	struct DrawElement
+	{
+		uint32_t model_matrix_index = 0;
+		uint32_t material_index = 0;
+	};
 
+	uint32_t mDrawElementsCount = 0;
 	const VulkanScene* mScene = nullptr;
 	VkDevice mDevice = VK_NULL_HANDLE;
+	VmaAllocator mAllocator = VK_NULL_HANDLE;
 };

@@ -11,9 +11,9 @@ struct PhysicalDeviceData
 	VkPhysicalDeviceMemoryProperties2KHR MemoryProperties = {};
 	VkPhysicalDeviceRayTracingPipelinePropertiesKHR RayTracingProperties = {};
 	VkPhysicalDeviceAccelerationStructurePropertiesKHR AccelerationStructureProperties = {};
-	uint32_t GraphicsQueueFamilyIndex = 0;
-	uint32_t ComputeQueueFamilyIndex = 0;
-	uint32_t TransferQueueFamilyIndex = 0;
+	uint32_t GraphicsQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+	uint32_t ComputeQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+	uint32_t TransferQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
 };
 
 class Instance
@@ -240,7 +240,7 @@ class BLAccelerationStructure
 {
 public:
 	BLAccelerationStructure() = delete;
-	BLAccelerationStructure(const VkDevice device, const VmaAllocator allocator, const Scene::Mesh::Primitive& primitive, const std::vector<uint8_t>& vertex_data, const std::vector<uint8_t>& index_data, const VmaPool mem_pool, const size_t scratch_buffer_alignment, ComputeHelpers* compute_helpers, const std::string& name);
+	BLAccelerationStructure(const VkDevice device, const VmaAllocator allocator, const Scene::Mesh::Primitive& primitive, const VkDeviceOrHostAddressConstKHR positions_addr, const VkDeviceOrHostAddressConstKHR indices_addr, const VmaPool mem_pool, const size_t scratch_buffer_alignment, ComputeHelpers* compute_helpers, const std::string& name);
 
 	BLAccelerationStructure(const BLAccelerationStructure& other) = delete;
 	BLAccelerationStructure& operator=(const BLAccelerationStructure& other) = delete;

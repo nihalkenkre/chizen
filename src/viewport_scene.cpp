@@ -24,10 +24,12 @@ public:
 
 	struct PushConstants
 	{
+		VkDeviceAddress ViewProjMatrix = 0;
+		VkDeviceAddress DrawElements = 0;
+		VkDeviceAddress Materials = 0;
+		VkDeviceAddress ModelMatrices = 0;
 		VkDeviceAddress Lights = 0;
 		uint32_t LightsCount = 0;
-		uint32_t ModelMatrixIndex = 0;
-		uint32_t MaterialIndex = 0;
 		uint32_t IsCPUShading = 0;
 	};
 
@@ -199,31 +201,6 @@ ViewportScenePipelineData::ViewportScenePipelineData(const VkDevice device, cons
 	const VkDescriptorSetLayoutBinding dsl_0_binds[] = {
 		{
 			.binding = 0,
-			.descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC,
-			.descriptorCount = 1,
-			.stageFlags = VK_SHADER_STAGE_VERTEX_BIT,
-		}
-	};
-
-	const VkDescriptorSetLayoutBinding dsl_1_binds[] = {
-		{
-			.binding = 0,
-			.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,
-			.descriptorCount = 1,
-			.stageFlags = VK_SHADER_STAGE_VERTEX_BIT,
-		},
-	};
-
-	// had to use vector because of num_images (const variable) ?!?!
-	const std::vector<VkDescriptorSetLayoutBinding> dsl_2_binds = {
-		{
-			.binding = 0,
-			.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,
-			.descriptorCount = 1,
-			.stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT,
-		},
-		{
-			.binding = 1,
 			.descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
 			.descriptorCount = static_cast<uint32_t>(num_images),
 			.stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT,
@@ -231,10 +208,10 @@ ViewportScenePipelineData::ViewportScenePipelineData(const VkDevice device, cons
 	};
 
 	const VkDescriptorBindingFlagsEXT binding_flags[] = {
-		0, VK_DESCRIPTOR_BINDING_VARIABLE_DESCRIPTOR_COUNT_BIT | VK_DESCRIPTOR_BINDING_PARTIALLY_BOUND_BIT,
+		VK_DESCRIPTOR_BINDING_VARIABLE_DESCRIPTOR_COUNT_BIT | VK_DESCRIPTOR_BINDING_PARTIALLY_BOUND_BIT,
 	};
 
-	const VkDescriptorSetLayoutBindingFlagsCreateInfo dsl_2_binds_flags_ci = {
+	const VkDescriptorSetLayoutBindingFlagsCreateInfo dsl_0_binds_flags_ci = {
 		.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_BINDING_FLAGS_CREATE_INFO,
 		.bindingCount = std::size(binding_flags),
 		.pBindingFlags = binding_flags,
@@ -243,19 +220,9 @@ ViewportScenePipelineData::ViewportScenePipelineData(const VkDevice device, cons
 	const VkDescriptorSetLayoutCreateInfo dsl_cis[] = {
 		{
 			.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO,
+			.pNext = &dsl_0_binds_flags_ci,
 			.bindingCount = std::size(dsl_0_binds),
 			.pBindings = dsl_0_binds,
-		},
-		{
-			.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO,
-			.bindingCount = std::size(dsl_1_binds),
-			.pBindings = dsl_1_binds,
-		},
-		{
-			.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO,
-			.pNext = &dsl_2_binds_flags_ci,
-			.bindingCount = static_cast<uint32_t>(std::size(dsl_2_binds)),
-			.pBindings = dsl_2_binds.data(),
 		}
 	};
 
@@ -355,32 +322,21 @@ const std::vector<VkDescriptorSetLayout>& ViewportScenePipelineData::GetDescript
 }
 
 ViewportWorldScene::ViewportWorldScene(const VulkanScene* vulkan_scene, const VulkanInterface* vulkan_interface)
-	: mDevice(vulkan_interface->GetVkDevice()), mScene(vulkan_scene)
+	: mDevice(vulkan_interface->GetVkDevice()), mAllocator(vulkan_interface->GetVmaAllocator()), mScene(vulkan_scene)
 {
 	mPipelineData = std::make_unique<ViewportScenePipelineData>(mDevice, std::max(static_cast<size_t>(1), vulkan_scene->GetImages().size()), "Scene");
 
-	VmaAllocator allocator = vulkan_interface->GetVmaAllocator();
-
-	mCameraDescBuffer = {
-		.buffer = vulkan_scene->GetCameraMatricesData()->GetVkBuffer(),
-		.offset = 0,
-		.range = sizeof(glm::mat4),
-	};
-
-	CreateIndirectBuffer();
+	CreateIndirectBufferAndDrawElementsBuffer(vulkan_interface->GetTransferHelpers());
 	CreateDescriptorPool();
 	CreateDescriptorSets();
 }
 
-void ViewportWorldScene::Render(const VkCommandBuffer cmd_buff, const uint32_t cam_index, const bool is_cpu_shading) const
+void ViewportWorldScene::Render(const VkCommandBuffer cmd_buff, const uint32_t camera_index, const bool is_cpu_shading) const
 {
 	vkCmdBindPipeline(cmd_buff, VK_PIPELINE_BIND_POINT_GRAPHICS, mPipelineData->GetPipeline());
 
-	const uint32_t offsets[] = { static_cast<uint32_t>(mScene->GetCameraInstances()[cam_index].GetViewProjMatrixOffset()) };
 
 	const VkDescriptorSet desc_sets[] = {
-		mCameraMatrixDescSet,
-		mModelMatrixDescSet,
 		mMTexturesDescSet,
 	};
 
@@ -391,69 +347,43 @@ void ViewportWorldScene::Render(const VkCommandBuffer cmd_buff, const uint32_t c
 		.firstSet = 0,
 		.descriptorSetCount = _countof(desc_sets),
 		.pDescriptorSets = desc_sets,
-		.dynamicOffsetCount = _countof(offsets),
-		.pDynamicOffsets = offsets,
 	};
 
 	vkCmdBindDescriptorSets2(cmd_buff, &bind_ds_info);
 
-	uint32_t instance_index = 0;
+	const VkBuffer bindings[] = {
+		mScene->GetPositionsData()->GetVkBuffer(),
+		mScene->GetVertexData()->GetVkBuffer(),
+	};
 
-	for (const auto& mesh_instance : mScene->GetMeshInstances())
-	{
-		const auto& curr_prims = mScene->GetMeshes()[mesh_instance.GetMeshIndex()].GetPrimitives();
+	const VkDeviceSize bindings_offsets[] = {
+		0,
+		0,
+	};
 
-		for (const auto& curr_prim : curr_prims)
-		{
-			const ViewportScenePipelineData::PushConstants pcf = {
-				.Lights = mScene->GetLightsData()->GetDeviceAddress(),
-				.LightsCount = static_cast<uint32_t>(mScene->GetLights().size()),
-				.ModelMatrixIndex = instance_index,
-				.MaterialIndex = static_cast<uint32_t>(curr_prim.GetMaterialIndex()),
-				.IsCPUShading = is_cpu_shading,
-			};
+	vkCmdBindVertexBuffers2(cmd_buff, 0, std::size(bindings), bindings, bindings_offsets, nullptr, nullptr);
+	vkCmdBindIndexBuffer2(cmd_buff, mScene->GetIndexData()->GetVkBuffer(), 0, mScene->GetIndicesSize(), VK_INDEX_TYPE_UINT32);
 
-			const VkPushConstantsInfoKHR pc_info = {
-				.sType = VK_STRUCTURE_TYPE_PUSH_CONSTANTS_INFO_KHR,
-				.layout = mPipelineData->GetPipelineLayout(),
-				.stageFlags = VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT,
-				.size = sizeof(ViewportScenePipelineData::PushConstants),
-				.pValues = &pcf,
-			};
-			vkCmdPushConstants2(cmd_buff, &pc_info);
+	const ViewportScenePipelineData::PushConstants pcf = {
+		.ViewProjMatrix = mScene->GetCameraMatricesData()->GetDeviceAddress() + (camera_index * 3 * sizeof(glm::mat4)),
+		.DrawElements = mDrawElements->GetDeviceAddress(),
+		.Materials = mScene->GetMaterialsData()->GetDeviceAddress(),
+		.ModelMatrices = mScene->GetModelMatricesData()->GetDeviceAddress(),
+		.Lights = mScene->GetLightsData()->GetDeviceAddress(),
+		.LightsCount = static_cast<uint32_t>(mScene->GetLights().size()),
+		.IsCPUShading = is_cpu_shading,
+	};
 
-			const VkBuffer buffers[] = {
-				mScene->GetVertexData()->GetVkBuffer(),
-				mScene->GetVertexData()->GetVkBuffer(),
-			};
+	const VkPushConstantsInfoKHR pc_info = {
+		.sType = VK_STRUCTURE_TYPE_PUSH_CONSTANTS_INFO_KHR,
+		.layout = mPipelineData->GetPipelineLayout(),
+		.stageFlags = VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT,
+		.size = sizeof(ViewportScenePipelineData::PushConstants),
+		.pValues = &pcf,
+	};
+	vkCmdPushConstants2(cmd_buff, &pc_info);
 
-			const VkDeviceSize offsets[] = {
-				curr_prim.GetPositionsOffset(),
-				curr_prim.GetVerticesDataOffset(),
-			};
-
-			vkCmdBindVertexBuffers2(cmd_buff, 0, std::size(buffers), buffers, offsets, nullptr, nullptr);
-
-			if (curr_prim.GetIndexCount() != 0)
-			{
-				vkCmdBindIndexBuffer2(
-					cmd_buff,
-					mScene->GetIndexData()->GetVkBuffer(),
-					curr_prim.GetIndicesOffset(),
-					curr_prim.GetIndicesSize(),
-					curr_prim.GetIndexType()
-				);
-
-				vkCmdDrawIndexed(cmd_buff, static_cast<uint32_t>(curr_prim.GetIndexCount()), 1, 0, 0, 0);
-			}
-			else
-			{
-				vkCmdDraw(cmd_buff, static_cast<uint32_t>(curr_prim.GetVertexCount()), 1, 0, 0);
-			}
-		}
-
-		++instance_index;
-	}
+	vkCmdDrawIndexedIndirect(cmd_buff, mIndirectCommandsBuffer->GetVkBuffer(), 0, mDrawElementsCount, sizeof(VkDrawIndexedIndirectCommand));
 }
 
 void ViewportWorldScene::ReloadShaders()
@@ -468,37 +398,91 @@ void ViewportWorldScene::ReloadShaders()
 	CreateDescriptorSets();
 }
 
-void ViewportWorldScene::CreateIndirectBuffer()
+void ViewportWorldScene::CreateIndirectBufferAndDrawElementsBuffer(TransferHelpers* transfer_helpers)
 {
 	std::vector<VkDrawIndexedIndirectCommand> indirect_commands;
+	std::vector<DrawElement> draw_elements;
+
+	for (const auto& mesh_instance : mScene->GetMeshInstances())
+	{
+		auto curr_mesh = mScene->GetMeshes()[mesh_instance.GetMeshIndex()];
+
+		for (const auto& curr_prim : curr_mesh.GetPrimitives())
+		{
+			draw_elements.push_back(
+				DrawElement{
+					.model_matrix_index = static_cast<uint32_t>(mesh_instance.GetModelMatrixOffset() / 64), // just store the index in the scene mesh instance object. :|
+					.material_index = static_cast<uint32_t>(curr_prim.GetMaterialIndex()),
+				}
+				);
+
+			indirect_commands.push_back(
+				VkDrawIndexedIndirectCommand{
+					.indexCount = static_cast<uint32_t>(curr_prim.GetIndexCount()),
+					.instanceCount = 1,
+					.firstIndex = static_cast<uint32_t>(curr_prim.GetFirstIndexIndex()),
+				}
+				);
+
+			++mDrawElementsCount;
+		}
+	}
+
+	std::vector<uint8_t> indirect_commands_data(indirect_commands.size() * sizeof(VkDrawIndexedIndirectCommand));
+	std::memcpy(
+		indirect_commands_data.data(),
+		indirect_commands.data(),
+		indirect_commands_data.size()
+	);
+
+	auto staging_indirect_commands = std::make_unique<HostBufferResource>(
+		mDevice, mAllocator, VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
+		VMA_ALLOCATION_CREATE_HOST_ACCESS_SEQUENTIAL_WRITE_BIT,
+		indirect_commands_data, "staging indirect commands"
+	);
+	mIndirectCommandsBuffer = std::make_unique<DeviceBufferResource>(
+		mDevice, mAllocator, VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_INDIRECT_BUFFER_BIT,
+		indirect_commands_data.size(),
+		"indirect commands"
+	);
+
+	std::vector<uint8_t> draw_elements_data(draw_elements.size() * sizeof(DrawElement));
+	std::memcpy(
+		draw_elements_data.data(),
+		draw_elements.data(),
+		draw_elements_data.size()
+	);
+
+	auto staging_draw_elements = std::make_unique<HostBufferResource>(
+		mDevice, mAllocator, VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
+		VMA_ALLOCATION_CREATE_HOST_ACCESS_SEQUENTIAL_WRITE_BIT,
+		draw_elements_data, "staging draw elements"
+	);
+	mDrawElements = std::make_unique<DeviceBufferResource>(
+		mDevice, mAllocator, VK_BUFFER_USAGE_TRANSFER_DST_BIT,
+		draw_elements_data.size(), "draw elements"
+	);
+
+	transfer_helpers->RecordBatch();
+	transfer_helpers->CopyBufferToBuffer(staging_indirect_commands->GetVkBuffer(), mIndirectCommandsBuffer->GetVkBuffer(), indirect_commands_data.size());
+	transfer_helpers->CopyBufferToBuffer(staging_draw_elements->GetVkBuffer(), mDrawElements->GetVkBuffer(), draw_elements_data.size());
+	transfer_helpers->SubmitBatch();
 }
 
 void ViewportWorldScene::CreateDescriptorPool()
 {
-	const VkDescriptorPoolSize view_proj_desc_size = {
-		.type = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC,
-		.descriptorCount = 1,
-	};
-
-	const VkDescriptorPoolSize model_mat_desc_size = {
-		.type = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,
-		.descriptorCount = 1,
-	};
-
 	const VkDescriptorPoolSize imgs_desc_pool_size = {
 		.type = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER,
 		.descriptorCount = static_cast<uint32_t>(std::max(static_cast<size_t>(1), mScene->GetImages().size())),
 	};
 
 	const VkDescriptorPoolSize pool_sizes[] = {
-		view_proj_desc_size,
-		model_mat_desc_size,
 		imgs_desc_pool_size,
 	};
 
 	const VkDescriptorPoolCreateInfo dsp_ci = {
 		.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO,
-		.maxSets = view_proj_desc_size.descriptorCount + model_mat_desc_size.descriptorCount + 1, //1 for the textures desc set
+		.maxSets = 1, //1 for the textures desc set
 		.poolSizeCount = std::size(pool_sizes),
 		.pPoolSizes = pool_sizes,
 	};
@@ -513,53 +497,6 @@ void ViewportWorldScene::CreateDescriptorPool()
 void ViewportWorldScene::CreateDescriptorSets()
 {
 	const std::vector<VkDescriptorSetLayout>& desc_set_layouts = mPipelineData->GetDescriptorSetLayouts();
-
-	const VkDescriptorSetAllocateInfo cam_ds_ai = {
-		.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO,
-		.descriptorPool = mDescriptorPool,
-		.descriptorSetCount = 1,
-		.pSetLayouts = desc_set_layouts.data(),
-	};
-	VK_CHECK("allocate cam matrix desc set", vkAllocateDescriptorSets(mDevice, &cam_ds_ai, &mCameraMatrixDescSet));
-
-#ifdef _DEBUG
-	Utils_SetObjectName(mDevice, VK_OBJECT_TYPE_DESCRIPTOR_SET, reinterpret_cast<uint64_t>(mCameraMatrixDescSet), "viewport scene cam desc set");
-#endif
-
-	const VkWriteDescriptorSet cam_ds_write = {
-		.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
-		.dstSet = mCameraMatrixDescSet,
-		.dstBinding = 0,
-		.descriptorCount = 1,
-		.descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC,
-		.pBufferInfo = &mCameraDescBuffer,
-	};
-
-	vkUpdateDescriptorSets(mDevice, 1, &cam_ds_write, 0, nullptr);
-
-	const VkDescriptorSetAllocateInfo model_ds_ai = {
-		.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO,
-		.descriptorPool = mDescriptorPool,
-		.descriptorSetCount = 1,
-		.pSetLayouts = desc_set_layouts.data() + 1,
-	};
-	VK_CHECK("allocate model matrix desc set", vkAllocateDescriptorSets(mDevice, &model_ds_ai, &mModelMatrixDescSet));
-
-#ifdef _DEBUG
-	Utils_SetObjectName(mDevice, VK_OBJECT_TYPE_DESCRIPTOR_SET, reinterpret_cast<uint64_t>(mModelMatrixDescSet), "viewport scene model matrix desc set");
-#endif
-
-	const VkDescriptorBufferInfo model_matrices_desc_info = mScene->GetModelMatricesData()->GetDescriptorInfo();
-	const VkWriteDescriptorSet model_ds_write = {
-		.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
-		.dstSet = mModelMatrixDescSet,
-		.dstBinding = 0,
-		.descriptorCount = 1,
-		.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,
-		.pBufferInfo = &model_matrices_desc_info,
-	};
-
-	vkUpdateDescriptorSets(mDevice, 1, &model_ds_write, 0, nullptr);
 
 	const uint32_t tex_desc_counts[] = {
 		static_cast<uint32_t>(std::max(static_cast<size_t>(1), mScene->GetImages().size()))
@@ -576,7 +513,7 @@ void ViewportWorldScene::CreateDescriptorSets()
 		.pNext = &tex_ds_vdcai,
 		.descriptorPool = mDescriptorPool,
 		.descriptorSetCount = 1,
-		.pSetLayouts = desc_set_layouts.data() + 2,
+		.pSetLayouts = desc_set_layouts.data(),
 	};
 
 	VK_CHECK("create mat tex desc set", vkAllocateDescriptorSets(mDevice, &tex_ds_ai, &mMTexturesDescSet));
@@ -585,24 +522,11 @@ void ViewportWorldScene::CreateDescriptorSets()
 	Utils_SetObjectName(mDevice, VK_OBJECT_TYPE_DESCRIPTOR_SET, reinterpret_cast<uint64_t>(mMTexturesDescSet), "textures desc set");
 #endif // _DEBUG
 
-	const VkDescriptorBufferInfo mat_desc_buff = {
-		.buffer = mScene->GetMaterialsData()->GetVkBuffer(),
-		.range = VK_WHOLE_SIZE,
-	};
-
 	const VkWriteDescriptorSet write_descs[] = {
 		{
 			.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
 			.dstSet = mMTexturesDescSet,
 			.dstBinding = 0,
-			.descriptorCount = 1,
-			.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,
-			.pBufferInfo = &mat_desc_buff,
-		},
-		{
-			.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
-			.dstSet = mMTexturesDescSet,
-			.dstBinding = 1,
 			.descriptorCount = static_cast<uint32_t>(mScene->GetImageDescs().size()),
 			.descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
 			.pImageInfo = mScene->GetImageDescs().data(),

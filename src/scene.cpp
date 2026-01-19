@@ -152,6 +152,11 @@ const std::vector<std::string>& Scene::GetCameraNames() const
 	return mCameraNames;
 }
 
+const std::vector<uint8_t>& Scene::GetPositionsData() const
+{
+	return mPositionsData;
+}
+
 const std::vector<uint8_t>& Scene::GetVertexData() const
 {
 	return mVertexData;
@@ -255,13 +260,13 @@ void Scene::AddCameraInstance(const cgltf_data* gltf, const cgltf_node* node, co
 	auto view_inverse = glm::inverse(view_matrix);
 	auto proj_inverse = glm::inverse(proj_matrix);
 
-	std::vector<uint8_t> view_data(ALIGNED_SIZE(sizeof(glm::mat4), uniform_buffer_alignment));
-	std::memcpy(view_data.data(), &view_inverse, sizeof(glm::mat4));
-	mCameraMatricesData.append_range(view_data);
+	std::vector<uint8_t> view_inverse_data(ALIGNED_SIZE(sizeof(glm::mat4), uniform_buffer_alignment));
+	std::memcpy(view_inverse_data.data(), &view_inverse, sizeof(glm::mat4));
+	mCameraMatricesData.append_range(view_inverse_data);
 
-	std::vector<uint8_t> proj_data(ALIGNED_SIZE(sizeof(glm::mat4), uniform_buffer_alignment));
-	std::memcpy(proj_data.data(), &proj_inverse, sizeof(glm::mat4));
-	mCameraMatricesData.append_range(proj_data);
+	std::vector<uint8_t> proj_inverse_data(ALIGNED_SIZE(sizeof(glm::mat4), uniform_buffer_alignment));
+	std::memcpy(proj_inverse_data.data(), &proj_inverse, sizeof(glm::mat4));
+	mCameraMatricesData.append_range(proj_inverse_data);
 
 	mCameraNames.push_back(node->name == nullptr ? "scene cam" : node->name);
 }
@@ -281,48 +286,8 @@ void Scene::AddMesh(const cgltf_data* gltf, const cgltf_mesh* mesh)
 		size_t indices_offset = 0;
 		size_t vertex_count = 0;
 		size_t index_count = 0;
+		size_t first_index_index = mIndexData.size() / sizeof(uint32_t);
 		size_t material_index = mMaterials.size() - 1; // default material
-
-		VkIndexType index_type = VK_INDEX_TYPE_UINT32;
-
-		if (curr_prim->indices->component_type == cgltf_component_type_r_32u)
-		{
-			indices_size = curr_prim->indices->buffer_view->size;
-			indices_offset = mIndexData.size();
-			index_count = curr_prim->indices->count;
-
-			std::vector<uint8_t> index_data(indices_size);
-			std::memcpy(
-				index_data.data(),
-				reinterpret_cast<uint8_t*>(curr_prim->indices->buffer_view->buffer->data) + curr_prim->indices->buffer_view->offset + curr_prim->indices->offset,
-				curr_prim->indices->buffer_view->size
-			);
-			mIndexData.append_range(index_data);
-		}
-		else if (curr_prim->indices->component_type == cgltf_component_type_r_16u)
-		{
-			std::vector<uint16_t> indices_16(curr_prim->indices->count);
-			std::memcpy(
-				indices_16.data(),
-				reinterpret_cast<uint8_t*>(curr_prim->indices->buffer_view->buffer->data) + curr_prim->indices->buffer_view->offset + curr_prim->indices->offset,
-				curr_prim->indices->buffer_view->size
-			);
-
-			std::vector<uint32_t> indices_32(curr_prim->indices->count);
-			std::copy(indices_16.begin(), indices_16.end(), indices_32.begin());
-
-			indices_size = indices_32.size() * sizeof(uint32_t);
-			indices_offset = mIndexData.size();
-			index_count = curr_prim->indices->count;
-
-			std::vector<uint8_t> index_data(indices_size);
-			std::memcpy(
-				index_data.data(),
-				indices_32.data(),
-				indices_size
-			);
-			mIndexData.append_range(index_data);
-		}
 
 		std::vector<VertexData> vertices_data;
 		std::vector<glm::vec4> tangents;
@@ -340,8 +305,8 @@ void Scene::AddMesh(const cgltf_data* gltf, const cgltf_mesh* mesh)
 					reinterpret_cast<uint8_t*>(curr_attr->data->buffer_view->buffer->data) + curr_attr->data->buffer_view->offset + curr_attr->data->offset,
 					curr_attr->data->buffer_view->size
 				);
-				positions_offset = mVertexData.size();
-				mVertexData.append_range(attr_data);
+				positions_offset = mPositionsData.size();
+				mPositionsData.append_range(attr_data);
 
 				vertex_count = curr_attr->data->count;
 				positions_size = curr_attr->data->buffer_view->size;
@@ -410,14 +375,68 @@ void Scene::AddMesh(const cgltf_data* gltf, const cgltf_mesh* mesh)
 			material_index = static_cast<int32_t>(cgltf_material_index(gltf, curr_prim->material));
 		}
 
+		VkIndexType index_type = VK_INDEX_TYPE_UINT32;
+
+		if (curr_prim->indices->component_type == cgltf_component_type_r_32u)
+		{
+			indices_size = curr_prim->indices->buffer_view->size;
+			indices_offset = mIndexData.size();
+			index_count = curr_prim->indices->count;
+
+			std::vector<uint32_t> indices(index_count);
+			std::memcpy(
+				indices.data(),
+				reinterpret_cast<uint8_t*>(curr_prim->indices->buffer_view->buffer->data) + curr_prim->indices->buffer_view->offset + curr_prim->indices->offset,
+				curr_prim->indices->buffer_view->size
+			);
+
+			std::for_each(std::begin(indices), std::end(indices), [&](uint32_t& index) { index += static_cast<uint32_t>(mVertexCount); });
+
+			std::vector<uint8_t> index_data(indices_size);
+			std::memcpy(
+				index_data.data(),
+				indices.data(),
+				curr_prim->indices->buffer_view->size
+			);
+			mIndexData.append_range(index_data);
+		}
+		else if (curr_prim->indices->component_type == cgltf_component_type_r_16u)
+		{
+			std::vector<uint16_t> indices_16(curr_prim->indices->count);
+			std::memcpy(
+				indices_16.data(),
+				reinterpret_cast<uint8_t*>(curr_prim->indices->buffer_view->buffer->data) + curr_prim->indices->buffer_view->offset + curr_prim->indices->offset,
+				curr_prim->indices->buffer_view->size
+			);
+
+			std::vector<uint32_t> indices_32(curr_prim->indices->count);
+			std::copy(indices_16.begin(), indices_16.end(), indices_32.begin());
+
+			std::for_each(std::begin(indices_32), std::end(indices_32), [&](uint32_t& index) { index += static_cast<uint32_t>(mVertexCount); });
+
+			indices_size = indices_32.size() * sizeof(uint32_t);
+			indices_offset = mIndexData.size();
+			index_count = curr_prim->indices->count;
+
+			std::vector<uint8_t> index_data(indices_size);
+			std::memcpy(
+				index_data.data(),
+				indices_32.data(),
+				indices_size
+			);
+			mIndexData.append_range(index_data);
+		}
+
 		primitives.push_back(
 			Scene::Mesh::Primitive(
 				positions_size, positions_offset,
 				vertices_data_size, vertices_data_offset, vertex_count,
 				indices_size, indices_offset, index_count, index_type,
-				material_index
+				material_index, first_index_index
 			)
 		);
+
+		mVertexCount += vertex_count;
 	}
 
 	mMeshes.push_back(Mesh(primitives));
@@ -631,7 +650,7 @@ Scene::Mesh::Primitive::Primitive(
 	const size_t positions_size, const size_t positions_offset,
 	const size_t vertices_data_size, const size_t vertices_data_offset, const size_t vertex_count,
 	const size_t indices_size, const size_t indices_offset, const size_t index_count, const VkIndexType index_type,
-	const size_t material_index
+	const size_t material_index, const size_t first_index_index
 )
 	: mPositionsSize(positions_size),
 	mPositionsOffset(positions_offset),
@@ -642,7 +661,8 @@ Scene::Mesh::Primitive::Primitive(
 	mIndicesOffset(indices_offset),
 	mIndexCount(index_count),
 	mIndexType(index_type),
-	mMaterialIndex(material_index)
+	mMaterialIndex(material_index),
+	mFirstIndexIndex(first_index_index)
 {
 }
 
@@ -694,6 +714,11 @@ size_t Scene::Mesh::Primitive::GetIndexCount() const
 size_t Scene::Mesh::Primitive::GetMaterialIndex() const
 {
 	return mMaterialIndex;
+}
+
+size_t Scene::Mesh::Primitive::GetFirstIndexIndex() const
+{
+	return mFirstIndexIndex;
 }
 
 glm::vec4 Scene::Material::GetBaseColorFactor() const

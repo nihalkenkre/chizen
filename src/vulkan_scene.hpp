@@ -87,12 +87,15 @@ public:
 	const std::vector<VulkanScene::Light>& GetLights() const;
 	const std::vector<VkDescriptorImageInfo>& GetImageDescs() const;
 
+	const DeviceBufferResource* GetPositionsData() const;
 	const DeviceBufferResource* GetVertexData() const;
 	const DeviceBufferResource* GetIndexData() const;
 	const DeviceBufferResource* GetCameraMatricesData() const;
 	const DeviceBufferResource* GetModelMatricesData() const;
 	const DeviceBufferResource* GetMaterialsData() const;
 	const DeviceBufferResource* GetLightsData() const;
+
+	size_t GetIndicesSize() const;
 
 private:
 	std::vector<VulkanScene::MeshInstance> mMeshInstances;
@@ -104,6 +107,7 @@ private:
 	std::vector<VulkanScene::Light> mLights;
 	std::vector<VkDescriptorImageInfo> mImageDescs;
 
+	std::unique_ptr<DeviceBufferResource> mPositionsData;
 	std::unique_ptr<DeviceBufferResource> mVertexData;
 	std::unique_ptr<DeviceBufferResource> mIndexData;
 	std::unique_ptr<DeviceBufferResource> mCameraMatricesData;
@@ -112,4 +116,5 @@ private:
 	std::unique_ptr<DeviceBufferResource> mLightsData;
 
 	VkDevice mDevice;
+	VkDeviceSize mIndicesSize;
 };

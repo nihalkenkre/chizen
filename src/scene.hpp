@@ -36,7 +36,7 @@ public:
 				const size_t positions_size, const size_t positions_offset,
 				const size_t vertices_data_size, const size_t vertices_data_offset, const size_t vertex_count,
 				const size_t indices_size, const size_t indices_offset, const size_t index_count, const VkIndexType index_type,
-				const size_t material_index
+				const size_t material_index, const size_t first_index_index
 			);
 
 			size_t GetPositionsSize() const;
@@ -51,6 +51,7 @@ public:
 			size_t GetIndexCount() const;
 
 			size_t GetMaterialIndex() const;
+			size_t GetFirstIndexIndex() const;
 
 		private:
 			size_t mPositionsSize = 0;
@@ -64,6 +65,7 @@ public:
 			size_t mVertexCount = 0;
 			size_t mIndexCount = 0;
 			size_t mMaterialIndex = 0;
+			size_t mFirstIndexIndex = 0;
 		};
 
 		Mesh(std::vector<Scene::Mesh::Primitive> primitives);
@@ -189,6 +191,7 @@ public:
 
 	const std::vector<std::string>& GetCameraNames() const;
 
+	const std::vector<uint8_t>& GetPositionsData() const;
 	const std::vector<uint8_t>& GetVertexData() const;
 	const std::vector<uint8_t>& GetIndexData() const;
 	const std::vector<uint8_t>& GetCameraMatricesData() const;
@@ -214,9 +217,12 @@ private:
 
 	std::vector<std::string> mCameraNames;
 
+	std::vector<uint8_t> mPositionsData;
 	std::vector<uint8_t> mVertexData;
 	std::vector<uint8_t> mIndexData;
 	std::vector<uint8_t> mCameraMatricesData;
 	std::vector<uint8_t> mModelMatricesData;
 	std::vector<uint8_t> mImagesData;
+	
+	size_t mVertexCount = 0;
 };

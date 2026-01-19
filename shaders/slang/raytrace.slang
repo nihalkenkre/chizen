@@ -10,7 +10,10 @@ struct CamInfo
 
 struct PushConstants
 {
+    uint4 *random_states;
+    CamInfo *camera_info;
     Light *lights;
+    Material *materials;
     uint lights_count;
     uint current_sample;
     uint is_cpu_shading;
@@ -23,22 +26,22 @@ struct VertexData
     float2 uv;
 };
 
+// [[vk::binding(0, 0)]]
+// ConstantBuffer<CamInfo> cam_info;
+
 [[vk::binding(0, 0)]]
-ConstantBuffer<CamInfo> cam_info;
-
-[[vk::binding(0, 1)]]
 RWTexture2D<float4> accum_target;
-[[vk::binding(1, 1)]]
+[[vk::binding(1, 0)]]
 RWTexture2D<float4> final_target;
-[[vk::binding(2, 1)]]
-RWStructuredBuffer<uint4> rand_states;
+// [[vk::binding(2, 0)]]
+// RWStructuredBuffer<uint4> rand_states;
 
-[[vk::binding(3, 1)]]
+[[vk::binding(2, 0)]]
 RaytracingAccelerationStructure tlas;
 
-[[vk::binding(4, 1)]]
-StructuredBuffer<Material> materials;
-[[vk::binding(5, 1)]]
+// [[vk::binding(4, 1)]]
+// StructuredBuffer<Material> materials;
+[[vk::binding(3, 0)]]
 Sampler2D textures[];
 
 [[vk::push_constant]]
@@ -78,7 +81,7 @@ float HybridTaus(inout uint4 z, uint flat_index)
                                         TausStep(z.z, 3, 11, 17, 4294967280) ^
                                         LCGStep(z.w, 1664525, 1013904223));
 
-    rand_states[flat_index] = z;
+    pc.random_states[flat_index] = z;
     return rand;
 }
 
@@ -90,6 +93,8 @@ void raygen()
 
     const float2 pixel_center = float2(launch_id.xy) + float2(0.5, 0.5);
     const float2 in_uv = pixel_center / float2(launch_size.xy);
+
+    CamInfo cam_info = *pc.camera_info;
 
     float2 d = in_uv * 2.0 - 1.0;
     float4 target = mul(cam_info.proj_inverse, float4(d.x, d.y, 1, 1));
@@ -115,7 +120,7 @@ void miss(inout Payload p)
     uint3 launch_size = DispatchRaysDimensions();
 
     uint flat_index = launch_id.y * launch_size.x + launch_id.x;
-    uint4 z = rand_states[flat_index];
+    uint4 z = pc.random_states[flat_index];
 
     p.throughput = float4(HybridTaus(z, flat_index), HybridTaus(z, flat_index), HybridTaus(z, flat_index), 1);
 }
@@ -132,7 +137,7 @@ void closesthit(inout Payload p, in Attributes attribs)
     uint3 launch_size = DispatchRaysDimensions();
 
     uint flat_index = launch_id.y * launch_size.x + launch_id.x;
-    uint4 z = rand_states[flat_index];
+    uint4 z = pc.random_states[flat_index];
     const float3 bary_coords = float3(attribs.bary.x, attribs.bary.y, 1.0f - attribs.bary.x - attribs.bary.y);
 
     uint3 index_triplet = *(ch_sbt.indices + PrimitiveIndex());
@@ -161,22 +166,24 @@ void closesthit(inout Payload p, in Attributes attribs)
     float3x3 tbn = transpose(float3x3(t, b, n));
 
     float4 final_color = float4(0, 0, 0, 1);
-    float4 base_color = materials[ch_sbt.material_index].base_color_factor;
+    Material material = pc.materials[ch_sbt.material_index];
+
+    float4 base_color = material.base_color_factor;
 
     float3 l = float3(0, 0, 1);
 
     if (pc.is_cpu_shading == 0)
     {
-        if (materials[ch_sbt.material_index].base_normal_metalrough_index.x >= 0)
+        if (material.base_normal_metalrough_index.x >= 0)
         {
-            base_color *= textures[NonUniformResourceIndex(materials[ch_sbt.material_index].base_normal_metalrough_index.x)].SampleLevel(uv, 0);
+            base_color *= textures[NonUniformResourceIndex(material.base_normal_metalrough_index.x)].SampleLevel(uv, 0);
         }
 
-        if (materials[ch_sbt.material_index].base_normal_metalrough_index.y >= 0)
+        if (material.base_normal_metalrough_index.y >= 0)
         {
             n = mul(
                 tbn,
-                textures[NonUniformResourceIndex(materials[ch_sbt.material_index].base_normal_metalrough_index.y)].SampleLevel(uv, 0).xyz * 2 - 1);
+                textures[NonUniformResourceIndex(material.base_normal_metalrough_index.y)].SampleLevel(uv, 0).xyz * 2 - 1);
         }
 
         float u = HybridTaus(z, flat_index);

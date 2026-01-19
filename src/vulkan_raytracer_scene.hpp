@@ -52,9 +52,7 @@ private:
 	VkDeviceSize mCHSbtAlignedSize = 0;
 
 	VkDescriptorPool mDescriptorPool = VK_NULL_HANDLE;
-	VkDescriptorSet mCameraDescSet = VK_NULL_HANDLE;
 	VkDescriptorSet mSceneDescSet = VK_NULL_HANDLE;
-	VkDescriptorBufferInfo mCameraDescBuffer = {};
 
 	const VulkanScene* mScene = nullptr;
 	VkDevice mDevice = VK_NULL_HANDLE;

@@ -20,7 +20,10 @@ public:
 
 	struct PushConstants
 	{
+		VkDeviceAddress RandomStates = 0;
+		VkDeviceAddress CameraInfo = 0;
 		VkDeviceAddress Lights = 0;
+		VkDeviceAddress Materials = 0;
 		uint32_t LightsCount = 0;
 		uint32_t CurrentSample = 1;
 		uint32_t IsCPUShading = 0;
@@ -66,16 +69,6 @@ VulkanRaytracerScenePipelineData::VulkanRaytracerScenePipelineData(const VkDevic
 	}
 
 	const VkDescriptorSetLayoutBinding dsl_0_bindings[] = {
-	// Cam info
-		{
-			.binding = 0,
-			.descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC,
-			.descriptorCount = 1,
-			.stageFlags = VK_SHADER_STAGE_RAYGEN_BIT_KHR,
-		},
-	};
-
-	const VkDescriptorSetLayoutBinding dsl_1_bindings[] = {
 		// Accum Target
 		{
 			.binding = 0,
@@ -90,30 +83,16 @@ VulkanRaytracerScenePipelineData::VulkanRaytracerScenePipelineData(const VkDevic
 			.descriptorCount = 1,
 			.stageFlags = VK_SHADER_STAGE_RAYGEN_BIT_KHR,
 		},
-		// Rand States
-		{
-			.binding = 2,
-			.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,
-			.descriptorCount = 1,
-			.stageFlags = VK_SHADER_STAGE_RAYGEN_BIT_KHR | VK_SHADER_STAGE_MISS_BIT_KHR | VK_SHADER_STAGE_CLOSEST_HIT_BIT_KHR,
-		},
 		// TLAS
 		{
-			.binding = 3,
+			.binding = 2,
 			.descriptorType = VK_DESCRIPTOR_TYPE_ACCELERATION_STRUCTURE_KHR,
 			.descriptorCount = 1,
 			.stageFlags = VK_SHADER_STAGE_RAYGEN_BIT_KHR,
 		},
-		// Materials
-		{
-			.binding = 4,
-			.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,
-			.descriptorCount = 1,
-			.stageFlags = VK_SHADER_STAGE_CLOSEST_HIT_BIT_KHR
-		},
 		// Textures
 		{
-			.binding = 5,
+			.binding = 3,
 			.descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
 			.descriptorCount = static_cast<uint32_t>(num_images),
 			.stageFlags = VK_SHADER_STAGE_CLOSEST_HIT_BIT_KHR,
@@ -121,10 +100,10 @@ VulkanRaytracerScenePipelineData::VulkanRaytracerScenePipelineData(const VkDevic
 	};
 
 	const VkDescriptorBindingFlagsEXT binding_flags[] = {
-		0, 0, 0, 0, 0, VK_DESCRIPTOR_BINDING_VARIABLE_DESCRIPTOR_COUNT_BIT_EXT | VK_DESCRIPTOR_BINDING_PARTIALLY_BOUND_BIT_EXT
+		0, 0, 0, VK_DESCRIPTOR_BINDING_VARIABLE_DESCRIPTOR_COUNT_BIT_EXT | VK_DESCRIPTOR_BINDING_PARTIALLY_BOUND_BIT_EXT
 	};
 
-	const VkDescriptorSetLayoutBindingFlagsCreateInfo dsl_1_binds_flags_ci = {
+	const VkDescriptorSetLayoutBindingFlagsCreateInfo dsl_0_binds_flags_ci = {
 		.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_BINDING_FLAGS_CREATE_INFO,
 		.bindingCount = std::size(binding_flags),
 		.pBindingFlags = binding_flags,
@@ -133,14 +112,9 @@ VulkanRaytracerScenePipelineData::VulkanRaytracerScenePipelineData(const VkDevic
 	const VkDescriptorSetLayoutCreateInfo dsl_cis[] = {
 		{
 			.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO,
+			.pNext = &dsl_0_binds_flags_ci,
 			.bindingCount = std::size(dsl_0_bindings),
 			.pBindings = dsl_0_bindings,
-		},
-		{
-			.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO,
-			.pNext = &dsl_1_binds_flags_ci,
-			.bindingCount = std::size(dsl_1_bindings),
-			.pBindings = dsl_1_bindings,
 		},
 	};
 
@@ -156,7 +130,7 @@ VulkanRaytracerScenePipelineData::VulkanRaytracerScenePipelineData(const VkDevic
 
 	const VkPushConstantRange pc_ranges[] = {
 		{
-			.stageFlags = VK_SHADER_STAGE_RAYGEN_BIT_KHR | VK_SHADER_STAGE_CLOSEST_HIT_BIT_KHR,
+			.stageFlags = VK_SHADER_STAGE_RAYGEN_BIT_KHR | VK_SHADER_STAGE_MISS_BIT_KHR | VK_SHADER_STAGE_CLOSEST_HIT_BIT_KHR,
 			.size = sizeof(VulkanRaytracerScenePipelineData::PushConstants),
 		},
 	};
@@ -287,7 +261,7 @@ VulkanRaytracerScene::VulkanRaytracerScene(const Scene& scene, const VulkanScene
 	VkDeviceSize scratch_buffer_alignment = vulkan_interface->GetPhysicalDeviceData()->AccelerationStructureProperties.minAccelerationStructureScratchOffsetAlignment;
 	ComputeHelpers* compute_helpers = vulkan_interface->GetComputeHelpers();
 
-	mPipelineData = std::make_unique<VulkanRaytracerScenePipelineData>(mDevice, std::max(static_cast<size_t>(1), scene.GetImages().size()), "vulkan raytracer");
+	mPipelineData = std::make_unique<VulkanRaytracerScenePipelineData>(mDevice, std::max(static_cast<size_t>(1), vulkan_scene->GetImages().size()), "vulkan raytracer");
 	mScratchBufferPool = std::make_unique<Pool>(allocator, scratch_buffer_alignment, mem_type_id);
 	mSBTBufferPool = std::make_unique<Pool>(allocator, mRaytracingProperties.shaderGroupBaseAlignment, mem_type_id);
 
@@ -332,19 +306,20 @@ VulkanRaytracerScene::VulkanRaytracerScene(const Scene& scene, const VulkanScene
 	mCHSbtRecordAlignedSize = ALIGNED_SIZE(mRaytracingProperties.shaderGroupHandleSize + sizeof(CHSbtRecordData), mRaytracingProperties.shaderGroupHandleAlignment);
 
 	std::vector<VkAccelerationStructureInstanceKHR> instances;
-	instances.reserve(scene.GetMeshInstances().size());
+	instances.reserve(vulkan_scene->GetMeshInstances().size());
 
 	// outside vector is meshes, inside vector is offset of prims of meshes
 	std::vector<std::vector<uint32_t>> prim_sbt_record_offsets;
 
 	uint32_t total_records = 0;
-	for (const auto& mesh : scene.GetMeshes())
+	for (const auto& mesh : vulkan_scene->GetMeshes())
 	{
 		std::vector<uint32_t> mesh_prim_offsets;
+
 		for (const auto& prim : mesh.GetPrimitives())
 		{
 			const CHSbtRecordData ch_sbt_record = {
-				.vertices_data = vulkan_scene->GetVertexData()->GetDeviceOrHostAddressConstKHR().deviceAddress + prim.GetVerticesDataOffset(),
+				.vertices_data = vulkan_scene->GetVertexData()->GetDeviceOrHostAddressConstKHR().deviceAddress,
 				.indices = vulkan_scene->GetIndexData()->GetDeviceOrHostAddressConstKHR().deviceAddress + prim.GetIndicesOffset(),
 				.MaterialIndex = static_cast<uint64_t>(prim.GetMaterialIndex()),
 			};
@@ -361,16 +336,24 @@ VulkanRaytracerScene::VulkanRaytracerScene(const Scene& scene, const VulkanScene
 		prim_sbt_record_offsets.push_back(mesh_prim_offsets);
 	}
 
-	for (const auto& mesh_instance : scene.GetMeshInstances())
+	for (const auto& mesh_instance : vulkan_scene->GetMeshInstances())
 	{
-		auto mesh = scene.GetMeshes()[mesh_instance.GetMeshIndex()];
+		auto mesh = vulkan_scene->GetMeshes()[mesh_instance.GetMeshIndex()];
 
 		size_t curr_prim_idx = 0;
 		for (const auto& prim : mesh.GetPrimitives())
 		{
+			const VkDeviceOrHostAddressConstKHR positions_addr = {
+				.deviceAddress = vulkan_scene->GetPositionsData()->GetDeviceAddress(),
+			};
+
+			const VkDeviceOrHostAddressConstKHR indices_addr = {
+				.deviceAddress = vulkan_scene->GetIndexData()->GetDeviceAddress() + prim.GetIndicesOffset(),
+			};
+
 			mBLASes.push_back(
 				std::make_unique<BLAccelerationStructure>(
-					mDevice, allocator, prim, scene.GetVertexData(), scene.GetIndexData(), mScratchBufferPool->GetPool(), scratch_buffer_alignment, compute_helpers, "BLAS"
+					mDevice, allocator, prim, positions_addr, indices_addr, mScratchBufferPool->GetPool(), scratch_buffer_alignment, compute_helpers, "BLAS"
 				)
 			);
 
@@ -430,13 +413,12 @@ VulkanRaytracerScene::~VulkanRaytracerScene() noexcept
 		vkDestroyDescriptorPool(mDevice, mDescriptorPool, nullptr);
 }
 
-void VulkanRaytracerScene::Render(const VkCommandBuffer cmd_buff, const DeviceBufferResource* rand_states, const ImageResource* accum_target, const ImageResource* final_render_target, const uint32_t current_sample, const uint32_t width, const uint32_t height, const uint32_t cam_index, const bool is_cpu_shading) const
+void VulkanRaytracerScene::Render(const VkCommandBuffer cmd_buff, const DeviceBufferResource* rand_states, const ImageResource* accum_target, const ImageResource* final_render_target, const uint32_t current_sample, const uint32_t width, const uint32_t height, const uint32_t camera_index, const bool is_cpu_shading) const
 {
 	vkCmdBindPipeline(cmd_buff, VK_PIPELINE_BIND_POINT_RAY_TRACING_KHR, mPipelineData->GetPipeline());
 
 	const VkDescriptorImageInfo accum_target_desc_info = accum_target->GetDescriptorInfo();
 	const VkDescriptorImageInfo final_render_target_desc_info = final_render_target->GetDescriptorInfo();
-	const VkDescriptorBufferInfo rand_states_desc_info = rand_states->GetDescriptorInfo();
 
 	const VkWriteDescriptorSet write_desc_sets[] = {
 		{
@@ -455,36 +437,15 @@ void VulkanRaytracerScene::Render(const VkCommandBuffer cmd_buff, const DeviceBu
 			.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_IMAGE,
 			.pImageInfo = &final_render_target_desc_info,
 		},
-		{
-			.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
-			.dstSet = mSceneDescSet,
-			.dstBinding = 2,
-			.descriptorCount = 1,
-			.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,
-			.pBufferInfo = &rand_states_desc_info,
-		}
 	};
 
 	vkUpdateDescriptorSets(mDevice, std::size(write_desc_sets), write_desc_sets, 0, nullptr);
-
-	const uint32_t offset = static_cast<uint32_t>(mScene->GetCameraInstances()[cam_index].GetViewInverseMatrixOffset());
-	const VkBindDescriptorSetsInfoKHR cam_ds_bind_info = {
-		.sType = VK_STRUCTURE_TYPE_BIND_DESCRIPTOR_SETS_INFO_KHR,
-		.stageFlags = VK_SHADER_STAGE_RAYGEN_BIT_KHR,
-		.layout = mPipelineData->GetPipelineLayout(),
-		.descriptorSetCount = 1,
-		.pDescriptorSets = &mCameraDescSet,
-		.dynamicOffsetCount = 1,
-		.pDynamicOffsets = &offset,
-	};
-
-	vkCmdBindDescriptorSets2(cmd_buff, &cam_ds_bind_info);
 
 	const VkBindDescriptorSetsInfoKHR scene_ds_bind_info = {
 		.sType = VK_STRUCTURE_TYPE_BIND_DESCRIPTOR_SETS_INFO_KHR,
 		.stageFlags = VK_SHADER_STAGE_RAYGEN_BIT_KHR,
 		.layout = mPipelineData->GetPipelineLayout(),
-		.firstSet = 1,
+		.firstSet = 0,
 		.descriptorSetCount = 1,
 		.pDescriptorSets = &mSceneDescSet,
 	};
@@ -492,7 +453,10 @@ void VulkanRaytracerScene::Render(const VkCommandBuffer cmd_buff, const DeviceBu
 	vkCmdBindDescriptorSets2(cmd_buff, &scene_ds_bind_info);
 
 	const VulkanRaytracerScenePipelineData::PushConstants pc = {
+		.RandomStates = rand_states->GetDeviceAddress(),
+		.CameraInfo = mScene->GetCameraMatricesData()->GetDeviceAddress() + ((camera_index * 3 + 1) * sizeof(glm::mat4)),
 		.Lights = mScene->GetLightsData()->GetDeviceAddress(),
+		.Materials = mScene->GetMaterialsData()->GetDeviceAddress(),
 		.LightsCount = static_cast<uint32_t>(mScene->GetLights().size()),
 		.CurrentSample = current_sample,
 		.IsCPUShading = is_cpu_shading,
@@ -501,7 +465,7 @@ void VulkanRaytracerScene::Render(const VkCommandBuffer cmd_buff, const DeviceBu
 	const VkPushConstantsInfoKHR pc_info = {
 		.sType = VK_STRUCTURE_TYPE_PUSH_CONSTANTS_INFO_KHR,
 		.layout = mPipelineData->GetPipelineLayout(),
-		.stageFlags = VK_SHADER_STAGE_RAYGEN_BIT_KHR | VK_SHADER_STAGE_CLOSEST_HIT_BIT_KHR,
+		.stageFlags = VK_SHADER_STAGE_RAYGEN_BIT_KHR | VK_SHADER_STAGE_MISS_BIT_KHR | VK_SHADER_STAGE_CLOSEST_HIT_BIT_KHR,
 		.size = sizeof(VulkanRaytracerScenePipelineData::PushConstants),
 		.pValues = &pc,
 	};
@@ -556,29 +520,14 @@ VulkanRaytracerScenePipelineData* VulkanRaytracerScene::GetPipelineData() const
 void VulkanRaytracerScene::CreateDescriptorPool()
 {
 	const VkDescriptorPoolSize pool_sizes[] = {
-		// Camera info
-		{
-			.type = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC,
-			.descriptorCount = 1,
-		},
 		// accum target and final target
 		{
 			.type = VK_DESCRIPTOR_TYPE_STORAGE_IMAGE,
 			.descriptorCount = 2,
 		},
-		// rand states
-		{
-			.type = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,
-			.descriptorCount = 1,
-		},
 		// TLAS
 		{
 			.type = VK_DESCRIPTOR_TYPE_ACCELERATION_STRUCTURE_KHR,
-			.descriptorCount = 1,
-		},
-		// Materials Info
-		{
-			.type = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,
 			.descriptorCount = 1,
 		},
 		// Textures
@@ -610,19 +559,6 @@ void VulkanRaytracerScene::CreateDescriptorSets()
 {
 	const std::vector<VkDescriptorSetLayout>& desc_set_layouts = mPipelineData->GetDescriptorSetLayouts();
 
-	const VkDescriptorSetAllocateInfo cam_ds_ai = {
-		.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO,
-		.descriptorPool = mDescriptorPool,
-		.descriptorSetCount = 1,
-		.pSetLayouts = desc_set_layouts.data(),
-	};
-
-	VK_CHECK("allocate desc set", vkAllocateDescriptorSets(mDevice, &cam_ds_ai, &mCameraDescSet));
-
-#ifdef _DEBUG
-	Utils_SetObjectName(mDevice, VK_OBJECT_TYPE_DESCRIPTOR_SET, reinterpret_cast<uint64_t>(mCameraDescSet), "vulkan raytracer cam descriptor set");
-#endif // _DEBUG
-
 	const uint32_t tex_desc_counts[] = {
 		static_cast<uint32_t>(std::max(static_cast<size_t>(1), mScene->GetImages().size()))
 	};
@@ -638,7 +574,7 @@ void VulkanRaytracerScene::CreateDescriptorSets()
 		.pNext = &tex_ds_vdcai,
 		.descriptorPool = mDescriptorPool,
 		.descriptorSetCount = 1,
-		.pSetLayouts = desc_set_layouts.data() + 1,
+		.pSetLayouts = desc_set_layouts.data(),
 	};
 
 	VK_CHECK("allocate desc set", vkAllocateDescriptorSets(mDevice, &ds_ai, &mSceneDescSet));
@@ -646,16 +582,6 @@ void VulkanRaytracerScene::CreateDescriptorSets()
 #ifdef _DEBUG
 	Utils_SetObjectName(mDevice, VK_OBJECT_TYPE_DESCRIPTOR_SET, reinterpret_cast<uint64_t>(mSceneDescSet), "vulkan raytracer scene descriptor set");
 #endif // _DEBUG
-
-	mCameraDescBuffer = {
-		.buffer = mScene->GetCameraMatricesData()->GetVkBuffer(),
-		.range = sizeof(glm::mat4) * 2,
-	};
-
-	const VkDescriptorBufferInfo mat_desc_buff = {
-		.buffer = mScene->GetMaterialsData()->GetVkBuffer(),
-		.range = VK_WHOLE_SIZE,
-	};
 
 	VkAccelerationStructureKHR tlas = mTLAS->GetAS();
 	const VkWriteDescriptorSetAccelerationStructureKHR tlas_desc_info = {
@@ -667,32 +593,16 @@ void VulkanRaytracerScene::CreateDescriptorSets()
 	const VkWriteDescriptorSet ds_writes[] = {
 		{
 			.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
-			.dstSet = mCameraDescSet,
-			.dstBinding = 0,
-			.descriptorCount = 1,
-			.descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC,
-			.pBufferInfo = &mCameraDescBuffer,
-		},
-		{
-			.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
 			.pNext = &tlas_desc_info,
 			.dstSet = mSceneDescSet,
-			.dstBinding = 3,
+			.dstBinding = 2,
 			.descriptorCount = 1,
 			.descriptorType = VK_DESCRIPTOR_TYPE_ACCELERATION_STRUCTURE_KHR,
 		},
 		{
 			.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
 			.dstSet = mSceneDescSet,
-			.dstBinding = 4,
-			.descriptorCount = 1,
-			.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,
-			.pBufferInfo = &mat_desc_buff,
-		},
-		{
-			.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
-			.dstSet = mSceneDescSet,
-			.dstBinding = 5,
+			.dstBinding = 3,
 			.descriptorCount = static_cast<uint32_t>(mImageDescs.size()),
 			.descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
 			.pImageInfo = mImageDescs.data(),
