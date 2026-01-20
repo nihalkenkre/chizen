@@ -15,19 +15,22 @@ def delete_spv(path):
 def build_slang(shader_path, build_type):
     print('Building Slang...')
 
+    skip_files = ['utils.slang']
+
     for slang in shader_path.glob('*.slang'):
-        if not slang.match('utils.slang'):
-            spv_name = str(slang) + '.spv'
+        for skip in skip_files:
+            if not slang.match(skip):
+                spv_name = str(slang) + '.spv'
 
-            cmd = 'slangc ' + str(slang)
-            if (build_type == 'Debug'):
-                cmd += ' -g3 -O0'
-            elif (build_type == 'MinSizeRel'):
-                cmd += ' -g0 -O3'
+                cmd = 'slangc ' + str(slang)
+                if (build_type == 'Debug'):
+                    cmd += ' -g3 -O0'
+                elif (build_type == 'MinSizeRel'):
+                    cmd += ' -g0 -O3'
 
-            cmd += ' -matrix-layout-column-major -o ' + str(spv_name)
+                cmd += ' -matrix-layout-column-major -o ' + str(spv_name)
 
-            subprocess.call(cmd)
+                subprocess.call(cmd)
 
 
 def copy_spv(src, dst):

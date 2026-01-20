@@ -44,14 +44,7 @@ private:
 
 	VkDescriptorPool mDescriptorPool = VK_NULL_HANDLE;
 	VkDescriptorSet mMTexturesDescSet = VK_NULL_HANDLE;
-	//VkDescriptorBufferInfo mCameraDescBuffer = {};
-	//VkDescriptorSet mCameraMatrixDescSet = VK_NULL_HANDLE;
 
-	struct DrawElement
-	{
-		uint32_t model_matrix_index = 0;
-		uint32_t material_index = 0;
-	};
 
 	uint32_t mDrawElementsCount = 0;
 	const VulkanScene* mScene = nullptr;

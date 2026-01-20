@@ -157,7 +157,7 @@ public:
 
 	~TransferHelpers() noexcept;
 
-	void RecordBatch();
+	void RecordBatch() const;
 	void ChangeImageLayout(
 		const VkPipelineStageFlags2 src_stage_mask, const VkAccessFlags2 src_access_mask,
 		const VkPipelineStageFlags2 dst_stage_mask, const VkAccessFlags2 dst_access_mask,
@@ -201,7 +201,7 @@ public:
 
 	~ComputeHelpers() noexcept;
 
-	void RecordBatch();
+	void RecordBatch() const;
 	void ChangeImageLayout(
 		const VkPipelineStageFlags2 src_stage_mask, const VkAccessFlags2 src_access_mask,
 		const VkPipelineStageFlags2 dst_stage_mask, const VkAccessFlags2 dst_access_mask,

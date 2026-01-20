@@ -432,7 +432,7 @@ TransferHelpers::~TransferHelpers() noexcept
 	}
 }
 
-void TransferHelpers::RecordBatch()
+void TransferHelpers::RecordBatch() const
 {
 	const VkSemaphoreWaitInfo  wait_info = {
 		.sType = VK_STRUCTURE_TYPE_SEMAPHORE_WAIT_INFO,
@@ -915,7 +915,7 @@ ComputeHelpers::~ComputeHelpers() noexcept
 	}
 }
 
-void ComputeHelpers::RecordBatch()
+void ComputeHelpers::RecordBatch() const
 {
 	const VkSemaphoreWaitInfo  wait_info = {
 		.sType = VK_STRUCTURE_TYPE_SEMAPHORE_WAIT_INFO,

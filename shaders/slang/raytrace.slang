@@ -26,21 +26,14 @@ struct VertexData
     float2 uv;
 };
 
-// [[vk::binding(0, 0)]]
-// ConstantBuffer<CamInfo> cam_info;
-
 [[vk::binding(0, 0)]]
 RWTexture2D<float4> accum_target;
 [[vk::binding(1, 0)]]
 RWTexture2D<float4> final_target;
-// [[vk::binding(2, 0)]]
-// RWStructuredBuffer<uint4> rand_states;
 
 [[vk::binding(2, 0)]]
 RaytracingAccelerationStructure tlas;
 
-// [[vk::binding(4, 1)]]
-// StructuredBuffer<Material> materials;
 [[vk::binding(3, 0)]]
 Sampler2D textures[];
 
@@ -74,8 +67,9 @@ uint LCGStep(inout uint z, uint A, uint C)
     return z = (A * z + C);
 }
 
-float HybridTaus(inout uint4 z, uint flat_index)
+float HybridTaus(uint flat_index)
 {
+    uint4 z = pc.random_states[flat_index];
     float rand = 2.3283064365387e-10 * (TausStep(z.x, 13, 19, 12, 4294967294) ^
                                         TausStep(z.y, 2, 25, 4, 4294967288) ^
                                         TausStep(z.z, 3, 11, 17, 4294967280) ^
@@ -90,17 +84,20 @@ void raygen()
 {
     uint3 launch_id = DispatchRaysIndex();
     uint3 launch_size = DispatchRaysDimensions();
+    uint flat_index = launch_id.y * launch_size.x + launch_id.x;
 
     const float2 pixel_center = float2(launch_id.xy) + float2(0.5, 0.5);
     const float2 in_uv = pixel_center / float2(launch_size.xy);
 
     CamInfo cam_info = *pc.camera_info;
 
-    float2 d = in_uv * 2.0 - 1.0;
+    float2 d = in_uv * 2.f - 1.f;
     float4 target = mul(cam_info.proj_inverse, float4(d.x, d.y, 1, 1));
 
+    float2 o_offset = (float2(HybridTaus(flat_index), HybridTaus(flat_index)) * 2 - 1) / (launch_size.xy / 5);
+
     RayDesc ray_desc;
-    ray_desc.Origin = mul(cam_info.view_inverse, float4(0, 0, 0, 1)).xyz;
+    ray_desc.Origin = mul(cam_info.view_inverse, float4(o_offset, 0, 1)).xyz;
     ray_desc.Direction = mul(cam_info.view_inverse, float4(normalize(target.xyz), 0)).xyz;
     ray_desc.TMin = 0.01f;
     ray_desc.TMax = 1000.f;
@@ -120,9 +117,8 @@ void miss(inout Payload p)
     uint3 launch_size = DispatchRaysDimensions();
 
     uint flat_index = launch_id.y * launch_size.x + launch_id.x;
-    uint4 z = pc.random_states[flat_index];
 
-    p.throughput = float4(HybridTaus(z, flat_index), HybridTaus(z, flat_index), HybridTaus(z, flat_index), 1);
+    p.throughput = float4(HybridTaus(flat_index), HybridTaus(flat_index), HybridTaus(flat_index), 1);
 }
 
 struct Attributes
@@ -137,7 +133,6 @@ void closesthit(inout Payload p, in Attributes attribs)
     uint3 launch_size = DispatchRaysDimensions();
 
     uint flat_index = launch_id.y * launch_size.x + launch_id.x;
-    uint4 z = pc.random_states[flat_index];
     const float3 bary_coords = float3(attribs.bary.x, attribs.bary.y, 1.0f - attribs.bary.x - attribs.bary.y);
 
     uint3 index_triplet = *(ch_sbt.indices + PrimitiveIndex());
@@ -186,8 +181,8 @@ void closesthit(inout Payload p, in Attributes attribs)
                 textures[NonUniformResourceIndex(material.base_normal_metalrough_index.y)].SampleLevel(uv, 0).xyz * 2 - 1);
         }
 
-        float u = HybridTaus(z, flat_index);
-        float v = HybridTaus(z, flat_index);
+        float u = HybridTaus(flat_index);
+        float v = HybridTaus(flat_index);
 
         float theta = asin(sqrt(u));
         float phi = 2 * 3.14 * v;

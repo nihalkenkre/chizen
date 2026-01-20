@@ -400,6 +400,12 @@ void ViewportWorldScene::ReloadShaders()
 
 void ViewportWorldScene::CreateIndirectBufferAndDrawElementsBuffer(TransferHelpers* transfer_helpers)
 {
+	struct DrawElement
+	{
+		uint32_t model_matrix_index = 0;
+		uint32_t material_index = 0;
+	};
+
 	std::vector<VkDrawIndexedIndirectCommand> indirect_commands;
 	std::vector<DrawElement> draw_elements;
 
