@@ -16,7 +16,6 @@ struct PushConstants
     Material *materials;
     uint lights_count;
     uint current_sample;
-    uint is_cpu_shading;
 };
 
 struct VertexData
@@ -42,9 +41,16 @@ PushConstants pc;
 
 struct Payload
 {
+    float3 origin;
     float4 throughput;
     bool is_hit;
 };
+
+struct PayloadDirectLight
+{
+    float4 throughput;
+    bool is_lit;
+}
 
 struct CH_SBT_Record
 {
@@ -91,34 +97,51 @@ void raygen()
 
     CamInfo cam_info = *pc.camera_info;
 
-    float2 d = in_uv * 2.f - 1.f;
+    float2 d_offset = (float2(HybridTaus(flat_index), HybridTaus(flat_index)) * 2 - 1) / (launch_size.xy);
+    float2 d = in_uv * 2.f - 1.f + d_offset;
     float4 target = mul(cam_info.proj_inverse, float4(d.x, d.y, 1, 1));
 
-    float2 o_offset = (float2(HybridTaus(flat_index), HybridTaus(flat_index)) * 2 - 1) / (launch_size.xy / 5);
-
     RayDesc ray_desc;
-    ray_desc.Origin = mul(cam_info.view_inverse, float4(o_offset, 0, 1)).xyz;
+    ray_desc.Origin = mul(cam_info.view_inverse, float4(0, 0, 0, 1)).xyz;
     ray_desc.Direction = mul(cam_info.view_inverse, float4(normalize(target.xyz), 0)).xyz;
     ray_desc.TMin = 0.01f;
     ray_desc.TMax = 1000.f;
 
-    Payload payload;
+    Payload p = {};
 
-    TraceRay(tlas, RAY_FLAG_FORCE_OPAQUE, 0xFF, 0, 0, 0, ray_desc, payload);
+    TraceRay(tlas, 0, 0xFF, 0, 2, 1, ray_desc, p);
 
-    accum_target[launch_id.xy] += payload.throughput;
+    // if (p.is_hit)
+    // {
+    //     // Direct lighting punctual light
+    //     for (uint l = 0; l < pc.lights_count; ++l)
+    //     {
+    //         // p.throughput = float4(normalize(pc.lights[l].position - p.origin), 1);
+    //         p.throughput = float4(0.2, 0.2, 0.2, 1.f);
+    //     }
+    // }
+    // else
+    // {
+    //     // p.throughput = float4(HybridTaus(flat_index), HybridTaus(flat_index), HybridTaus(flat_index), 1);
+    //     p.throughput = float4(0, 0, 0.5, 1);
+    // }
+
+    accum_target[launch_id.xy] += p.throughput;
     final_target[launch_id.xy] = accum_target[launch_id.xy] / pc.current_sample;
 }
 
 [shader("miss")]
 void miss(inout Payload p)
 {
-    uint3 launch_id = DispatchRaysIndex();
-    uint3 launch_size = DispatchRaysDimensions();
+    p.is_hit = false;
+    p.throughput = float4(0, 0, 0, 1);
+}
 
-    uint flat_index = launch_id.y * launch_size.x + launch_id.x;
-
-    p.throughput = float4(HybridTaus(flat_index), HybridTaus(flat_index), HybridTaus(flat_index), 1);
+[shader("miss")]
+void miss_direct_light(inout Payload p)
+{
+    p.is_hit = false;
+    p.throughput = float4(1, 1, 1, 1);
 }
 
 struct Attributes
@@ -167,36 +190,39 @@ void closesthit(inout Payload p, in Attributes attribs)
 
     float3 l = float3(0, 0, 1);
 
-    if (pc.is_cpu_shading == 0)
+    if (material.base_normal_metalrough_index.x >= 0)
     {
-        if (material.base_normal_metalrough_index.x >= 0)
-        {
-            base_color *= textures[NonUniformResourceIndex(material.base_normal_metalrough_index.x)].SampleLevel(uv, 0);
-        }
-
-        if (material.base_normal_metalrough_index.y >= 0)
-        {
-            n = mul(
-                tbn,
-                textures[NonUniformResourceIndex(material.base_normal_metalrough_index.y)].SampleLevel(uv, 0).xyz * 2 - 1);
-        }
-
-        float u = HybridTaus(flat_index);
-        float v = HybridTaus(flat_index);
-
-        float theta = asin(sqrt(u));
-        float phi = 2 * 3.14 * v;
-
-        float3 r = mul(tbn, float3(
-                                sin(theta) * cos(phi),
-                                sin(theta) * sin(phi),
-                                cos(theta)));
-
-        for (uint l = 0; l < pc.lights_count; ++l)
-        {
-            final_color.xyz += (base_color.xyz * (dot(-pc.lights[l].direction, n)));
-        }
+        base_color *= textures[NonUniformResourceIndex(material.base_normal_metalrough_index.x)].SampleLevel(uv, 0);
     }
 
-    p.throughput = final_color;
+    if (material.base_normal_metalrough_index.y >= 0)
+    {
+        n = mul(
+            tbn,
+            textures[NonUniformResourceIndex(material.base_normal_metalrough_index.y)].SampleLevel(uv, 0).xyz * 2 - 1);
+    }
+
+    float u = HybridTaus(flat_index);
+    float v = HybridTaus(flat_index);
+
+    float theta = asin(sqrt(u));
+    float phi = 2 * 3.14 * v;
+
+    float3 r = mul(tbn, float3(
+                            sin(theta) * cos(phi),
+                            sin(theta) * sin(phi),
+                            cos(theta)));
+
+    float3 hit_point = mul(ObjectToWorld(), float4(HitTriangleVertexPosition(index_triplet.x) * bary_coords.z + HitTriangleVertexPosition(index_triplet.y) * bary_coords.x + HitTriangleVertexPosition(index_triplet.z) * bary_coords.y, 1));
+
+    p.is_hit = true;
+    p.origin = hit_point;
+    p.throughput = float4(n, 1);
+}
+
+[shader("anyhit")]
+void anyhit_direct_light(inout Payload p)
+{
+    p.is_hit = true;
+    p.throughput = float4(0, 0, 0, 1);
 }

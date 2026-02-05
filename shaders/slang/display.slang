@@ -1,15 +1,12 @@
 struct VSInput
 {
-    [[vk::location(0)]]
     float2 pos;
-    [[vk::location(1)]]
     float2 uv;
 }
 
 struct VSOutput
 {
     float4 pos : SV_Position;
-    [[vk::location(0)]]
     float2 uv;
 }
 

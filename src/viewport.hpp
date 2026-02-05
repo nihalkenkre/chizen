@@ -21,8 +21,8 @@ public:
 
 	~Viewport() noexcept;
 
-	void Render(const ViewportScene* scene, const Swapchain* swapchain, const VkExtent2D extent, ImGUIState* imgui_state);
-	void RecreateDepthTexture(const VkExtent2D extent);
+	void Render(const ViewportScene* scene, const Swapchain* swapchain, const VkExtent2D extent, ImGUIState* imgui_state, TransferHelpers* transfer_helpers);
+	void RecreateDepthTexture(const VkExtent2D extent, TransferHelpers* transfer_helpers);
 
 private:
 	std::unique_ptr<FrameObjects> mFrameObjects;
@@ -34,7 +34,6 @@ private:
 
 	VkDescriptorPool mDescriptorPool = VK_NULL_HANDLE;
 
-	TransferHelpers* mTransferHelpers = nullptr;
 	Allocator* mAllocator = nullptr;
 	VkDevice mDevice = VK_NULL_HANDLE;
 	VkQueue mQueue = VK_NULL_HANDLE;

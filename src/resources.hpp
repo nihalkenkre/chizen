@@ -71,7 +71,7 @@ class HostBufferResource : public BufferResource
 {
 public:
 	HostBufferResource() = delete;
-	HostBufferResource(const VkDevice device, const VmaAllocator allocator, const VkBufferUsageFlags usage, const VmaAllocationCreateFlags vma_alloc_create_flags, const std::vector<uint8_t>& data, const std::string& name, const std::vector<uint32_t>& queue_family_indices = {});
+	HostBufferResource(const VkDevice device, const VmaAllocator allocator, const VkBufferUsageFlags usage, const VmaAllocationCreateFlags vma_alloc_create_flags, const void* data, const size_t data_size, const std::string& name, const std::vector<uint32_t>& queue_family_indices = {});
 	HostBufferResource(const VkDevice device, const VmaAllocator allocator, const VkBufferUsageFlags usage, const VmaAllocationCreateFlags vma_alloc_create_flags, const VkDeviceSize size, const std::string& name, const std::vector<uint32_t>& queue_family_indices = {});
 
 	~HostBufferResource() noexcept;
@@ -81,7 +81,7 @@ class DeviceBufferResource : public BufferResource
 {
 public:
 	DeviceBufferResource() = delete;
-	DeviceBufferResource(const VkDevice device, const VmaAllocator allocator, const VkBufferUsageFlags usage, const VkDeviceSize size, const std::string& name, const VmaPool mem_pool = VK_NULL_HANDLE);
+	DeviceBufferResource(const VkDevice device, const VmaAllocator allocator, const VkBufferUsageFlags usage, const VkDeviceSize size, const std::string& name, const VkDeviceSize min_alignment = 0);
 
 	~DeviceBufferResource() noexcept;
 };

@@ -217,6 +217,24 @@ private:
 
 	std::vector<std::string> mCameraNames;
 
+	//void *mPositionsData = nullptr;
+	//size_t mPositionsDataSize = 0;
+
+	//void *mVertexData = nullptr;
+	//size_t mVertexDataSize = 0;
+
+	//void* mIndexData = nullptr;
+	//size_t mIndexDataSize = 0;
+
+	//void *mCameraMatricesData = nullptr;
+	//size_t mCameraMatricesDataSize = 0;
+
+	//void *mModelMatricesData = nullptr;
+	//size_t mModelMatricesDataSize = 0;
+
+	//void *mImagesData = nullptr;
+	//size_t mImagesDataSize = 0;
+
 	std::vector<uint8_t> mPositionsData;
 	std::vector<uint8_t> mVertexData;
 	std::vector<uint8_t> mIndexData;

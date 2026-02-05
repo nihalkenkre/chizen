@@ -10,58 +10,69 @@ VulkanScene::VulkanScene(const Scene& scene, const VulkanInterface* vulkan_inter
 	VmaAllocator allocator = vulkan_interface->GetVmaAllocator();
 
 	auto positions_data = scene.GetPositionsData();
+	size_t positions_data_size = positions_data.size() * sizeof(positions_data[0]);
+
 	mPositionsData = std::make_unique<DeviceBufferResource>(
 		mDevice, allocator,
 		VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_VERTEX_BUFFER_BIT | VK_BUFFER_USAGE_ACCELERATION_STRUCTURE_BUILD_INPUT_READ_ONLY_BIT_KHR,
-		positions_data.size(), "scene positions data"
+		positions_data_size, "scene positions data"
 	);
 
 	auto staging_positions_data = std::make_unique<HostBufferResource>(
 		mDevice, allocator,
 		VK_BUFFER_USAGE_TRANSFER_SRC_BIT, VMA_ALLOCATION_CREATE_HOST_ACCESS_SEQUENTIAL_WRITE_BIT,
-		positions_data, "staging positions data"
+		positions_data.data(), positions_data_size, "staging positions data"
 	);
 
 	auto vertex_data = scene.GetVertexData();
+	size_t vertex_data_size = vertex_data.size() * sizeof(vertex_data[0]);
+
 	mVertexData = std::make_unique<DeviceBufferResource>(
 		mDevice, allocator,
 		VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_VERTEX_BUFFER_BIT,
-		vertex_data.size(), "scene vertex data"
+		vertex_data_size, "scene vertex data"
 	);
 
 	auto staging_vertex_data = std::make_unique<HostBufferResource>(
 		mDevice, allocator,
 		VK_BUFFER_USAGE_TRANSFER_SRC_BIT, VMA_ALLOCATION_CREATE_HOST_ACCESS_SEQUENTIAL_WRITE_BIT,
-		vertex_data, "staging vertex data"
+		vertex_data.data(), vertex_data_size, "staging vertex data"
 	);
 
 	auto index_data = scene.GetIndexData();
+	size_t index_data_size = index_data.size() * sizeof(index_data[0]);
+
 	mIndexData = std::make_unique<DeviceBufferResource>(
 		mDevice, allocator,
 		VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_INDEX_BUFFER_BIT | VK_BUFFER_USAGE_ACCELERATION_STRUCTURE_BUILD_INPUT_READ_ONLY_BIT_KHR,
-		index_data.size(), "scene index data"
+		index_data_size, "scene index data"
 	);
 
 	auto staging_index_data = std::make_unique<HostBufferResource>(
 		mDevice, allocator,
 		VK_BUFFER_USAGE_TRANSFER_SRC_BIT, VMA_ALLOCATION_CREATE_HOST_ACCESS_SEQUENTIAL_WRITE_BIT,
-		index_data, "staging index data"
+		index_data.data(), index_data_size, "staging index data"
 	);
 
 	auto camera_matrices_data = scene.GetCameraMatricesData();
+	size_t camera_matrices_data_size = camera_matrices_data.size() * sizeof(camera_matrices_data[0]);
+
 	mCameraMatricesData = std::make_unique<DeviceBufferResource>(
 		mDevice, allocator,
 		VK_BUFFER_USAGE_TRANSFER_DST_BIT,
-		camera_matrices_data.size(), "scene cam matrices data"
+		camera_matrices_data_size, "scene cam matrices data"
 	);
 
 	auto staging_camera_matrices_data = std::make_unique<HostBufferResource>(
 		mDevice, allocator,
 		VK_BUFFER_USAGE_TRANSFER_SRC_BIT, VMA_ALLOCATION_CREATE_HOST_ACCESS_SEQUENTIAL_WRITE_BIT,
-		camera_matrices_data, "staging cam matrices data"
+		camera_matrices_data.data(), camera_matrices_data_size, "staging cam matrices data"
 	);
 
+
 	auto model_matrices_data = scene.GetModelMatricesData();
+	size_t model_matrices_data_size = model_matrices_data.size() * sizeof(model_matrices_data[0]);
+
 	mModelMatricesData = std::make_unique<DeviceBufferResource>(
 		mDevice, allocator,
 		VK_BUFFER_USAGE_TRANSFER_DST_BIT,
@@ -71,7 +82,7 @@ VulkanScene::VulkanScene(const Scene& scene, const VulkanInterface* vulkan_inter
 	auto staging_model_matrices_data = std::make_unique<HostBufferResource>(
 		mDevice, allocator,
 		VK_BUFFER_USAGE_TRANSFER_SRC_BIT, VMA_ALLOCATION_CREATE_HOST_ACCESS_SEQUENTIAL_WRITE_BIT,
-		model_matrices_data, "staging model matrices data"
+		model_matrices_data.data(), model_matrices_data_size, "staging model matrices data"
 	);
 
 	mCameraInstances.reserve(scene.GetCameraInstances().size());
@@ -104,34 +115,38 @@ VulkanScene::VulkanScene(const Scene& scene, const VulkanInterface* vulkan_inter
 		mLights.push_back(VulkanScene::Light(light));
 	}
 
-	std::vector<uint8_t> materials_data(mMaterials.size() * sizeof(Material));
-	std::memcpy(materials_data.data(), mMaterials.data(), materials_data.size());
+	//std::vector<uint8_t> materials_data(mMaterials.size() * sizeof(Material));
+	//std::memcpy(materials_data.data(), mMaterials.data(), materials_data.size());
+
+	size_t materials_data_size = mMaterials.size() * sizeof(mMaterials[0]);
 
 	auto staging_materials_data = std::make_unique<HostBufferResource>(
 		mDevice, allocator,
 		VK_BUFFER_USAGE_TRANSFER_SRC_BIT, VMA_ALLOCATION_CREATE_HOST_ACCESS_SEQUENTIAL_WRITE_BIT,
-		materials_data, "staging materials"
+		mMaterials.data(), materials_data_size, "staging materials"
 	);
 
 	mMaterialsData = std::make_unique<DeviceBufferResource>(
 		mDevice, allocator,
 		VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_STORAGE_BUFFER_BIT,
-		mMaterials.size() * sizeof(Material), "materials"
+		materials_data_size, "materials"
 	);
 
-	std::vector<uint8_t> lights_data(mLights.size() * sizeof(Light));
-	std::memcpy(lights_data.data(), mLights.data(), lights_data.size());
+	//std::vector<uint8_t> lights_data(mLights.size() * sizeof(Light));
+	//std::memcpy(lights_data.data(), mLights.data(), lights_data.size());
+
+	size_t lights_data_size = mLights.size() * sizeof(mLights[0]);
 
 	auto staging_lights_data = std::make_unique<HostBufferResource>(
 		mDevice, allocator,
 		VK_BUFFER_USAGE_TRANSFER_SRC_BIT, VMA_ALLOCATION_CREATE_HOST_ACCESS_SEQUENTIAL_WRITE_BIT,
-		lights_data, "staging lights"
+		mLights.data(), lights_data_size, "staging lights"
 	);
 
 	mLightsData = std::make_unique<DeviceBufferResource>(
 		mDevice, allocator,
 		VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_STORAGE_BUFFER_BIT,
-		mLights.size() * sizeof(Light), "lights"
+		lights_data_size, "lights"
 	);
 
 	TransferHelpers* transfer_helpers = vulkan_interface->GetTransferHelpers();

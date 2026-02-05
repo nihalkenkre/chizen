@@ -14,7 +14,6 @@ Instance::Instance(const char* const* extensions, const uint32_t extensions_coun
 	}
 
 	std::vector<const char*> more_exts = {
-		VK_EXT_SURFACE_MAINTENANCE_1_EXTENSION_NAME,
 		VK_KHR_GET_SURFACE_CAPABILITIES_2_EXTENSION_NAME,
 #ifdef _DEBUG
 		  VK_EXT_DEBUG_UTILS_EXTENSION_NAME,
@@ -260,7 +259,7 @@ Allocator::Allocator(const VkInstance& instance, const VkPhysicalDevice& physica
 		.physicalDevice = physical_device,
 		.device = device,
 		.instance = instance,
-		.vulkanApiVersion = VK_MAKE_API_VERSION(0, 1, 2, 0),
+		.vulkanApiVersion = VK_MAKE_API_VERSION(0, 1, 4, 0),
 	};
 
 	VK_CHECK("create vma allocator", vmaCreateAllocator(&allocator_create_info, &mAllocator));
@@ -269,6 +268,11 @@ Allocator::Allocator(const VkInstance& instance, const VkPhysicalDevice& physica
 VmaAllocator Allocator::GetAllocator() const
 {
 	return mAllocator;
+}
+
+Allocator::~Allocator() noexcept
+{
+	vmaDestroyAllocator(mAllocator);
 }
 
 Pool::Pool(const VmaAllocator& allocator, const VkDeviceSize min_alignment, const uint32_t mem_type_id) : mAllocator(allocator)
@@ -290,11 +294,6 @@ Pool::~Pool() noexcept
 VmaPool Pool::GetPool() const
 {
 	return mPool;
-}
-
-Allocator::~Allocator() noexcept
-{
-	vmaDestroyAllocator(mAllocator);
 }
 
 Swapchain::Swapchain(const VkDevice device, const Surface* surface_data, const uint32_t graphics_queue_family_index, const std::string& name) : mDevice(device)
@@ -511,7 +510,7 @@ void TransferHelpers::CopyBufferToImage(const VkBuffer src_buffer, const VkImage
 		},
 	};
 
-	const VkCopyBufferToImageInfo2KHR copy_buff_info = {
+	const VkCopyBufferToImageInfo2 copy_buff_info = {
 		.sType = VK_STRUCTURE_TYPE_COPY_BUFFER_TO_IMAGE_INFO_2_KHR,
 		.srcBuffer = src_buffer,
 		.dstImage = dst_image,
@@ -638,26 +637,10 @@ Device::Device(const PhysicalDeviceData* physical_device_data)
 {
 	std::vector<const char*> req_ext_names = {
 		VK_KHR_SWAPCHAIN_EXTENSION_NAME,
-		VK_KHR_MAINTENANCE_6_EXTENSION_NAME,
 		VK_KHR_ACCELERATION_STRUCTURE_EXTENSION_NAME,
 		VK_KHR_RAY_TRACING_PIPELINE_EXTENSION_NAME,
 		VK_KHR_RAY_TRACING_POSITION_FETCH_EXTENSION_NAME,
 		VK_KHR_DEFERRED_HOST_OPERATIONS_EXTENSION_NAME,
-		VK_KHR_BUFFER_DEVICE_ADDRESS_EXTENSION_NAME,
-		VK_KHR_SPIRV_1_4_EXTENSION_NAME,
-		VK_KHR_SHADER_FLOAT_CONTROLS_EXTENSION_NAME,
-		VK_KHR_DYNAMIC_RENDERING_EXTENSION_NAME,
-		VK_KHR_DEPTH_STENCIL_RESOLVE_EXTENSION_NAME,
-		VK_KHR_CREATE_RENDERPASS_2_EXTENSION_NAME,
-		VK_KHR_SYNCHRONIZATION_2_EXTENSION_NAME,
-		VK_KHR_TIMELINE_SEMAPHORE_EXTENSION_NAME,
-		VK_KHR_COPY_COMMANDS_2_EXTENSION_NAME,
-		VK_KHR_SEPARATE_DEPTH_STENCIL_LAYOUTS_EXTENSION_NAME,
-		VK_KHR_SHADER_DRAW_PARAMETERS_EXTENSION_NAME,
-		"VK_KHR_maintenance5",
-		"VK_KHR_maintenance6",
-		VK_EXT_DESCRIPTOR_INDEXING_EXTENSION_NAME,
-		VK_EXT_EXTENDED_DYNAMIC_STATE_EXTENSION_NAME,
 		VK_EXT_ROBUSTNESS_2_EXTENSION_NAME,
 	};
 
@@ -685,51 +668,42 @@ Device::Device(const PhysicalDeviceData* physical_device_data)
 	};
 
 	std::vector<VkDeviceQueueCreateInfo> d_q_cis{ q_ci };
+	auto d_q_ci_it = std::find_if(std::begin(d_q_cis), std::end(d_q_cis), [&](const VkDeviceQueueCreateInfo& d_q_ci) {return d_q_ci.queueFamilyIndex == physical_device_data->TransferQueueFamilyIndex; });
+
+	if (d_q_ci_it == std::end(d_q_cis))
 	{
-		auto d_q_ci_it = std::find_if(std::begin(d_q_cis), std::end(d_q_cis), [&](const VkDeviceQueueCreateInfo d_q_ci) {return d_q_ci.queueFamilyIndex == physical_device_data->TransferQueueFamilyIndex; });
+		q_ci.queueFamilyIndex = physical_device_data->TransferQueueFamilyIndex;
+		q_ci.queueCount = 1;
+		d_q_cis.push_back(q_ci);
+	}
+	else
+	{
+		++d_q_ci_it->queueCount;
+	}
 
-		if (d_q_ci_it == std::end(d_q_cis))
-		{
-			q_ci.queueFamilyIndex = physical_device_data->TransferQueueFamilyIndex;
-			q_ci.queueCount = 1;
-			d_q_cis.push_back(q_ci);
-		}
-		else
-		{
-			++d_q_ci_it->queueCount;
-		}
+	d_q_ci_it = std::find_if(std::begin(d_q_cis), std::end(d_q_cis), [&](const VkDeviceQueueCreateInfo& d_q_ci) {return d_q_ci.queueFamilyIndex == physical_device_data->ComputeQueueFamilyIndex; });
 
-		d_q_ci_it = std::find_if(std::begin(d_q_cis), std::end(d_q_cis), [&](const VkDeviceQueueCreateInfo d_q_ci) {return d_q_ci.queueFamilyIndex == physical_device_data->ComputeQueueFamilyIndex; });
-
-		if (d_q_ci_it == std::end(d_q_cis))
-		{
-			q_ci.queueFamilyIndex = physical_device_data->ComputeQueueFamilyIndex;
-			q_ci.queueCount = 1;
-			d_q_cis.push_back(q_ci);
-		}
-		else
-		{
-			++d_q_ci_it->queueCount;
-		}
+	if (d_q_ci_it == std::end(d_q_cis))
+	{
+		q_ci.queueFamilyIndex = physical_device_data->ComputeQueueFamilyIndex;
+		q_ci.queueCount = 1;
+		d_q_cis.push_back(q_ci);
+	}
+	else
+	{
+		++d_q_ci_it->queueCount;
 	}
 
 	std::vector<std::vector<float>> priorities(d_q_cis.size());
+	size_t d_q_ci_idx = 0;
+	for (auto& d_q_ci : d_q_cis)
 	{
-		size_t d_q_ci_idx = 0;
-		for (auto& d_q_ci : d_q_cis)
-		{
-			priorities[d_q_ci_idx].resize(d_q_ci.queueCount, 1.f);
-			d_q_ci.pQueuePriorities = priorities[d_q_ci_idx].data();
-		}
+		priorities[d_q_ci_idx].resize(d_q_ci.queueCount, 1.f);
+		d_q_ci.pQueuePriorities = priorities[d_q_ci_idx].data();
 	}
-
-	VkPhysicalDeviceRobustness2FeaturesEXT rob2_feats = {
-		.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_ROBUSTNESS_2_FEATURES_EXT,
-	};
 
 	VkPhysicalDeviceRayTracingPositionFetchFeaturesKHR rt_pos_fetch_feats = {
 		.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_RAY_TRACING_POSITION_FETCH_FEATURES_KHR,
-		.pNext = &rob2_feats,
 	};
 
 	VkPhysicalDeviceRayTracingPipelineFeaturesKHR rt_pipe_feats = {
@@ -742,14 +716,9 @@ Device::Device(const PhysicalDeviceData* physical_device_data)
 		.pNext = &rt_pipe_feats,
 	};
 
-	VkPhysicalDeviceExtendedDynamicStateFeaturesEXT extended_dyn_feats = {
-		.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_EXTENDED_DYNAMIC_STATE_FEATURES_EXT,
-		.pNext = &accel_struct_feats,
-	};
-
 	VkPhysicalDeviceDynamicRenderingFeatures dyn_rend_feats = {
 		.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_DYNAMIC_RENDERING_FEATURES,
-		.pNext = &extended_dyn_feats,
+		.pNext = &accel_struct_feats,
 	};
 
 	VkPhysicalDeviceSynchronization2Features sync2_feats = {
@@ -757,9 +726,14 @@ Device::Device(const PhysicalDeviceData* physical_device_data)
 		.pNext = &dyn_rend_feats,
 	};
 
+	VkPhysicalDeviceVulkan11Features feats11 = {
+		.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_1_FEATURES,
+		.pNext = &sync2_feats,
+	};
+
 	VkPhysicalDeviceVulkan12Features feats12 = {
 		.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_2_FEATURES,
-		.pNext = &sync2_feats,
+		.pNext = &feats11,
 	};
 
 	VkPhysicalDeviceFeatures2 feats2 = {
@@ -838,7 +812,6 @@ Device::Device(const PhysicalDeviceData* physical_device_data)
 	Utils_SetObjectName(mDevice, VK_OBJECT_TYPE_QUEUE, reinterpret_cast<uint64_t>(mGraphicsQueue), "graphics queue");
 	Utils_SetObjectName(mDevice, VK_OBJECT_TYPE_QUEUE, reinterpret_cast<uint64_t>(mComputeQueue), "compute queue");
 	Utils_SetObjectName(mDevice, VK_OBJECT_TYPE_QUEUE, reinterpret_cast<uint64_t>(mTransferQueue), "transfer queue");
-
 #endif	// _DEBUG
 }
 
@@ -1170,7 +1143,7 @@ uint32_t ComputeHelpers::GetQueueFamilyIndex() const
 	return mQueueFamilyIndex;
 }
 
-BLAccelerationStructure::BLAccelerationStructure(const VkDevice device, const VmaAllocator allocator, const Scene::Mesh::Primitive& primitive, const VkDeviceOrHostAddressConstKHR positions_addr, const VkDeviceOrHostAddressConstKHR indices_addr, const VmaPool mem_pool, const size_t scratch_buffer_alignment, ComputeHelpers* compute_helpers, const std::string& name)
+BLAccelerationStructure::BLAccelerationStructure(const VkDevice device, const VmaAllocator allocator, const Scene::Mesh::Primitive& primitive, const VkDeviceOrHostAddressConstKHR positions_addr, const VkDeviceOrHostAddressConstKHR indices_addr, const size_t scratch_buffer_alignment, ComputeHelpers* compute_helpers, const std::string& name)
 	: mDevice(device)
 {
 	const VkAccelerationStructureGeometryKHR geom = {
@@ -1216,7 +1189,7 @@ BLAccelerationStructure::BLAccelerationStructure(const VkDevice device, const Vm
 	auto scratch_buffer = std::make_unique<DeviceBufferResource>(
 		device, allocator,
 		VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT | VK_BUFFER_USAGE_STORAGE_BUFFER_BIT,
-		ALIGNED_SIZE(size_info.buildScratchSize, scratch_buffer_alignment), "BLAS scratch", mem_pool
+		ALIGNED_SIZE(size_info.buildScratchSize, scratch_buffer_alignment), "BLAS scratch", scratch_buffer_alignment
 	);
 
 	const VkAccelerationStructureCreateInfoKHR ci = {
@@ -1271,22 +1244,23 @@ DeviceBufferResource* BLAccelerationStructure::GetASBuffer() const
 	return mASBuffer.get();
 }
 
-TLAccelerationStructure::TLAccelerationStructure(const VkDevice device, const VmaAllocator allocator, const std::vector<VkAccelerationStructureInstanceKHR>& instances, const VmaPool mem_pool, const size_t scratch_buffer_alignment, ComputeHelpers* compute_helpers, const std::string& name)
+TLAccelerationStructure::TLAccelerationStructure(const VkDevice device, const VmaAllocator allocator, const std::vector<VkAccelerationStructureInstanceKHR>& instances, const size_t scratch_buffer_alignment, ComputeHelpers* compute_helpers, const std::string& name)
 	: mDevice(device)
 {
-	std::vector<uint8_t> instances_data(instances.size() * sizeof(VkAccelerationStructureInstanceKHR));
-	std::memcpy(instances_data.data(), instances.data(), instances_data.size());
+	//std::vector<uint8_t> instances_data(instances.size() * sizeof(VkAccelerationStructureInstanceKHR));
+	//std::memcpy(instances_data.data(), instances.data(), instances_data.size());
 
+	size_t instances_size = instances.size() * sizeof(instances[0]);
 	auto instances_data_staging = std::make_unique<HostBufferResource>(
 		device, allocator,
 		VK_BUFFER_USAGE_TRANSFER_SRC_BIT, VMA_ALLOCATION_CREATE_HOST_ACCESS_SEQUENTIAL_WRITE_BIT,
-		instances_data, "instances staging"
+		instances.data(), instances_size, "instances staging"
 	);
 
 	auto instances_data_buffer = std::make_unique<DeviceBufferResource>(
 		device, allocator,
 		VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT_KHR | VK_BUFFER_USAGE_ACCELERATION_STRUCTURE_BUILD_INPUT_READ_ONLY_BIT_KHR,
-		instances_data.size(), "instances"
+		instances_size, "instances"
 	);
 
 	const VkAccelerationStructureGeometryKHR geom = {
@@ -1329,7 +1303,7 @@ TLAccelerationStructure::TLAccelerationStructure(const VkDevice device, const Vm
 	auto scratch_buffer = std::make_unique<DeviceBufferResource>(
 		device, allocator,
 		VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT | VK_BUFFER_USAGE_STORAGE_BUFFER_BIT,
-		ALIGNED_SIZE(size_info.buildScratchSize, scratch_buffer_alignment), "TLAS Scratch", mem_pool
+		ALIGNED_SIZE(size_info.buildScratchSize, scratch_buffer_alignment), "TLAS Scratch", scratch_buffer_alignment
 	);
 
 	const VkAccelerationStructureCreateInfoKHR ci = {
@@ -1353,7 +1327,7 @@ TLAccelerationStructure::TLAccelerationStructure(const VkDevice device, const Vm
 	build_geom_info.scratchData = scratch_buffer->GetDeviceOrHostAddressKHR();
 
 	compute_helpers->RecordBatch();
-	compute_helpers->CopyBufferToBuffer(instances_data_staging->GetVkBuffer(), instances_data_buffer->GetVkBuffer(), instances_data.size());
+	compute_helpers->CopyBufferToBuffer(instances_data_staging->GetVkBuffer(), instances_data_buffer->GetVkBuffer(), instances_size);
 	compute_helpers->InsertMemoryBarrier(
 		VK_PIPELINE_STAGE_2_TRANSFER_BIT, VK_ACCESS_2_TRANSFER_WRITE_BIT,
 		VK_PIPELINE_STAGE_2_ACCELERATION_STRUCTURE_BUILD_BIT_KHR, VK_ACCESS_2_SHADER_READ_BIT

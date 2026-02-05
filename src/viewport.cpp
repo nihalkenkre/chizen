@@ -13,7 +13,6 @@ Viewport::Viewport(const VulkanInterface* vulkan_interface) :
 	mDevice(vulkan_interface->GetVkDevice()),
 	mQueue(vulkan_interface->GetDevice()->GetGraphicsQueue()),
 	mAllocator(vulkan_interface->GetAllocator()),
-	mTransferHelpers(vulkan_interface->GetTransferHelpers()),
 	mQueueFamilyIndices({
 			vulkan_interface->GetPhysicalDeviceData()->GraphicsQueueFamilyIndex,
 			vulkan_interface->GetPhysicalDeviceData()->ComputeQueueFamilyIndex,
@@ -52,8 +51,10 @@ Viewport::Viewport(const VulkanInterface* vulkan_interface) :
 #endif // _DEBUG
 	}
 
-	mTransferHelpers->RecordBatch();
-	mTransferHelpers->ChangeImageLayout(
+	TransferHelpers* transfer_helpers = vulkan_interface->GetTransferHelpers();
+
+	transfer_helpers->RecordBatch();
+	transfer_helpers->ChangeImageLayout(
 		VK_PIPELINE_STAGE_2_TOP_OF_PIPE_BIT, 0,
 		VK_PIPELINE_STAGE_2_BOTTOM_OF_PIPE_BIT, 0,
 		VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_DEPTH_ATTACHMENT_OPTIMAL,
@@ -61,10 +62,10 @@ Viewport::Viewport(const VulkanInterface* vulkan_interface) :
 		VK_IMAGE_ASPECT_DEPTH_BIT,
 		mDepthTexture->GetVkImage()
 	);
-	mTransferHelpers->SubmitBatch();
+	transfer_helpers->SubmitBatch();
 }
 
-void Viewport::Render(const ViewportScene* scene, const Swapchain* swapchain, const VkExtent2D extent, ImGUIState* imgui_state)
+void Viewport::Render(const ViewportScene* scene, const Swapchain* swapchain, const VkExtent2D extent, ImGUIState* imgui_state, TransferHelpers* transfer_helpers)
 {
 	VkDevice device = mDevice;
 	VkCommandBuffer cmd_buff = mFrameObjects->GetCommandBuffer();
@@ -196,8 +197,8 @@ void Viewport::Render(const ViewportScene* scene, const Swapchain* swapchain, co
 		},
 		{
 			.sType = VK_STRUCTURE_TYPE_SEMAPHORE_SUBMIT_INFO,
-			.semaphore = mTransferHelpers->GetSemaphore(),
-			.value = mTransferHelpers->GetSemaphoreValue(),
+			.semaphore = transfer_helpers->GetSemaphore(),
+			.value = transfer_helpers->GetSemaphoreValue(),
 			.stageMask = VK_PIPELINE_STAGE_2_TOP_OF_PIPE_BIT,
 		},
 	};
@@ -257,7 +258,7 @@ void Viewport::Render(const ViewportScene* scene, const Swapchain* swapchain, co
 	mFrameObjects->NextFrame();
 }
 
-void Viewport::RecreateDepthTexture(const VkExtent2D extent)
+void Viewport::RecreateDepthTexture(const VkExtent2D extent, TransferHelpers* transfer_helpers)
 {
 	mDepthTexture = std::make_unique<ImageResource>(
 		mDevice,
@@ -270,6 +271,10 @@ void Viewport::RecreateDepthTexture(const VkExtent2D extent)
 		mQueueFamilyIndices,
 		"raster depth texture"
 		);
+
+	transfer_helpers->RecordBatch();
+	transfer_helpers->ChangeImageLayout(VK_PIPELINE_STAGE_2_TOP_OF_PIPE_BIT, 0, VK_PIPELINE_STAGE_2_BOTTOM_OF_PIPE_BIT, 0, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_DEPTH_ATTACHMENT_OPTIMAL, VK_QUEUE_FAMILY_IGNORED, VK_QUEUE_FAMILY_IGNORED, VK_IMAGE_ASPECT_DEPTH_BIT, mDepthTexture->GetVkImage());
+	transfer_helpers->SubmitBatch();
 }
 
 Viewport::~Viewport() noexcept

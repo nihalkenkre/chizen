@@ -41,9 +41,6 @@ struct PushConstants
 [[vk::push_constant]]
 PushConstants pc;
 
-// [[vk::binding(0, 0)]]
-// ConstantBuffer<ViewProj> view_proj;
-
 [shader("vertex")]
 VSOutput vertex(VSInput in, uint draw_id: SV_DrawIndex)
 {

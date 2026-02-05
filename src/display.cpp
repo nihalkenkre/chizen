@@ -457,8 +457,6 @@ Display::Display(const VulkanInterface* vulkan_interface, const ImageResource* f
 	};
 
 	size_t verts_size = std::size(verts) * sizeof(float);
-	std::vector <uint8_t> verts_data(verts_size);
-	std::memcpy(verts_data.data(), verts, verts_size);
 
 	mGeometryBuffer = std::make_unique<DeviceBufferResource>(
 		vulkan_interface->GetVkDevice(), vulkan_interface->GetVmaAllocator(),
@@ -467,7 +465,7 @@ Display::Display(const VulkanInterface* vulkan_interface, const ImageResource* f
 
 	auto staging_buffer = std::make_unique<HostBufferResource>(
 		vulkan_interface->GetVkDevice(), vulkan_interface->GetVmaAllocator(),
-		VK_BUFFER_USAGE_TRANSFER_SRC_BIT, VMA_ALLOCATION_CREATE_HOST_ACCESS_SEQUENTIAL_WRITE_BIT, verts_data,
+		VK_BUFFER_USAGE_TRANSFER_SRC_BIT, VMA_ALLOCATION_CREATE_HOST_ACCESS_SEQUENTIAL_WRITE_BIT, verts, verts_size,
 		"staging geometry"
 	);
 

@@ -10,11 +10,11 @@
 VulkanRaytracer::VulkanRaytracer(const VulkanInterface* const vulkan_interface, const VkExtent3D& extent)
 	: mDevice(vulkan_interface->GetVkDevice()), mAllocator(vulkan_interface->GetVmaAllocator()), mRayTracingProperties(vulkan_interface->GetPhysicalDeviceData()->RayTracingProperties),
 	mQueueFamilyIndices(std::vector<uint32_t>{
-		vulkan_interface->GetPhysicalDeviceData()->GraphicsQueueFamilyIndex,
+	vulkan_interface->GetPhysicalDeviceData()->GraphicsQueueFamilyIndex,
 		vulkan_interface->GetPhysicalDeviceData()->ComputeQueueFamilyIndex,
 		vulkan_interface->GetPhysicalDeviceData()->TransferQueueFamilyIndex
-		}
-	)
+}
+)
 {
 	mAccumRenderTarget = std::make_unique<ImageResource>(
 		mDevice, extent, VK_FORMAT_R32G32B32A32_SFLOAT,
@@ -54,22 +54,24 @@ void VulkanRaytracer::InitializeResources(const VkExtent3D& extent)
 		rand_states[st] = rand_val;
 	}
 
-	std::vector<uint8_t>rand_states_data(rand_states.size() * sizeof(uint32_t));
-	std::memcpy(rand_states_data.data(), rand_states.data(), rand_states_data.size());
+	//std::vector<uint8_t>rand_states_data(rand_states.size() * sizeof(uint32_t));
+	//std::memcpy(rand_states_data.data(), rand_states.data(), rand_states_data.size());
+	
+	size_t rand_states_size = rand_states.size() * sizeof(rand_states[0]);
 
 	mRandomStates = std::make_unique<DeviceBufferResource>(
 		mDevice, mAllocator,
 		VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_STORAGE_BUFFER_BIT,
-		rand_states_data.size(), "rand states"
+		rand_states_size, "rand states"
 	);
 
 	auto rand_states_staging = std::make_unique<HostBufferResource>(
 		mDevice, mAllocator, VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
 		VMA_ALLOCATION_CREATE_HOST_ACCESS_SEQUENTIAL_WRITE_BIT,
-		rand_states_data, "random states staging"
+		rand_states.data(), rand_states_size, "random states staging"
 	);
 
-	mTransferHelpers->CopyBufferToBuffer(rand_states_staging->GetVkBuffer(), mRandomStates->GetVkBuffer(), rand_states_data.size());
+	mTransferHelpers->CopyBufferToBuffer(rand_states_staging->GetVkBuffer(), mRandomStates->GetVkBuffer(), rand_states.size() * sizeof(rand_states[0]));
 	mTransferHelpers->SubmitBatch();
 }
 

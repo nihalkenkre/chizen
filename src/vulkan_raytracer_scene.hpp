@@ -51,6 +51,10 @@ private:
 	VkDeviceSize mCHSbtRecordAlignedSize = 0;
 	VkDeviceSize mCHSbtAlignedSize = 0;
 
+	VkStridedDeviceAddressRegionKHR mRG;
+	VkStridedDeviceAddressRegionKHR mMS;
+	VkStridedDeviceAddressRegionKHR mCH;
+
 	VkDescriptorPool mDescriptorPool = VK_NULL_HANDLE;
 	VkDescriptorSet mSceneDescSet = VK_NULL_HANDLE;
 

@@ -26,7 +26,6 @@ public:
 		VkDeviceAddress Materials = 0;
 		uint32_t LightsCount = 0;
 		uint32_t CurrentSample = 1;
-		uint32_t IsCPUShading = 0;
 	};
 
 	VkPipeline GetPipeline() const;
@@ -88,7 +87,7 @@ VulkanRaytracerScenePipelineData::VulkanRaytracerScenePipelineData(const VkDevic
 			.binding = 2,
 			.descriptorType = VK_DESCRIPTOR_TYPE_ACCELERATION_STRUCTURE_KHR,
 			.descriptorCount = 1,
-			.stageFlags = VK_SHADER_STAGE_RAYGEN_BIT_KHR,
+			.stageFlags = VK_SHADER_STAGE_RAYGEN_BIT_KHR | VK_SHADER_STAGE_CLOSEST_HIT_BIT_KHR,
 		},
 		// Textures
 		{
@@ -160,9 +159,21 @@ VulkanRaytracerScenePipelineData::VulkanRaytracerScenePipelineData(const VkDevic
 		},
 		{
 			.sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO,
+			.stage = VK_SHADER_STAGE_MISS_BIT_KHR,
+			.module = mod,
+			.pName = "miss_direct_light",
+		},
+		{
+			.sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO,
 			.stage = VK_SHADER_STAGE_CLOSEST_HIT_BIT_KHR,
 			.module = mod,
 			.pName = "closesthit",
+		},
+		{
+			.sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO,
+			.stage = VK_SHADER_STAGE_ANY_HIT_BIT_KHR,
+			.module = mod,
+			.pName = "anyhit_direct_light",
 		},
 	};
 
@@ -185,10 +196,26 @@ VulkanRaytracerScenePipelineData::VulkanRaytracerScenePipelineData(const VkDevic
 		},
 		{
 			.sType = VK_STRUCTURE_TYPE_RAY_TRACING_SHADER_GROUP_CREATE_INFO_KHR,
+			.type = VK_RAY_TRACING_SHADER_GROUP_TYPE_GENERAL_KHR,
+			.generalShader = 2,
+			.closestHitShader = VK_SHADER_UNUSED_KHR,
+			.anyHitShader = VK_SHADER_UNUSED_KHR,
+			.intersectionShader = VK_SHADER_UNUSED_KHR,
+		},
+		{
+			.sType = VK_STRUCTURE_TYPE_RAY_TRACING_SHADER_GROUP_CREATE_INFO_KHR,
 			.type = VK_RAY_TRACING_SHADER_GROUP_TYPE_TRIANGLES_HIT_GROUP_KHR,
 			.generalShader = VK_SHADER_UNUSED_KHR,
-			.closestHitShader = 2,
+			.closestHitShader = 3,
 			.anyHitShader = VK_SHADER_UNUSED_KHR,
+			.intersectionShader = VK_SHADER_UNUSED_KHR,
+		},
+		{
+			.sType = VK_STRUCTURE_TYPE_RAY_TRACING_SHADER_GROUP_CREATE_INFO_KHR,
+			.type = VK_RAY_TRACING_SHADER_GROUP_TYPE_TRIANGLES_HIT_GROUP_KHR,
+			.generalShader = VK_SHADER_UNUSED_KHR,
+			.closestHitShader = VK_SHADER_UNUSED_KHR,
+			.anyHitShader = 4,
 			.intersectionShader = VK_SHADER_UNUSED_KHR,
 		},
 	};
@@ -268,31 +295,31 @@ VulkanRaytracerScene::VulkanRaytracerScene(const Scene& scene, const VulkanScene
 	const VkDeviceSize sbt_handle_size = mRaytracingProperties.shaderGroupHandleSize;
 	const VkDeviceSize sbt_handle_aligned_size = ALIGNED_SIZE(mRaytracingProperties.shaderGroupHandleSize, mRaytracingProperties.shaderGroupHandleAlignment);
 	const size_t group_count = mPipelineData->GetShaderGroups().size();
-	const size_t sbt_size = group_count * sbt_handle_size;
+	const size_t sbt_size = group_count * sbt_handle_aligned_size;
 
 	std::vector<uint8_t> sbt_handles(sbt_size);
 	VK_CHECK("get sbt group handles", vkGetRayTracingShaderGroupHandlesKHR(mDevice, mPipelineData->GetPipeline(), 0, static_cast<uint32_t>(group_count), sbt_size, sbt_handles.data()));
 
 	auto staging_rg_sbt = std::make_unique<HostBufferResource>(
 		mDevice, allocator, VK_BUFFER_USAGE_TRANSFER_SRC_BIT, VMA_ALLOCATION_CREATE_HOST_ACCESS_SEQUENTIAL_WRITE_BIT,
-		ALIGNED_SIZE(sbt_handle_aligned_size, mRaytracingProperties.shaderGroupBaseAlignment), "staging rg sbt"
+		ALIGNED_SIZE(sbt_handle_aligned_size, mRaytracingProperties.shaderGroupHandleAlignment), "staging rg sbt"
 	);
-	std::memcpy(staging_rg_sbt->GetAllocationInfo2().allocationInfo.pMappedData, sbt_handles.data(), sbt_handle_size);
+	std::memcpy(staging_rg_sbt->GetAllocationInfo2().allocationInfo.pMappedData, sbt_handles.data(), sbt_handle_aligned_size);
 
 	mRGSbt = std::make_unique<DeviceBufferResource>(
 		mDevice, allocator, VK_BUFFER_USAGE_SHADER_BINDING_TABLE_BIT_KHR | VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT,
-		ALIGNED_SIZE(sbt_handle_aligned_size, mRaytracingProperties.shaderGroupBaseAlignment), "rg sbt", mSBTBufferPool->GetPool()
+		ALIGNED_SIZE(sbt_handle_aligned_size, mRaytracingProperties.shaderGroupHandleAlignment), "rg sbt", mRaytracingProperties.shaderGroupBaseAlignment
 	);
 
 	auto staging_ms_sbt = std::make_unique<HostBufferResource>(
 		mDevice, allocator, VK_BUFFER_USAGE_TRANSFER_SRC_BIT, VMA_ALLOCATION_CREATE_HOST_ACCESS_SEQUENTIAL_WRITE_BIT,
-		ALIGNED_SIZE(sbt_handle_aligned_size, mRaytracingProperties.shaderGroupBaseAlignment), "staging ms sbt"
+		ALIGNED_SIZE(sbt_handle_aligned_size, mRaytracingProperties.shaderGroupHandleAlignment) * 2, "staging ms sbt"
 	);
-	std::memcpy(staging_ms_sbt->GetAllocationInfo2().allocationInfo.pMappedData, sbt_handles.data() + sbt_handle_aligned_size, sbt_handle_size);
+	std::memcpy(staging_ms_sbt->GetAllocationInfo2().allocationInfo.pMappedData, sbt_handles.data() + sbt_handle_aligned_size, sbt_handle_aligned_size * 2);
 
 	mMSSbt = std::make_unique<DeviceBufferResource>(
 		mDevice, allocator, VK_BUFFER_USAGE_SHADER_BINDING_TABLE_BIT_KHR | VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT,
-		ALIGNED_SIZE(sbt_handle_aligned_size, mRaytracingProperties.shaderGroupBaseAlignment), "ms sbt", mSBTBufferPool->GetPool()
+		ALIGNED_SIZE(sbt_handle_aligned_size, mRaytracingProperties.shaderGroupHandleAlignment) * 2, "ms sbt", mRaytracingProperties.shaderGroupBaseAlignment
 	);
 
 	struct CHSbtRecordData
@@ -325,16 +352,35 @@ VulkanRaytracerScene::VulkanRaytracerScene(const Scene& scene, const VulkanScene
 			};
 
 			std::vector<uint8_t> ch_sbt_record_data(mCHSbtRecordAlignedSize);
-			std::memcpy(ch_sbt_record_data.data(), sbt_handles.data() + (sbt_handle_size * 2), sbt_handle_size);
-			std::memcpy(ch_sbt_record_data.data() + sbt_handle_size, &ch_sbt_record, sizeof(CHSbtRecordData));
+			std::memcpy(ch_sbt_record_data.data(), sbt_handles.data() + (sbt_handle_aligned_size * 3), sbt_handle_size);
+			std::memcpy(ch_sbt_record_data.data() + sbt_handle_aligned_size, &ch_sbt_record, sizeof(CHSbtRecordData));
+
+			std::vector<uint8_t> ch_sbt_record_data_direct_lighting(mCHSbtRecordAlignedSize);
+			std::memcpy(ch_sbt_record_data_direct_lighting.data(), sbt_handles.data() + (sbt_handle_aligned_size * 4), sbt_handle_size);
+			std::memcpy(ch_sbt_record_data_direct_lighting.data() + sbt_handle_aligned_size, &ch_sbt_record, sizeof(CHSbtRecordData));
 
 			ch_sbt.append_range(ch_sbt_record_data);
+			ch_sbt.append_range(ch_sbt_record_data_direct_lighting);
 
-			mesh_prim_offsets.push_back(total_records++);
+			mesh_prim_offsets.push_back(total_records);
+			total_records += 2;
 		}
 
 		prim_sbt_record_offsets.push_back(mesh_prim_offsets);
 	}
+
+	mCHSbtAlignedSize = ALIGNED_SIZE(ch_sbt.size(), mRaytracingProperties.shaderGroupHandleAlignment);
+
+	auto staging_ch_sbt = std::make_unique<HostBufferResource>(
+		mDevice, allocator, VK_BUFFER_USAGE_TRANSFER_SRC_BIT, VMA_ALLOCATION_CREATE_HOST_ACCESS_SEQUENTIAL_WRITE_BIT,
+		mCHSbtAlignedSize, "staging ch sbt"
+	);
+	std::memcpy(staging_ch_sbt->GetAllocationInfo2().allocationInfo.pMappedData, ch_sbt.data(), ch_sbt.size());
+
+	mCHSbt = std::make_unique<DeviceBufferResource>(
+		mDevice, allocator, VK_BUFFER_USAGE_SHADER_BINDING_TABLE_BIT_KHR | VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT,
+		mCHSbtAlignedSize, "ch sbt", mRaytracingProperties.shaderGroupBaseAlignment
+	);
 
 	for (const auto& mesh_instance : vulkan_scene->GetMeshInstances())
 	{
@@ -353,7 +399,7 @@ VulkanRaytracerScene::VulkanRaytracerScene(const Scene& scene, const VulkanScene
 
 			mBLASes.push_back(
 				std::make_unique<BLAccelerationStructure>(
-					mDevice, allocator, prim, positions_addr, indices_addr, mScratchBufferPool->GetPool(), scratch_buffer_alignment, compute_helpers, "BLAS"
+					mDevice, allocator, prim, positions_addr, indices_addr, scratch_buffer_alignment, compute_helpers, "BLAS"
 				)
 			);
 
@@ -380,25 +426,30 @@ VulkanRaytracerScene::VulkanRaytracerScene(const Scene& scene, const VulkanScene
 		}
 	}
 
-	mCHSbtAlignedSize = ALIGNED_SIZE(ch_sbt.size(), mRaytracingProperties.shaderGroupBaseAlignment);
-
-	auto staging_ch_sbt = std::make_unique<HostBufferResource>(
-		mDevice, allocator, VK_BUFFER_USAGE_TRANSFER_SRC_BIT, VMA_ALLOCATION_CREATE_HOST_ACCESS_SEQUENTIAL_WRITE_BIT,
-		mCHSbtAlignedSize, "staging ch sbt"
-	);
-	std::memcpy(staging_ch_sbt->GetAllocationInfo2().allocationInfo.pMappedData, ch_sbt.data(), ch_sbt.size());
-
-	mCHSbt = std::make_unique<DeviceBufferResource>(
-		mDevice, allocator, VK_BUFFER_USAGE_SHADER_BINDING_TABLE_BIT_KHR | VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT,
-		mCHSbtAlignedSize, "ch sbt", mSBTBufferPool->GetPool()
-	);
-
 	mTLAS = std::make_unique<TLAccelerationStructure>(
-		mDevice, allocator, instances, mScratchBufferPool->GetPool(), scratch_buffer_alignment, compute_helpers, "TLAS"
+		mDevice, allocator, instances, scratch_buffer_alignment, compute_helpers, "TLAS"
 	);
 
 	CreateDescriptorPool();
 	CreateDescriptorSets();
+
+	mRG = {
+		.deviceAddress = mRGSbt->GetDeviceAddress(),
+		.stride = ALIGNED_SIZE(mRaytracingProperties.shaderGroupHandleSize, mRaytracingProperties.shaderGroupHandleAlignment),
+		.size = ALIGNED_SIZE(mRaytracingProperties.shaderGroupHandleSize, mRaytracingProperties.shaderGroupHandleAlignment),
+	};
+
+	mMS = {
+		.deviceAddress = mMSSbt->GetDeviceAddress(),
+		.stride = ALIGNED_SIZE(mRaytracingProperties.shaderGroupHandleSize, mRaytracingProperties.shaderGroupHandleAlignment),
+		.size = ALIGNED_SIZE(sbt_handle_aligned_size, mRaytracingProperties.shaderGroupHandleAlignment) * 2,
+	};
+
+	mCH = {
+		.deviceAddress = mCHSbt->GetDeviceAddress(),
+		.stride = mCHSbtRecordAlignedSize,
+		.size = mCHSbtAlignedSize,
+	};
 
 	compute_helpers->RecordBatch();
 	compute_helpers->CopyBufferToBuffer(staging_rg_sbt->GetVkBuffer(), mRGSbt->GetVkBuffer(), staging_rg_sbt->GetAllocationInfo2().allocationInfo.size);
@@ -415,84 +466,72 @@ VulkanRaytracerScene::~VulkanRaytracerScene() noexcept
 
 void VulkanRaytracerScene::Render(const VkCommandBuffer cmd_buff, const DeviceBufferResource* rand_states, const ImageResource* accum_target, const ImageResource* final_render_target, const uint32_t current_sample, const uint32_t width, const uint32_t height, const uint32_t camera_index, const bool is_cpu_shading) const
 {
-	vkCmdBindPipeline(cmd_buff, VK_PIPELINE_BIND_POINT_RAY_TRACING_KHR, mPipelineData->GetPipeline());
+	if (is_cpu_shading)
+	{
 
-	const VkDescriptorImageInfo accum_target_desc_info = accum_target->GetDescriptorInfo();
-	const VkDescriptorImageInfo final_render_target_desc_info = final_render_target->GetDescriptorInfo();
+	}
+	else
+	{
+		vkCmdBindPipeline(cmd_buff, VK_PIPELINE_BIND_POINT_RAY_TRACING_KHR, mPipelineData->GetPipeline());
 
-	const VkWriteDescriptorSet write_desc_sets[] = {
-		{
-			.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
-			.dstSet = mSceneDescSet,
-			.dstBinding = 0,
-			.descriptorCount = 1,
-			.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_IMAGE,
-			.pImageInfo = &accum_target_desc_info,
-		},
-		{
-			.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
-			.dstSet = mSceneDescSet,
-			.dstBinding = 1,
-			.descriptorCount = 1,
-			.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_IMAGE,
-			.pImageInfo = &final_render_target_desc_info,
-		},
-	};
+		const VkDescriptorImageInfo accum_target_desc_info = accum_target->GetDescriptorInfo();
+		const VkDescriptorImageInfo final_render_target_desc_info = final_render_target->GetDescriptorInfo();
 
-	vkUpdateDescriptorSets(mDevice, std::size(write_desc_sets), write_desc_sets, 0, nullptr);
+		const VkWriteDescriptorSet write_desc_sets[] = {
+			{
+				.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
+				.dstSet = mSceneDescSet,
+				.dstBinding = 0,
+				.descriptorCount = 1,
+				.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_IMAGE,
+				.pImageInfo = &accum_target_desc_info,
+			},
+			{
+				.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
+				.dstSet = mSceneDescSet,
+				.dstBinding = 1,
+				.descriptorCount = 1,
+				.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_IMAGE,
+				.pImageInfo = &final_render_target_desc_info,
+			},
+		};
 
-	const VkBindDescriptorSetsInfoKHR scene_ds_bind_info = {
-		.sType = VK_STRUCTURE_TYPE_BIND_DESCRIPTOR_SETS_INFO_KHR,
-		.stageFlags = VK_SHADER_STAGE_RAYGEN_BIT_KHR,
-		.layout = mPipelineData->GetPipelineLayout(),
-		.firstSet = 0,
-		.descriptorSetCount = 1,
-		.pDescriptorSets = &mSceneDescSet,
-	};
+		vkUpdateDescriptorSets(mDevice, std::size(write_desc_sets), write_desc_sets, 0, nullptr);
 
-	vkCmdBindDescriptorSets2(cmd_buff, &scene_ds_bind_info);
+		const VkBindDescriptorSetsInfoKHR scene_ds_bind_info = {
+			.sType = VK_STRUCTURE_TYPE_BIND_DESCRIPTOR_SETS_INFO_KHR,
+			.stageFlags = VK_SHADER_STAGE_RAYGEN_BIT_KHR,
+			.layout = mPipelineData->GetPipelineLayout(),
+			.firstSet = 0,
+			.descriptorSetCount = 1,
+			.pDescriptorSets = &mSceneDescSet,
+		};
 
-	const VulkanRaytracerScenePipelineData::PushConstants pc = {
-		.RandomStates = rand_states->GetDeviceAddress(),
-		.CameraInfo = mScene->GetCameraMatricesData()->GetDeviceAddress() + ((camera_index * 3 + 1) * sizeof(glm::mat4)),
-		.Lights = mScene->GetLightsData()->GetDeviceAddress(),
-		.Materials = mScene->GetMaterialsData()->GetDeviceAddress(),
-		.LightsCount = static_cast<uint32_t>(mScene->GetLights().size()),
-		.CurrentSample = current_sample,
-		.IsCPUShading = is_cpu_shading,
-	};
+		vkCmdBindDescriptorSets2(cmd_buff, &scene_ds_bind_info);
 
-	const VkPushConstantsInfoKHR pc_info = {
-		.sType = VK_STRUCTURE_TYPE_PUSH_CONSTANTS_INFO_KHR,
-		.layout = mPipelineData->GetPipelineLayout(),
-		.stageFlags = VK_SHADER_STAGE_RAYGEN_BIT_KHR | VK_SHADER_STAGE_MISS_BIT_KHR | VK_SHADER_STAGE_CLOSEST_HIT_BIT_KHR,
-		.size = sizeof(VulkanRaytracerScenePipelineData::PushConstants),
-		.pValues = &pc,
-	};
+		const VulkanRaytracerScenePipelineData::PushConstants pc = {
+			.RandomStates = rand_states->GetDeviceAddress(),
+			.CameraInfo = mScene->GetCameraMatricesData()->GetDeviceAddress() + ((camera_index * 3 + 1) * sizeof(glm::mat4)),
+			.Lights = mScene->GetLightsData()->GetDeviceAddress(),
+			.Materials = mScene->GetMaterialsData()->GetDeviceAddress(),
+			.LightsCount = static_cast<uint32_t>(mScene->GetLights().size()),
+			.CurrentSample = current_sample,
+		};
 
-	vkCmdPushConstants2(cmd_buff, &pc_info);
+		const VkPushConstantsInfoKHR pc_info = {
+			.sType = VK_STRUCTURE_TYPE_PUSH_CONSTANTS_INFO_KHR,
+			.layout = mPipelineData->GetPipelineLayout(),
+			.stageFlags = VK_SHADER_STAGE_RAYGEN_BIT_KHR | VK_SHADER_STAGE_MISS_BIT_KHR | VK_SHADER_STAGE_CLOSEST_HIT_BIT_KHR,
+			.size = sizeof(VulkanRaytracerScenePipelineData::PushConstants),
+			.pValues = &pc,
+		};
 
-	const VkStridedDeviceAddressRegionKHR rg_sbt = {
-		.deviceAddress = mRGSbt->GetDeviceAddress(),
-		.stride = ALIGNED_SIZE(mRaytracingProperties.shaderGroupHandleSize, mRaytracingProperties.shaderGroupHandleAlignment),
-		.size = rg_sbt.stride,
-	};
-
-	const VkStridedDeviceAddressRegionKHR ms_sbt = {
-		.deviceAddress = mMSSbt->GetDeviceAddress(),
-		.stride = ALIGNED_SIZE(mRaytracingProperties.shaderGroupHandleSize, mRaytracingProperties.shaderGroupHandleAlignment),
-		.size = ALIGNED_SIZE(mRaytracingProperties.shaderGroupHandleSize, mRaytracingProperties.shaderGroupBaseAlignment),
-	};
-
-	const VkStridedDeviceAddressRegionKHR ch_sbt = {
-		.deviceAddress = mCHSbt->GetDeviceAddress(),
-		.stride = mCHSbtRecordAlignedSize,
-		.size = mCHSbtAlignedSize,
-	};
+		vkCmdPushConstants2(cmd_buff, &pc_info);
+	}
 
 	const VkStridedDeviceAddressRegionKHR cl_sbt = {};
 
-	vkCmdTraceRaysKHR(cmd_buff, &rg_sbt, &ms_sbt, &ch_sbt, &cl_sbt, width, height, 1);
+	vkCmdTraceRaysKHR(cmd_buff, &mRG, &mMS, &mCH, &cl_sbt, width, height, 1);
 }
 
 void VulkanRaytracerScene::ReloadShaders()
@@ -537,12 +576,9 @@ void VulkanRaytracerScene::CreateDescriptorPool()
 		},
 	};
 
-	uint32_t max_sets = 0;
-	std::for_each(std::begin(pool_sizes), std::end(pool_sizes), [&max_sets](const VkDescriptorPoolSize ps) { max_sets += ps.descriptorCount; });
-
 	const VkDescriptorPoolCreateInfo dsp_ci = {
 		.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO,
-		.maxSets = max_sets,
+		.maxSets = 1,
 		.poolSizeCount = std::size(pool_sizes),
 		.pPoolSizes = pool_sizes,
 	};
@@ -552,7 +588,6 @@ void VulkanRaytracerScene::CreateDescriptorPool()
 #ifdef _DEBUG
 	Utils_SetObjectName(mDevice, VK_OBJECT_TYPE_DESCRIPTOR_POOL, reinterpret_cast<uint64_t>(mDescriptorPool), "vulkan raytracer scene descriptor pool");
 #endif // _DEBUG
-
 }
 
 void VulkanRaytracerScene::CreateDescriptorSets()

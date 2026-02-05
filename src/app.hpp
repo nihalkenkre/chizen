@@ -37,7 +37,7 @@ public:
 	void RecreateViewportSwapchain();
 
 	VulkanInterface* GetVulkanInterface() const;
-	Viewport* GetRasterizer() const;
+	Viewport* GetViewport() const;
 	Display* GetDisplay() const;
 
 	SDL_Window* GetWindow() const;

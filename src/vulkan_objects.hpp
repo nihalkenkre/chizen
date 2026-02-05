@@ -240,7 +240,7 @@ class BLAccelerationStructure
 {
 public:
 	BLAccelerationStructure() = delete;
-	BLAccelerationStructure(const VkDevice device, const VmaAllocator allocator, const Scene::Mesh::Primitive& primitive, const VkDeviceOrHostAddressConstKHR positions_addr, const VkDeviceOrHostAddressConstKHR indices_addr, const VmaPool mem_pool, const size_t scratch_buffer_alignment, ComputeHelpers* compute_helpers, const std::string& name);
+	BLAccelerationStructure(const VkDevice device, const VmaAllocator allocator, const Scene::Mesh::Primitive& primitive, const VkDeviceOrHostAddressConstKHR positions_addr, const VkDeviceOrHostAddressConstKHR indices_addr, const size_t scratch_buffer_alignment, ComputeHelpers* compute_helpers, const std::string& name);
 
 	BLAccelerationStructure(const BLAccelerationStructure& other) = delete;
 	BLAccelerationStructure& operator=(const BLAccelerationStructure& other) = delete;
@@ -261,7 +261,7 @@ class TLAccelerationStructure
 {
 public:
 	TLAccelerationStructure() = delete;
-	TLAccelerationStructure(const VkDevice device, const VmaAllocator allocator, const std::vector<VkAccelerationStructureInstanceKHR>& instances, const VmaPool mem_pool, const size_t scratch_buffer_alignment, ComputeHelpers* compute_helpers, const std::string& name);
+	TLAccelerationStructure(const VkDevice device, const VmaAllocator allocator, const std::vector<VkAccelerationStructureInstanceKHR>& instances, const size_t scratch_buffer_alignment, ComputeHelpers* compute_helpers, const std::string& name);
 
 	TLAccelerationStructure(const TLAccelerationStructure& other) = delete;
 	TLAccelerationStructure& operator=(const TLAccelerationStructure& other) = delete;

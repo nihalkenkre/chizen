@@ -335,7 +335,6 @@ void ViewportWorldScene::Render(const VkCommandBuffer cmd_buff, const uint32_t c
 {
 	vkCmdBindPipeline(cmd_buff, VK_PIPELINE_BIND_POINT_GRAPHICS, mPipelineData->GetPipeline());
 
-
 	const VkDescriptorSet desc_sets[] = {
 		mMTexturesDescSet,
 	};
@@ -434,44 +433,34 @@ void ViewportWorldScene::CreateIndirectBufferAndDrawElementsBuffer(TransferHelpe
 		}
 	}
 
-	std::vector<uint8_t> indirect_commands_data(indirect_commands.size() * sizeof(VkDrawIndexedIndirectCommand));
-	std::memcpy(
-		indirect_commands_data.data(),
-		indirect_commands.data(),
-		indirect_commands_data.size()
-	);
+	size_t indirect_commands_size = indirect_commands.size() * sizeof(indirect_commands[0]);
 
 	auto staging_indirect_commands = std::make_unique<HostBufferResource>(
 		mDevice, mAllocator, VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
 		VMA_ALLOCATION_CREATE_HOST_ACCESS_SEQUENTIAL_WRITE_BIT,
-		indirect_commands_data, "staging indirect commands"
+		indirect_commands.data(), indirect_commands_size, "staging indirect commands"
 	);
 	mIndirectCommandsBuffer = std::make_unique<DeviceBufferResource>(
 		mDevice, mAllocator, VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_INDIRECT_BUFFER_BIT,
-		indirect_commands_data.size(),
+		indirect_commands_size,
 		"indirect commands"
 	);
 
-	std::vector<uint8_t> draw_elements_data(draw_elements.size() * sizeof(DrawElement));
-	std::memcpy(
-		draw_elements_data.data(),
-		draw_elements.data(),
-		draw_elements_data.size()
-	);
+	size_t draw_elements_size = draw_elements.size() * sizeof(draw_elements[0]);
 
 	auto staging_draw_elements = std::make_unique<HostBufferResource>(
 		mDevice, mAllocator, VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
 		VMA_ALLOCATION_CREATE_HOST_ACCESS_SEQUENTIAL_WRITE_BIT,
-		draw_elements_data, "staging draw elements"
+		draw_elements.data(), draw_elements_size, "staging draw elements"
 	);
 	mDrawElements = std::make_unique<DeviceBufferResource>(
 		mDevice, mAllocator, VK_BUFFER_USAGE_TRANSFER_DST_BIT,
-		draw_elements_data.size(), "draw elements"
+		draw_elements_size, "draw elements"
 	);
 
 	transfer_helpers->RecordBatch();
-	transfer_helpers->CopyBufferToBuffer(staging_indirect_commands->GetVkBuffer(), mIndirectCommandsBuffer->GetVkBuffer(), indirect_commands_data.size());
-	transfer_helpers->CopyBufferToBuffer(staging_draw_elements->GetVkBuffer(), mDrawElements->GetVkBuffer(), draw_elements_data.size());
+	transfer_helpers->CopyBufferToBuffer(staging_indirect_commands->GetVkBuffer(), mIndirectCommandsBuffer->GetVkBuffer(), indirect_commands_size);
+	transfer_helpers->CopyBufferToBuffer(staging_draw_elements->GetVkBuffer(), mDrawElements->GetVkBuffer(), draw_elements_size);
 	transfer_helpers->SubmitBatch();
 }
 
@@ -488,7 +477,7 @@ void ViewportWorldScene::CreateDescriptorPool()
 
 	const VkDescriptorPoolCreateInfo dsp_ci = {
 		.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO,
-		.maxSets = 1, //1 for the textures desc set
+		.maxSets = 1,
 		.poolSizeCount = std::size(pool_sizes),
 		.pPoolSizes = pool_sizes,
 	};

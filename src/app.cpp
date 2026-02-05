@@ -325,7 +325,8 @@ void App::RunViewport()
 {
 	mViewport->Render(mViewportScene.get(), mVulkanInterface->GetSwapchain(),
 		mVulkanInterface->GetSurfaceKHR()->GetSurfaceCapabilities().surfaceCapabilities.currentExtent,
-		mImGUIState.get()
+		mImGUIState.get(),
+		mVulkanInterface->GetTransferHelpers()
 	);
 }
 
@@ -391,7 +392,7 @@ void App::StopRendering()
 void App::RecreateViewportSwapchain()
 {
 	mVulkanInterface->RecreateViewportSwapchain();
-	mViewport->RecreateDepthTexture(mVulkanInterface->GetSurfaceKHR()->GetSurfaceCapabilities().surfaceCapabilities.currentExtent);
+	mViewport->RecreateDepthTexture(mVulkanInterface->GetSurfaceKHR()->GetSurfaceCapabilities().surfaceCapabilities.currentExtent, mVulkanInterface->GetTransferHelpers());
 }
 
 VulkanInterface* App::GetVulkanInterface() const
@@ -399,7 +400,7 @@ VulkanInterface* App::GetVulkanInterface() const
 	return mVulkanInterface.get();
 }
 
-Viewport* App::GetRasterizer() const
+Viewport* App::GetViewport() const
 {
 	return mViewport.get();
 }
